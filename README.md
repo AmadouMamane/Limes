@@ -1,5 +1,10 @@
 # limes
 
+[![ci](https://github.com/AmadouMamane/Limes/actions/workflows/ci.yml/badge.svg)](https://github.com/AmadouMamane/Limes/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+![PyPI: not yet published](https://img.shields.io/badge/PyPI-not%20yet%20published-lightgrey.svg)
+
 **The guard that can prove what it refused.**
 
 limes is a transport-agnostic policy guard for LLM agents whose every verdict
@@ -10,6 +15,31 @@ cannot see returns `CannotSay` — never a silent "allow".
 > **Working name, pre-publication.** The package name, the PyPI / GitHub
 > identity, the CLA, and the final license split are decisions pending
 > ratification (see *License*). Nothing here is published yet.
+
+## The verdict
+
+A guard's answer is not a boolean. "Allowed" that cannot say *what it looked at* is
+indistinguishable from "never looked" — and the second is the more common failure.
+So a limes verdict is a closed, exhaustively matched union that carries its
+evidence:
+
+```
+Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot)
+```
+
+- **`Allow` is unconstructible without evidence** — no default, no convenience
+  constructor; `Allow()` is a *type error*. A ratchet asserts mypy rejects it, and
+  it goes red the moment someone gives evidence a default (ADR 0002).
+- **`CannotSay` fails closed** — a detector that cannot see (dependency absent,
+  content unreadable, timeout) publishes a blind spot; it never degrades to a
+  silent `Allow`. A witness that cannot see may never report "ok".
+- **`__bool__` raises** — there is no `if verdict:`. Every Python object is truthy,
+  so a bare truthiness test would read a `Deny` (and a `CannotSay`!) as success.
+  Callers pattern-match.
+
+A `Deny` therefore carries both a human-readable reason **and** a redacted,
+hash-chained record of exactly what fired — the tagline made mechanical, and a
+refusal that is auditable and contestable.
 
 ## What limes is — and is not
 
@@ -56,6 +86,11 @@ before commit (the "no unverified citation" discipline it inherits from Tessera)
 The core, one detector (`injection`, inbound), and the in-process transport.
 
 ### The injection detector — the two numbers
+
+Report only "attacks blocked" and *block-everything* wins with 33/33 — while
+killing all 8 benign inputs. Report only "benign preserved" and the *unplugged*
+guard scores a perfect 8/8 — while blocking 0 attacks. Neither is a guard. Only the
+**pair** is a measurement.
 
 Measured over the copied corpus (33 attack prompts = 11 cases × fr/de/en; 8
 benign inputs), calibrated against Tessera's corrected-grader baseline (criteria
@@ -119,6 +154,16 @@ make sync    # uv sync
 make gate    # ruff + ruff format --check + mypy --strict + pytest, naming the tree it judged
 make eval    # run the harness, write the confusion matrix
 ```
+
+## Contributing & security
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to work with limes, and the
+  admission rule every detector must pass (its two numbers).
+- **[CLA.md](CLA.md)** — the Contributor License Agreement; no external
+  contribution is merged without a signed one (it keeps the dual-license option
+  alive).
+- **[SECURITY.md](SECURITY.md)** — how to report a vulnerability privately.
+- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — the Contributor Covenant.
 
 ## License
 
