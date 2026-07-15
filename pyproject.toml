@@ -1,0 +1,113 @@
+[project]
+name = "limes"
+version = "0.1.0"
+description = "The guard that can prove what it refused — a transport-agnostic, evidence-carrying policy guard for LLM agents."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = [
+    "llm",
+    "guardrail",
+    "mcp",
+    "prompt-injection",
+    "tool-policy",
+    "pii",
+    "audit",
+    "evidence",
+]
+authors = [{ name = "Amadou Mamane" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+# Detectors are discovered as plugins (ADR 0004). The canonical admitted set is
+# the code tuple limes.detectors.ADMITTED; a test asserts these entry points and
+# that tuple name the same detectors, so neither can drift from the other.
+[project.entry-points."limes.detectors"]
+injection = "limes.detectors.injection:InjectionDetector"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8.0",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/limes"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/limes/corpus" = "limes/corpus"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "PT",   # pytest style
+    "SIM",  # simplify
+    "RUF",  # ruff-specific
+    "D",    # pydocstyle
+    "ANN",  # annotations
+]
+ignore = [
+    "D203",  # one-blank-line-before-class (conflicts with D211)
+    "D213",  # multi-line-summary-second-line (conflicts with D212)
+    "D105",  # magic methods document themselves by name
+    "D107",  # __init__ is documented by its class docstring
+    "N818",  # domain exception names (Blocked, DetectorBlind) read better than an -Error suffix
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests need neither module docstrings nor full annotations to be readable.
+"tests/**" = ["D", "ANN", "PT011"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# Tests are checked, but leniently: they may omit return annotations and call
+# pytest's untyped helpers without ceremony. Source (src/) stays fully strict.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
+warn_return_any = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "mutation: a ratchet that must be seen RED under a named source mutation (a ratchet never seen red is not a ratchet).",
+]
