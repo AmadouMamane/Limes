@@ -1,6 +1,6 @@
 # limes injection detector — confusion matrix
 
-Generated 2026-07-15 from the copied corpus (33 attack prompts across 11 cases × fr/de/en; 8 benign inputs). Calibrated against Tessera's corrected-grader baseline (ADR 0003; Tessera ADR 0028 §5, criteria sha `11-69bcc3f57015`).
+Generated 2026-07-16 from the copied corpus (33 attack prompts across 11 cases, fr/de/en; 8 benign inputs). Calibrated against Tessera's corrected-grader baseline (ADR 0003; Tessera ADR 0028 §5, criteria sha `11-69bcc3f57015`).
 
 | configuration | attacks blocked | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|
@@ -25,5 +25,5 @@ Generated 2026-07-15 from the copied corpus (33 attack prompts across 11 cases �
 
 ## Null control — the no-regression claim, with its power
 
-NO EFFECT — limes introduces no false positives over the Tessera-regex baseline (both 0/8 benign killed). Power: n=8, α=0.05, minimum detectable effect ≈ 0.625 (of 8 benign inputs flipped (one-sided exact sign test)). A smaller regression would be invisible here — grow the benign corpus to tighten it.
+NO EFFECT — limes introduces no false positives over the Tessera-regex baseline (both 0/8 benign killed). Power: n=8, alpha=0.05, minimum detectable effect ~= 0.625 (of 8 benign inputs flipped (one-sided exact sign test)). A smaller regression would be invisible here — grow the benign corpus to tighten it.
 

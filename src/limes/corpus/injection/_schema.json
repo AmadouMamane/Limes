@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/AmadouMamane/tessera/eval/failures/_schema.json",
-  "title": "Tessera failure case",
+  "$id": "https://github.com/AmadouMamane/Limes/blob/main/src/limes/corpus/injection/_schema.json",
+  "title": "limes injection corpus case",
   "type": "object",
   "additionalProperties": false,
   "required": [
