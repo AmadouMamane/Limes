@@ -6,6 +6,45 @@ All notable changes to limes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added — v0.3, egress redaction (ADR 0006)
+
+- **A transport behaviour, not a fourth verdict.** When a detector fires on the
+  outbound leg, the transport blocks by default; under
+  `on_egress_finding: redact` it overwrites the matched offsets with a fixed
+  token and forwards the rest. Declared per kind (`pii: redact`,
+  `secret: block`) in the policy file the transport already reads, or with
+  `--on-egress-finding` for the default. Both transports honour it.
+- **Nothing was added to the core.** Evidence has carried `start`/`end` for every
+  match since v0.1; those are the coordinates the masker needs. No new field, no
+  new verdict, no new detector.
+- **A masked forward is a normal result** — a `CallToolResult` without
+  `isError` — with `_meta.limes` naming what was masked, at which offsets, under
+  which chain record, and never the masked text. The token `[REDACTED:<kind>]` is
+  the in-band annotation an agent reads.
+- **The chain still records a `Deny`.** Content that left masked is not recorded
+  as allowed; the record's `mcp.action` reads `redact`.
+- **The masking is verified before it is sent.** The sanitised payload is
+  re-derived and compared to the plan applied to the flat content; a
+  disagreement blocks, as do a refusal with no located span and offsets that do
+  not fit the content. Nothing is clamped.
+- **`serve(config, outbound=[...])`** lets an embedder install their own outbound
+  detectors. The console entry point never passes any.
+
+### Unchanged — the core still did not grow
+
+- `tests/unit/test_frontier.py` (which supersedes `tests/unit/mcp/test_boundary.py`)
+  asserts the core, the pipeline, the detectors and their tests are byte-identical
+  to the v0.1 commit, *and* that the named core list is not covered by the
+  transport allowlist — so widening the allowlist cannot buy silence. Six
+  mutations were each seen red.
+
+### Known limitation
+
+- **limes still ships no egress detector**, so out of the box nothing is ever
+  masked: ADR 0003 forbids shipping a detector without an eval corpus and a null
+  control. The proofs use doubles that live in `tests/`. Told to mask with an
+  empty outbound leg, the proxy says so on stderr.
+
 ### Added — v0.2, the MCP stdio proxy (ADR 0005)
 
 - **A second transport, and nothing else.** `limes proxy` / `limes-proxy` sits

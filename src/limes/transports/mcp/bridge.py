@@ -16,7 +16,13 @@ What the relay does, message by message:
   ``CallToolResult`` with ``isError: true`` carrying the reason and the evidence.
 * the *result* of a ``tools/call`` / ``resources/read`` (server → host) — the
   **outbound** leg. The seam is wired: it runs the same core pipeline over the
-  response and enforces the same way. It is also **empty**, because limes ships
+  response and enforces the same way, with one behaviour of its own — under a
+  redacting egress policy a refusal is *masked and forwarded* rather than
+  blocked (ADR 0006). The masked result is a **normal** result: the matched
+  offsets read ``[REDACTED:<kind>]``, everything else is the server's own bytes,
+  and ``_meta`` says what was masked. The masking is verified before it is sent:
+  the sanitised payload is re-derived and compared to the plan applied to the
+  flat content, and a disagreement blocks. It is also **empty**, because limes ships
   no egress detector: with no outbound detector the relay passes the response
   through *untouched and unrecorded*. It deliberately does **not** call
   ``decide()`` over an empty detector list, because that returns an ``Allow``
@@ -37,8 +43,9 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Final
+from typing import Any, Final, final
 
 import anyio
 import mcp.types as types
@@ -53,9 +60,29 @@ from limes.policy import load_injection_policy
 from limes.record import DecisionRecord, Ledger
 from limes.transports.in_process import Guard
 from limes.transports.mcp.config import OnCannotSay, ProxyConfig
-from limes.transports.mcp.decision import Action, Ruling, refusal_meta, refusal_text, rule
-from limes.transports.mcp.payload import inspected_content, tool_call_arguments, tool_call_name
+from limes.transports.mcp.decision import (
+    Action,
+    Ruling,
+    redaction_meta,
+    refusal_meta,
+    refusal_text,
+    rule,
+)
+from limes.transports.mcp.payload import (
+    inspected_content,
+    redact_payload,
+    tool_call_arguments,
+    tool_call_name,
+)
 from limes.transports.mcp.sink import RecordSink, open_sink, record_entry
+from limes.transports.redaction import (
+    EgressPolicy,
+    RedactEgress,
+    Redaction,
+    apply_masking,
+    rule_egress,
+)
+from limes.verdict import Deny
 
 __all__ = [
     "BLOCKED_ERROR_CODE",
@@ -85,6 +112,26 @@ _TOOLS_CALL: Final = "tools/call"
 
 class _LinkClosed(Exception):
     """The peer went away mid-relay; the pump unwinds and the session ends."""
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _Screening:
+    """What the outbound seam decided about one response.
+
+    Attributes:
+        action: What the relay did — forward, redact, or block.
+        record: The chain record the decision produced.
+        replacement: The message to send instead of the server's, or ``None`` to
+            send the server's own. A masked forward is a *replacement*: it is not
+            the bytes the server sent.
+        redaction: The masking plan, present exactly when ``action`` is ``REDACT``.
+    """
+
+    action: Action
+    record: DecisionRecord
+    replacement: SessionMessage | None
+    redaction: Redaction | None
 
 
 def utc_now_iso() -> str:
@@ -119,22 +166,26 @@ class Relay:
         sink: RecordSink,
         clock: Callable[[], str] = utc_now_iso,
         ledger: Ledger | None = None,
+        egress: EgressPolicy | None = None,
     ) -> None:
         """Wire the relay.
 
         Args:
             inbound: Detectors run over ``tools/call`` arguments.
-            outbound: Detectors run over guarded responses. **Empty in v0.2** —
-                limes ships no egress detector. When empty, the outbound leg is
-                a pure pass-through and emits no record.
+            outbound: Detectors run over guarded responses. **Empty in the shipped
+                proxy** — limes ships no egress detector. When empty, the outbound
+                leg is a pure pass-through and emits no record.
             policy_hash: SHA-256 of the active policy, recorded into evidence.
             on_cannot_say: Fail-closed policy for a blind detector.
             actor: The identity asserted by the invoking session, or ``None``.
             sink: Where decision records are written.
             clock: Supplies ``observed_at``; injectable so a replay is exact.
             ledger: An existing chain to append to (a fresh one by default).
+            egress: What to do with an outbound finding. ``None`` means block
+                everything, which is what an operator who has said nothing gets.
         """
         self._ledger = ledger if ledger is not None else Ledger()
+        self._egress = egress if egress is not None else EgressPolicy.blocking()
         self._inbound_guard = Guard(inbound, policy_hash=policy_hash, ledger=self._ledger)
         # Constructed only when there is something to run. A Guard over zero
         # detectors would answer Allow with zero witnesses — the shape of a
@@ -218,6 +269,7 @@ class Relay:
                     tool=tool_call_name(message.params),
                     request_id=message.id,
                     action=ruling.action,
+                    redaction=None,
                 )
                 if ruling.action is Action.BLOCK:
                     await self._send(host_write, _blocked_tool_result(message.id, ruling, record))
@@ -242,18 +294,17 @@ class Relay:
             method = self._pending.pop(message.id, None)
             # The outbound seam. Wired, and empty until an egress detector exists.
             if method is not None and self._outbound_guard is not None:
-                ruling, record = self._inspect_result(message, self._outbound_guard)
+                screening = self._screen_result(message, method=method, guard=self._outbound_guard)
                 self._emit(
-                    record,
+                    screening.record,
                     method=method,
                     tool=None,
                     request_id=message.id,
-                    action=ruling.action,
+                    action=screening.action,
+                    redaction=screening.redaction,
                 )
-                if ruling.action is Action.BLOCK:
-                    await self._send(
-                        host_write, _blocked_response(message.id, method, ruling, record)
-                    )
+                if screening.replacement is not None:
+                    await self._send(host_write, screening.replacement)
                     return
 
         await self._send(host_write, item)
@@ -271,10 +322,22 @@ class Relay:
         # record is this decision's — no await separates the two.
         return rule(verdict, on_cannot_say=self._on_cannot_say), self._ledger.records()[-1]
 
-    def _inspect_result(
-        self, message: types.JSONRPCResponse, guard: Guard
-    ) -> tuple[Ruling, DecisionRecord]:
-        """Run the outbound pipeline over a guarded response's result."""
+    def _screen_result(
+        self, message: types.JSONRPCResponse, *, method: str, guard: Guard
+    ) -> _Screening:
+        """Run the outbound pipeline over a guarded response's result.
+
+        Args:
+            message: The server's response.
+            method: The method it answers — a refused ``tools/call`` result gets
+                an ``isError`` result, anything else a JSON-RPC error.
+            guard: The outbound guard (never ``None`` here: the caller checked).
+
+        Returns:
+            The action, its chain record, the message that replaces the server's
+            (``None`` to forward it as it stands), and the masking plan if one
+            was applied.
+        """
         content = inspected_content(message.result)
         verdict = guard.check(
             content,
@@ -282,7 +345,57 @@ class Relay:
             observed_at=self._clock(),
             direction=Direction.OUTBOUND,
         )
-        return rule(verdict, on_cannot_say=self._on_cannot_say), self._ledger.records()[-1]
+        record = self._ledger.records()[-1]
+
+        if isinstance(verdict, Deny):
+            egress = rule_egress(verdict, policy=self._egress, content_length=len(content))
+            if isinstance(egress, RedactEgress):
+                masked = _masked_response(message, content, egress, verdict, record)
+                if masked is not None:
+                    return _Screening(
+                        action=Action.REDACT,
+                        record=record,
+                        replacement=masked,
+                        redaction=egress.redaction,
+                    )
+                # The masking did not come out as planned. Nobody knows what the
+                # payload would carry, so nothing leaves: the fallback of a
+                # failed redaction is the refusal it was standing in for.
+                _note(
+                    "the masking could not be applied faithfully to the payload; blocking instead "
+                    f"of forwarding (record {record.digest})"
+                )
+                unfaithful = Ruling(
+                    action=Action.BLOCK,
+                    verdict=verdict,
+                    reason=(
+                        f"{egress.reason} — but the masked payload did not re-derive to the "
+                        "planned content, so limes blocked it instead"
+                    ),
+                )
+                return _Screening(
+                    action=Action.BLOCK,
+                    record=record,
+                    replacement=_blocked_response(message.id, method, unfaithful, record),
+                    redaction=None,
+                )
+            blocked = Ruling(action=Action.BLOCK, verdict=verdict, reason=egress.reason)
+            return _Screening(
+                action=Action.BLOCK,
+                record=record,
+                replacement=_blocked_response(message.id, method, blocked, record),
+                redaction=None,
+            )
+
+        ruling = rule(verdict, on_cannot_say=self._on_cannot_say)
+        if ruling.action is Action.BLOCK:
+            return _Screening(
+                action=Action.BLOCK,
+                record=record,
+                replacement=_blocked_response(message.id, method, ruling, record),
+                redaction=None,
+            )
+        return _Screening(action=Action.FORWARD, record=record, replacement=None, redaction=None)
 
     def _emit(
         self,
@@ -292,6 +405,7 @@ class Relay:
         tool: str | None,
         request_id: str | int | None,
         action: Action,
+        redaction: Redaction | None,
     ) -> None:
         """Write one decision to the sink."""
         self._sink.emit(
@@ -301,6 +415,7 @@ class Relay:
                 tool=tool,
                 request_id=request_id,
                 action=action.value,
+                redaction=None if redaction is None else redaction.annotation(),
             )
         )
 
@@ -350,6 +465,52 @@ def _blocked_tool_result(
     return _wrap(types.JSONRPCResponse(jsonrpc="2.0", id=request_id, result=payload))
 
 
+def _masked_response(
+    message: types.JSONRPCResponse,
+    content: str,
+    egress: RedactEgress,
+    verdict: Deny,
+    record: DecisionRecord,
+) -> SessionMessage | None:
+    """Build the masked result that replaces a refused response (ADR 0006).
+
+    The result stays a **normal** result — no ``isError``, no JSON-RPC error. The
+    host's tool call succeeds; the matched regions read ``[REDACTED:<kind>]`` and
+    ``_meta`` carries what was masked, where, and under which chain record.
+
+    The masking is then *checked* rather than trusted: the sanitised payload is
+    put back through the very derivation the offsets came from, and compared to
+    the plan applied to the flat content. They agree when every masked region sat
+    inside a single string; they disagree if a match straddled two strings, or if
+    the two walks ever drift apart. A disagreement means the payload is not what
+    the plan says it is, and an unverified redaction is not a redaction.
+
+    Args:
+        message: The server's response.
+        content: The inspected content the offsets index into.
+        egress: The redacting ruling — its plan, and the reason to annotate with.
+        verdict: The outbound ``Deny`` being masked.
+        record: The chain record indexing the decision.
+
+    Returns:
+        The replacement message, or ``None`` when the masking could not be
+        verified — the caller then blocks.
+    """
+    redaction = egress.redaction
+    sanitised = redact_payload(message.result, redaction)
+    if not isinstance(sanitised, dict):
+        return None
+    if inspected_content(sanitised) != apply_masking(content, redaction):
+        return None
+
+    result: dict[str, Any] = dict(sanitised)
+    existing = result.get("_meta")
+    meta: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
+    meta.update(redaction_meta(verdict, record, redaction, reason=egress.reason))
+    result["_meta"] = meta
+    return _wrap(types.JSONRPCResponse(jsonrpc="2.0", id=message.id, result=result))
+
+
 def _blocked_response(
     request_id: str | int, method: str, ruling: Ruling, record: DecisionRecord
 ) -> SessionMessage:
@@ -388,6 +549,7 @@ async def serve(
     *,
     sink: RecordSink | None = None,
     clock: Callable[[], str] = utc_now_iso,
+    outbound: Sequence[Detector] = (),
 ) -> Ledger:
     """Run the proxy on this process's stdio until the host disconnects.
 
@@ -397,6 +559,11 @@ async def serve(
         sink: Override the sink (tests, embedders). Defaults to the one
             ``config`` asks for: stderr, or ``--record``'s file.
         clock: Override the clock (replay). Defaults to UTC now.
+        outbound: Detectors for the outbound leg. **Empty by default, and the
+            console entry point never passes any** — limes ships no egress
+            detector. It is a parameter so an embedder with one of their own can
+            install it (and so the egress behaviour can be proven end to end
+            against a real process, which is how ADR 0006 is evidenced).
 
     Returns:
         The session's decision chain.
@@ -405,15 +572,23 @@ async def serve(
     owned_sink = sink if sink is not None else open_sink(config.record_path)
     relay = Relay(
         inbound=(InjectionDetector(policy),),
-        # v0.2 ships no egress detector; the seam stays empty rather than
-        # pretending. See this module's docstring.
-        outbound=(),
+        outbound=outbound,
         policy_hash=policy.policy_hash,
         on_cannot_say=config.on_cannot_say,
         actor=config.actor,
         sink=owned_sink,
         clock=clock,
+        egress=config.egress,
     )
+    if config.egress.redacts_anything() and not relay.outbound_is_wired:
+        # A setting that governs nothing must say so. limes ships no egress
+        # detector, so the outbound leg observes nothing and there is nothing to
+        # mask — the operator asked for a behaviour this process cannot exhibit.
+        _note(
+            "on_egress_finding asks for masking, but no egress detector is installed: the "
+            "outbound leg inspects nothing, so nothing will be masked. The setting is live for "
+            "embedders who wire their own outbound detectors into Relay."
+        )
     parameters = StdioServerParameters(
         command=config.server_command[0],
         args=list(config.server_command[1:]),

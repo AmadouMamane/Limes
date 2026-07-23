@@ -7,8 +7,14 @@ without its eval cases and its null control (ADR 0003).
 v0.1 shipped the core, one detector (``injection``, inbound), and the in-process
 transport. v0.2 adds a second transport and nothing else: the MCP stdio proxy
 (``limes proxy``, extra ``limes[mcp]``, ADR 0005), which reuses this core
-unchanged. Still not shipped: an HTTP transport, an egress detector, or any
-detector beyond ``injection`` — see the README's "What limes does not do".
+unchanged. v0.3 adds a *behaviour* to both transports' outbound leg and, again,
+nothing to the core: under a redacting egress policy a refused response is masked
+at the offsets its evidence already carried, and forwarded
+(:mod:`limes.transports.redaction`, ADR 0006).
+
+Still not shipped: an HTTP transport, an egress detector — so nothing exercises
+that behaviour out of the box — or any detector beyond ``injection``. See the
+README's "What limes does not do".
 """
 
 from __future__ import annotations

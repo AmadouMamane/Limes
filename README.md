@@ -158,6 +158,80 @@ before commit (the "no unverified citation" discipline it inherits from Tessera)
   harness for LLM apps. limes's eval harness draws on the same "publish the
   matrix" discipline, applied to detectors rather than prompts.
 
+## v0.3 — egress redaction
+
+A *behaviour*, added to both transports' outbound leg. The core, the pipeline and
+the detectors did not move — a ratchet compares them, by bytes, against the v0.1
+commit (ADR 0006).
+
+When a detector fires on the way **out**, the transport blocks the response. That
+is the default and it stays the default. An operator can declare, per kind, that
+some findings are worth masking instead:
+
+```yaml
+# in the same policy file the proxy already reads
+on_egress_finding:
+  default: block
+  by_kind:
+    pii: redact          # a customer's address is not worth losing the answer over
+    secret: block        # an API key is
+```
+
+The host then receives a **normal** result — no `isError`, the tool call
+succeeded — with the matched regions overwritten and everything else the wrapped
+server sent left alone:
+
+```
+Carte [REDACTED:pii] renvoyée, confirmation à [REDACTED:pii]. Solde 1 240,50 EUR.
+```
+
+and, in `_meta`, what was masked:
+
+```json
+{"limes": {
+  "blocked": false, "redacted": true,
+  "reason": "2 rule match(es) on outbound content: pii:email, pii:pan (egress policy masks kind: pii; 2 region(s) replaced)",
+  "record": {"seq": 1, "direction": "outbound", "digest": "5f07bb23…", "prev_hash": "e9cd424f…"},
+  "redaction": {"masked": 2, "kinds": ["pii"], "spans": [
+    {"start": 6,  "end": 25, "kinds": ["pii"], "token": "[REDACTED:pii]"},
+    {"start": 51, "end": 68, "kinds": ["pii"], "token": "[REDACTED:pii]"}]}}}
+```
+
+(real output, digests abbreviated — `tests/integration/mcp/test_redaction_e2e.py`
+drives the same path against real processes)
+
+Three things worth knowing about how it works:
+
+- **Nothing was added to the core to make this possible.** Evidence has carried
+  `start`/`end` for every match since v0.1 — for auditability. Those are exactly
+  the coordinates a masker needs. The transport still holds the content, so it
+  overwrites the named offsets and forwards.
+- **The chain still says `Deny`.** Content left the process, masked; recording
+  that as an `Allow` would be the one lie an audit trail cannot afford. The
+  record's action reads `redact`, and names the kinds and offsets — never the
+  masked text.
+- **The masking is verified, then sent.** The sanitised payload is put back
+  through the derivation the offsets came from and compared to the plan applied
+  to the flat content. A disagreement blocks. An unverified redaction is not a
+  redaction.
+
+### What redaction does **not** do (v0.3)
+
+- **It masks nothing out of the box**, because limes ships **no egress
+  detector** — see "What limes does NOT do" below. The behaviour is machinery
+  waiting for a detector: `serve(config, outbound=[...])` installs one, and the
+  proofs in `tests/` use doubles that are explicitly not shippable (ADR 0003).
+  Told `on_egress_finding: redact` with an empty outbound leg, the proxy says so
+  on stderr rather than looking like it is masking.
+- **The token is fixed.** `[REDACTED:<kind>]`, carrying the kind and nothing
+  else. No reversible tokenisation (that is an encoding, not a redaction), no
+  format-preserving masking (the shape is part of what leaks), no partial reveal
+  like `••••4242`.
+- **One blocking kind blocks the whole message.** Masking half of a response
+  would forward the other half.
+- **Offsets that do not fit the content block rather than being clamped**, and so
+  does a refusal that located no span. There is no "mask what we can" mode.
+
 ## v0.2 — the MCP stdio proxy
 
 One transport, and nothing else. The core, the detector and their tests are
@@ -194,6 +268,8 @@ What it does:
   deliberately does not run the pipeline over zero detectors, because that would
   answer `Allow` with no witness — a pass that reads like a verdict. An
   unwatched leg is a blind spot, and this is it, stated rather than simulated.
+  v0.3 gives that seam a *behaviour* (block or mask) — it still does not give it
+  a detector.
 - **Arguments only, string values only.** The inbound pipeline inspects the
   string *values* of a tool call's arguments, walked in canonical order. Object
   *keys* and non-string scalars are not inspected. A declared blind spot.
@@ -248,13 +324,14 @@ detector; an egress detector is future work), `41_rag_poison` (de/en) and
 `11_base64` (de) — adversarial wording the current patterns miss. Every one is
 also missed by the Tessera baseline; limes regresses on none of them.
 
-## What limes does NOT do (v0.2)
+## What limes does NOT do (v0.3)
 
-No HTTP/SSE transport. No PII or secrets detector — so **no egress detection at
-all**, and the outbound seam is honestly empty. No rate-limit, no kill-switch, no
-threat feed, no human-approval, no LLM-judge detector, no dashboard. The roadmap
-lands as future detectors, policies, and transports — never as growth of the core
-(ADR 0004).
+No HTTP/SSE transport. **No PII or secrets detector — so no egress detection at
+all.** v0.3 added what a transport *does* with an outbound finding; it added
+nobody to produce one, so out of the box nothing is ever masked. No rate-limit,
+no kill-switch, no threat feed, no human-approval, no LLM-judge detector, no
+dashboard. The roadmap lands as future detectors, policies, and transports —
+never as growth of the core (ADR 0004).
 
 ## Architecture
 
@@ -264,9 +341,11 @@ lands as future detectors, policies, and transports — never as growth of the c
 - **Detectors** (`src/limes/detectors/`): plugins behind one protocol, discovered
   by entry point. One: `injection`.
 - **Transports** (`src/limes/transports/`): adapters. Two — `in_process` (v0.1)
-  and `mcp` (v0.2, the stdio proxy; needs the `limes[mcp]` extra).
+  and `mcp` (v0.2, the stdio proxy; needs the `limes[mcp]` extra) — plus one
+  behaviour they share, `redaction.py` (v0.3): what to do with a finding on the
+  way out.
 
-Read the founding decisions first: `docs/decisions/0001`–`0005`. The proxy's
+Read the founding decisions first: `docs/decisions/0001`–`0006`. The proxy's
 design note, with the three places the shipped code deviates from it and why, is
 `docs/design/mcp-proxy-v0.2.md`.
 

@@ -1,6 +1,6 @@
 """What a ``limes proxy`` invocation is, as data (ADR 0005).
 
-Two things are worth naming here rather than leaving to the CLI.
+Three things are worth naming here rather than leaving to the CLI.
 
 **``on_cannot_say`` defaults to ``deny``.** A detector that could not look
 returns ``CannotSay``; the transport treats it as a refusal unless an operator
@@ -10,6 +10,12 @@ witness that cannot see may never report "ok" (ADR 0002).
 **``actor`` has no default.** It is asserted by the invoking session and it is
 ``None`` when nobody was asserted — never a string that names somebody who did
 not sign for the call (ADR 0002, Tessera ADR 0024).
+
+**``egress`` defaults to blocking.** An outbound finding stops the response
+unless an operator has declared that its kind may be masked and forwarded
+instead (:mod:`limes.transports.redaction`, ADR 0006). Same reasoning as
+``on_cannot_say``: the closed disposition is the one you get by not thinking
+about it.
 """
 
 from __future__ import annotations
@@ -20,6 +26,8 @@ from pathlib import Path
 from typing import Final, final
 
 import yaml
+
+from limes.transports.redaction import EgressPolicy
 
 __all__ = [
     "DEFAULT_ON_CANNOT_SAY",
@@ -59,6 +67,8 @@ class ProxyConfig:
         on_cannot_say: Fail-closed policy for ``CannotSay``.
         actor: The identity asserted by the invoking session; ``None`` is honest
             for an unattributed session.
+        egress: What to do with an outbound finding, by kind. Blocking unless the
+            policy file says otherwise.
     """
 
     server_command: tuple[str, ...]
@@ -66,6 +76,7 @@ class ProxyConfig:
     record_path: Path | None
     on_cannot_say: OnCannotSay
     actor: str | None
+    egress: EgressPolicy
 
     def __post_init__(self) -> None:
         """Refuse a configuration with no server to wrap.

@@ -110,6 +110,7 @@ def test_a_benign_tool_call_reaches_the_server_and_is_recorded_as_forwarded():
         "tool": "echo",
         "request_id": 7,
         "action": "forward",
+        "redaction": None,
     }
     assert records[0]["direction"] == "inbound"
     assert records[0]["actor"] == "session-under-test"

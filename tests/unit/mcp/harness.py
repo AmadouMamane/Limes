@@ -20,6 +20,7 @@ from limes.detector import Context, Detector, DetectorBlind, Direction, Finding
 from limes.record import DecisionRecord
 from limes.spans import redact
 from limes.transports.mcp.bridge import Relay
+from limes.transports.redaction import EgressPolicy
 
 AnyMessage = (
     types.JSONRPCRequest | types.JSONRPCNotification | types.JSONRPCResponse | types.JSONRPCError
@@ -144,6 +145,7 @@ def make_relay(
     on_cannot_say: object,
     records: list[dict[str, Any]],
     actor: str | None = "session-under-test",
+    egress: EgressPolicy | None = None,
 ) -> Relay:
     """Build a relay wired to a collecting sink and a frozen clock."""
     from limes.transports.mcp.config import OnCannotSay
@@ -156,6 +158,7 @@ def make_relay(
         actor=actor,
         sink=CollectingSink(records),
         clock=fixed_clock,
+        egress=egress,
     )
 
 

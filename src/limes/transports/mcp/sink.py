@@ -98,6 +98,7 @@ def record_entry(
     tool: str | None,
     request_id: str | int | None,
     action: str,
+    redaction: Mapping[str, object] | None,
 ) -> dict[str, object]:
     """Build the JSONL entry for one decision.
 
@@ -106,7 +107,11 @@ def record_entry(
         method: The MCP method the decision was about, e.g. ``"tools/call"``.
         tool: The tool name, when the message named one.
         request_id: The JSON-RPC id the decision belongs to.
-        action: ``"forward"`` or ``"block"``.
+        action: ``"forward"``, ``"redact"`` or ``"block"``.
+        redaction: What was masked — kinds, offsets and tokens, never the masked
+            text (ADR 0006). ``None`` when nothing was. It is required rather
+            than defaulted: a forward that silently omitted it would read, in the
+            journal, exactly like a forward that masked nothing.
 
     Returns:
         The record's own fields plus an ``mcp`` annotation. The annotation is
@@ -118,5 +123,6 @@ def record_entry(
         "tool": tool,
         "request_id": request_id,
         "action": action,
+        "redaction": None if redaction is None else dict(redaction),
     }
     return entry

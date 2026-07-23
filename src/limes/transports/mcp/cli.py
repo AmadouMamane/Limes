@@ -1,7 +1,8 @@
 """The console entry points: ``limes proxy`` and ``limes-proxy`` (ADR 0005).
 
     limes proxy [--policy P] [--record FILE] [--on-cannot-say deny|allow]
-                [--actor NAME] -- <server command...>
+                [--on-egress-finding block|redact] [--actor NAME]
+                -- <server command...>
 
 **Everything after the first bare ``--`` is the real server's command, launched
 verbatim** — including its own flags, which is why the split is done on ``argv``
@@ -27,6 +28,12 @@ from limes.transports.mcp.config import (
     OnCannotSay,
     ProxyConfig,
     read_on_cannot_say,
+)
+from limes.transports.redaction import (
+    DEFAULT_ON_EGRESS_FINDING,
+    EgressPolicy,
+    OnEgressFinding,
+    read_egress_policy,
 )
 
 __all__ = ["build_parser", "main", "main_proxy", "parse_config", "split_argv"]
@@ -100,6 +107,16 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         f"{DEFAULT_ON_CANNOT_SAY.value} — fail closed). Overrides the policy file.",
     )
     parser.add_argument(
+        "--on-egress-finding",
+        choices=[member.value for member in OnEgressFinding],
+        default=None,
+        help=f"what to do when a detector fires on a *response* (default: "
+        f"{DEFAULT_ON_EGRESS_FINDING.value}). `redact` masks the matched regions with "
+        "[REDACTED:<kind>] and forwards the rest. Overrides the policy file's default; "
+        "per-kind rules stay as `on_egress_finding.by_kind` declares them. limes ships no "
+        "egress detector, so nothing exercises this today.",
+    )
+    parser.add_argument(
         "--actor",
         default=None,
         metavar="NAME",
@@ -130,7 +147,10 @@ def parse_config(argv: Sequence[str], *, prog: str) -> ProxyConfig:
 
     Raises:
         SystemExit: With code 2 on a usage error — no ``--``, no server command,
-            or an unreadable ``on_cannot_say`` in the policy file.
+            or an unreadable ``on_cannot_say`` / ``on_egress_finding`` in the
+            policy file. An unreadable setting is a usage error and never a
+            silent fallback to the default: an operator who mistyped ``redact``
+            must be told, not quietly given ``block``.
     """
     own, server_command = split_argv(argv)
     parser = build_parser(prog)
@@ -143,16 +163,24 @@ def parse_config(argv: Sequence[str], *, prog: str) -> ProxyConfig:
         )
 
     on_cannot_say = DEFAULT_ON_CANNOT_SAY
+    egress = EgressPolicy.blocking()
     if options.policy is not None:
         try:
             declared = read_on_cannot_say(options.policy)
+            declared_egress = read_egress_policy(options.policy)
         except (OSError, ValueError) as exc:
             parser.error(str(exc))
         else:
             if declared is not None:
                 on_cannot_say = declared
+            if declared_egress is not None:
+                egress = declared_egress
     if options.on_cannot_say is not None:
         on_cannot_say = OnCannotSay(options.on_cannot_say)
+    if options.on_egress_finding is not None:
+        egress = EgressPolicy(
+            default=OnEgressFinding(options.on_egress_finding), by_kind=egress.by_kind
+        )
 
     return ProxyConfig(
         server_command=tuple(server_command),
@@ -160,6 +188,7 @@ def parse_config(argv: Sequence[str], *, prog: str) -> ProxyConfig:
         record_path=options.record,
         on_cannot_say=on_cannot_say,
         actor=options.actor,
+        egress=egress,
     )
 
 
@@ -200,7 +229,7 @@ def main_proxy(argv: Sequence[str] | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point for ``limes``, whose only subcommand in v0.2 is ``proxy``.
+    """Entry point for ``limes``, whose only subcommand is ``proxy``.
 
     Args:
         argv: Arguments without the program name; ``sys.argv[1:]`` by default.
@@ -214,7 +243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         "usage: limes proxy [options] -- <server command...>\n"
         "\n"
-        "limes v0.2 ships one command: `proxy`, the MCP stdio guard.\n"
+        "limes ships one command: `proxy`, the MCP stdio guard.\n"
         "Run `limes proxy --help` for its options.",
         file=sys.stderr,
     )

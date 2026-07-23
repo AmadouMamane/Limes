@@ -15,26 +15,26 @@ explains, tries something else), whereas a transport error reads as a crash and
 takes the session down with it. The refusal carries the reason *and* the
 evidence: the chain digest that indexes the decision, the policy hash, the hash
 of the inspected content, and the redacted spans that fired — never the payload.
+
+A fourth outcome exists on the **outbound** leg only, and it is not a fourth
+verdict: under a redacting egress policy a ``Deny`` becomes a *masked forward*
+(ADR 0006). The host then gets a **normal** result — no ``isError`` — whose
+matched regions read ``[REDACTED:<kind>]``, annotated in ``_meta`` with what was
+masked and where. The token is the in-band annotation an agent reads; ``_meta``
+is the machine-readable one. The decision is still a ``Deny`` on the chain.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Any, final
 
 from limes.record import DecisionRecord
 from limes.transports.mcp.config import OnCannotSay
+from limes.transports.redaction import Action, Redaction
 from limes.verdict import Allow, CannotSay, Deny, Verdict
 
-__all__ = ["Action", "Ruling", "refusal_meta", "refusal_text", "rule"]
-
-
-class Action(StrEnum):
-    """What the bridge does with the message it just inspected."""
-
-    FORWARD = "forward"
-    BLOCK = "block"
+__all__ = ["Action", "Ruling", "redaction_meta", "refusal_meta", "refusal_text", "rule"]
 
 
 @final
@@ -125,37 +125,82 @@ def refusal_meta(ruling: Ruling, record: DecisionRecord) -> dict[str, Any]:
         A ``{"limes": {...}}`` mapping carrying the reason, the chain linkage,
         and the redacted evidence (``None`` for a ``CannotSay``).
     """
-    verdict = ruling.verdict
-    evidence: dict[str, Any] | None = None
-    if not isinstance(verdict, CannotSay):
-        evidence = {
-            "policy_hash": verdict.evidence.policy_hash,
-            "content_sha": verdict.evidence.content_sha,
-            "witnesses": [
-                {"id": witness.detector_id, "version": witness.detector_version}
-                for witness in verdict.evidence.witnesses
-            ],
-            "matched_spans": [
-                {
-                    "label": span.label,
-                    "start": span.start,
-                    "end": span.end,
-                    "matched_sha": span.matched_sha,
-                }
-                for span in verdict.evidence.matched_spans
-            ],
-            "observed_at": verdict.evidence.observed_at,
-        }
     return {
         "limes": {
             "blocked": True,
+            "redacted": False,
             "reason": ruling.reason,
-            "record": {
-                "seq": record.seq,
-                "direction": record.direction,
-                "digest": record.digest,
-                "prev_hash": record.prev_hash,
-            },
-            "evidence": evidence,
+            "record": _record_meta(record),
+            "evidence": _evidence_meta(ruling.verdict),
+        }
+    }
+
+
+def _record_meta(record: DecisionRecord) -> dict[str, Any]:
+    """The chain linkage an auditor looks the decision up by."""
+    return {
+        "seq": record.seq,
+        "direction": record.direction,
+        "digest": record.digest,
+        "prev_hash": record.prev_hash,
+    }
+
+
+def _evidence_meta(verdict: Verdict) -> dict[str, Any] | None:
+    """The evidence as data — hashes and offsets, never the payload.
+
+    Returns ``None`` for a ``CannotSay``, which has no evidence by construction:
+    the detector did not observe, so there is nothing to publish but the blind spot.
+    """
+    if isinstance(verdict, CannotSay):
+        return None
+    return {
+        "policy_hash": verdict.evidence.policy_hash,
+        "content_sha": verdict.evidence.content_sha,
+        "witnesses": [
+            {"id": witness.detector_id, "version": witness.detector_version}
+            for witness in verdict.evidence.witnesses
+        ],
+        "matched_spans": [
+            {
+                "label": span.label,
+                "start": span.start,
+                "end": span.end,
+                "matched_sha": span.matched_sha,
+            }
+            for span in verdict.evidence.matched_spans
+        ],
+        "observed_at": verdict.evidence.observed_at,
+    }
+
+
+def redaction_meta(
+    verdict: Verdict, record: DecisionRecord, redaction: Redaction, *, reason: str
+) -> dict[str, Any]:
+    """Render the annotation a *masked* result carries in its ``_meta`` (ADR 0006).
+
+    The host is told, in machine-readable form, that this result is not what the
+    wrapped server sent: which kinds were masked, at which offsets, and under
+    which chain record. It is told **what was removed, never what it was** — the
+    annotation carries the same coordinates the evidence does, and no fragment of
+    the masked text.
+
+    Args:
+        verdict: The outbound ``Deny`` the masking came from.
+        record: The chain record this decision produced.
+        redaction: The masking plan that was applied.
+        reason: The one-line reason, as the egress ruling phrased it.
+
+    Returns:
+        A ``{"limes": {...}}`` mapping to merge into the result's ``_meta``.
+    """
+    return {
+        "limes": {
+            "blocked": False,
+            "redacted": True,
+            "reason": reason,
+            "record": _record_meta(record),
+            "redaction": redaction.annotation(),
+            "evidence": _evidence_meta(verdict),
         }
     }

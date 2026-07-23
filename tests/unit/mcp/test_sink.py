@@ -31,7 +31,9 @@ def _record() -> DecisionRecord:
 
 def test_the_entry_carries_exactly_the_in_process_record_fields_plus_the_annotation():
     record = _record()
-    entry = record_entry(record, method="tools/call", tool="echo", request_id=1, action="forward")
+    entry = record_entry(
+        record, method="tools/call", tool="echo", request_id=1, action="forward", redaction=None
+    )
 
     expected = {field.name for field in dataclasses.fields(DecisionRecord)} | {"mcp"}
     assert set(entry) == expected, (
@@ -43,13 +45,16 @@ def test_the_entry_carries_exactly_the_in_process_record_fields_plus_the_annotat
 
 def test_the_annotation_cannot_change_a_digest():
     record = _record()
-    entry = record_entry(record, method="tools/call", tool="echo", request_id=1, action="forward")
+    entry = record_entry(
+        record, method="tools/call", tool="echo", request_id=1, action="forward", redaction=None
+    )
     assert entry["digest"] == record.digest
     assert entry["mcp"] == {
         "method": "tools/call",
         "tool": "echo",
         "request_id": 1,
         "action": "forward",
+        "redaction": None,
     }
 
 
@@ -57,10 +62,24 @@ def test_one_canonical_line_per_record_flushed():
     stream = io.StringIO()
     sink = JsonlSink(stream)
     sink.emit(
-        record_entry(_record(), method="tools/call", tool=None, request_id="x", action="block")
+        record_entry(
+            _record(),
+            method="tools/call",
+            tool=None,
+            request_id="x",
+            action="block",
+            redaction=None,
+        )
     )
     sink.emit(
-        record_entry(_record(), method="tools/call", tool=None, request_id="y", action="block")
+        record_entry(
+            _record(),
+            method="tools/call",
+            tool=None,
+            request_id="y",
+            action="block",
+            redaction=None,
+        )
     )
 
     lines = stream.getvalue().splitlines()
@@ -85,7 +104,12 @@ def test_a_record_file_is_appended_to(tmp_path):
         sink = open_sink(target)
         sink.emit(
             record_entry(
-                _record(), method="tools/call", tool="echo", request_id=request_id, action="forward"
+                _record(),
+                method="tools/call",
+                tool="echo",
+                request_id=request_id,
+                action="forward",
+                redaction=None,
             )
         )
         sink.close()
