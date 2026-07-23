@@ -4,9 +4,11 @@ A transport-agnostic decision core whose verdicts carry evidence (ADR 0002),
 detectors as plugins (ADR 0004), and an admission rule that no detector lands
 without its eval cases and its null control (ADR 0003).
 
-v0.1 ships the core, one detector (``injection``, inbound), and the in-process
-transport. It does not ship an MCP proxy, an HTTP transport, a CLI, or any other
-detector — see the README's "What limes does not do".
+v0.1 shipped the core, one detector (``injection``, inbound), and the in-process
+transport. v0.2 adds a second transport and nothing else: the MCP stdio proxy
+(``limes proxy``, extra ``limes[mcp]``, ADR 0005), which reuses this core
+unchanged. Still not shipped: an HTTP transport, an egress detector, or any
+detector beyond ``injection`` — see the README's "What limes does not do".
 """
 
 from __future__ import annotations

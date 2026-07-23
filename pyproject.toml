@@ -31,6 +31,20 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+# The MCP stdio proxy transport (ADR 0005). NEVER a core dependency: `pip install
+# limes` stays at one dependency (PyYAML); the proxy is `pip install limes[mcp]`.
+# A ratchet (tests/unit/mcp/test_boundary.py) asserts `mcp` is absent from
+# [project].dependencies and that no module outside transports/mcp/ imports it.
+mcp = ["mcp>=1.28,<2"]
+
+[project.scripts]
+# Entry points for the proxy transport. Both are installed by the base package;
+# without the `mcp` extra they exit 2 with an install hint rather than an
+# ImportError traceback (ADR 0005).
+limes = "limes.transports.mcp.cli:main"
+limes-proxy = "limes.transports.mcp.cli:main_proxy"
+
 [project.urls]
 Homepage = "https://github.com/AmadouMamane/Limes"
 Repository = "https://github.com/AmadouMamane/Limes"
@@ -49,6 +63,10 @@ dev = [
     "mypy>=1.11",
     "pytest>=8.0",
     "types-pyyaml>=6.0",
+    # The MCP SDK is an OPTIONAL extra for users (limes[mcp]) and a DEV
+    # dependency here, so the gate actually RUNS the proxy's tests. A suite that
+    # skips its own definition of done reads green over a hole (ADR 0002).
+    "mcp>=1.28,<2",
 ]
 
 [build-system]

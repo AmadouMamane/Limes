@@ -16,6 +16,53 @@ cannot see returns `CannotSay` — never a silent "allow".
 > identity, the CLA, and the final license split are decisions pending
 > ratification (see *License*). Nothing here is published yet.
 
+## Guard any MCP server — one line of config
+
+v0.2 ships an MCP **stdio proxy**: to your host it looks like a server, to the
+server it looks like a client. Wrap the command you already run. Nothing else
+changes — not the host, not the server, and no code of yours.
+
+```json
+{ "mcpServers": { "files": {
+    "command": "uvx",
+    "args": ["limes-proxy", "--policy", "~/.limes/policy.yaml",
+             "--", "mcp-server-filesystem", "/data"]
+} } }
+```
+
+Everything after `--` is the real server's command, launched verbatim.
+
+```sh
+pip install 'limes[mcp]'    # the SDK is an optional extra; the core stays at one dependency
+```
+
+Now every tool call your agent emits is a decision that carries its evidence. A
+refused call comes back as a normal tool result marked `isError`, so the agent
+degrades instead of crashing:
+
+```
+limes blocked this tool call.
+reason: 2 rule match(es) on inbound content: injection:disable-control, injection:embedded-system-directive
+decision: seq 3, record b2d24712fb84…
+policy: sha256 84fc75f1d51e…
+inspected content: sha256 f1b51bbe89b6…
+matched: injection:embedded-system-directive at [53,71) sha256 c39dd723dc3a…
+matched: injection:disable-control at [61,94) sha256 98933a71331c…
+(evidence carries hashes and offsets, never the payload)
+```
+
+*(real output for corpus case 08 in a tool argument; the hashes are full 64-hex
+on the wire and abbreviated here for the page.)*
+
+…and the real server never received it. Every decision — allowed, refused, or
+*cannot say* — is appended to a hash-chained ledger, written as JSONL to stderr
+or to `--record FILE`.
+
+**Measured, not asserted:** one guarded `tools/call` adds a **median ~0.6 ms**
+over the same call made directly (two runs: +0.61 / +0.67 ms median, +0.95 /
++0.63 ms p95; macOS arm64, Python 3.12.4, n=200, 256-byte payload, default
+config). Reproduce: `uv run python -m limes.transports.mcp.bench`.
+
 ## The verdict
 
 A guard's answer is not a boolean. "Allowed" that cannot say *what it looked at* is
@@ -51,8 +98,38 @@ scanning. What it assembles, and what others do not:
    and its null control. A detector unmeasured against doing nothing is a
    decoration. *Two numbers, never one:* attacks blocked **and** legitimate
    traffic killed (ADR 0003).
-3. **A transport-agnostic core** — the same decision core guards an in-process
-   agent today and (v0.2) any MCP host tomorrow (ADR 0004).
+3. **A transport-agnostic core** — the *same* decision core guards an in-process
+   agent and any MCP host: one machine, two transports, so a `Deny` re-derives
+   identically whichever way it was reached (ADR 0004, ADR 0005).
+
+### Prior art — the MCP proxy
+
+limes did not invent the MCP proxy. Verified on **2026-07-23**, one by one,
+before commit.
+
+- [MCP Inspector](https://github.com/modelcontextprotocol/inspector) — the
+  official "visual testing tool for MCP servers" (MIT). A developer tool for
+  testing and debugging, not a runtime guard.
+- [mcpsnoop](https://github.com/kerlenton/mcpsnoop) — "Wireshark for MCP. A
+  transparent proxy that shows every real tool call between your AI client and
+  your MCP servers, live in your terminal" (MIT). The same wrapping shape limes
+  uses; it observes, it does not refuse.
+- [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) — "a bridge between
+  Streamable HTTP and stdio MCP transports" (MIT). Transport bridging, no
+  inspection.
+- [mcp-scan](https://pypi.org/project/mcp-scan/) (Invariant Labs) — **renamed**:
+  PyPI now reads "this package has been renamed to snyk-agent-scan", and the
+  repository presents [Snyk Agent Scan](https://github.com/invariantlabs-ai/mcp-scan),
+  "security scanner for AI agents, MCP servers and agent skills" (Apache-2.0),
+  which analyses configurations and tool descriptions rather than mediating live
+  traffic. Earlier write-ups call mcp-scan a real-time monitoring proxy; that is
+  not what either page says today, so limes does not repeat it.
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) — the
+  official SDK this transport is built on (pinned `>=1.28,<2`; 1.28.1 is the
+  latest stable line, negotiating protocol `2025-11-25`).
+
+What limes adds is not the proxy. It is the verdict that carries its proof, and
+the fact that the proxy and the in-process guard are the *same* decision core.
 
 ### Prior art (inspirations)
 
@@ -80,6 +157,48 @@ before commit (the "no unverified citation" discipline it inherits from Tessera)
 - [Promptfoo](https://github.com/promptfoo/promptfoo) — an eval / red-team
   harness for LLM apps. limes's eval harness draws on the same "publish the
   matrix" discipline, applied to detectors rather than prompts.
+
+## v0.2 — the MCP stdio proxy
+
+One transport, and nothing else. The core, the detector and their tests are
+byte-identical to v0.1 — a ratchet compares them against the v0.1 commit and
+fails on any change outside `src/limes/transports/mcp/` (ADR 0005).
+
+What it does:
+
+- **Faithful pass-through.** `initialize`, `tools/list`, `prompts/*`,
+  capabilities, notifications, unknown methods and unknown fields cross
+  unmodified, in both directions, ids preserved. Your host sees the *wrapped
+  server's* capabilities — the proxy answers nothing on its behalf. Proven by
+  running the same host script directly and proxied and comparing everything
+  observed.
+- **Refuses on the inbound leg.** A `tools/call` whose arguments trip the
+  `injection` detector is **not forwarded**; the host gets `isError: true` with
+  the reason and the redacted evidence. Proven end to end against a real MCP
+  server that journals what it receives — the blocked call is absent from that
+  journal, and the control run without the proxy shows the same call arriving.
+- **Fails closed.** `CannotSay` blocks unless an operator explicitly sets
+  `on_cannot_say: allow` (policy file) or `--on-cannot-say allow`. A proxy that
+  cannot load its policy exits `2` rather than becoming a silent pass-through.
+- **Records everything.** Allowed, refused and cannot-say alike, as hash-chained
+  `DecisionRecord`s — the same shape the in-process transport emits — to stderr
+  by default (**never stdout**: that is the host's JSON-RPC channel) or to
+  `--record FILE`. A recorded session replays to byte-identical digests.
+
+### What the proxy does **not** do (v0.2)
+
+- **stdio only.** No HTTP/SSE, and no skeleton pretending to anticipate it.
+- **No new detector.** It consumes the existing `injection` detector. The
+  **outbound seam is wired but empty**: limes ships no egress detector, so
+  responses pass through untouched and *no outbound record is written*. It
+  deliberately does not run the pipeline over zero detectors, because that would
+  answer `Allow` with no witness — a pass that reads like a verdict. An
+  unwatched leg is a blind spot, and this is it, stated rather than simulated.
+- **Arguments only, string values only.** The inbound pipeline inspects the
+  string *values* of a tool call's arguments, walked in canonical order. Object
+  *keys* and non-string scalars are not inspected. A declared blind spot.
+- One host↔server pair per process — no multiplexing. No dashboard, no rate
+  limit, no kill switch, no human approval, no config UI.
 
 ## v0.1 — the perimeter
 
@@ -129,23 +248,27 @@ detector; an egress detector is future work), `41_rag_poison` (de/en) and
 `11_base64` (de) — adversarial wording the current patterns miss. Every one is
 also missed by the Tessera baseline; limes regresses on none of them.
 
-## What limes does NOT do (v0.1)
+## What limes does NOT do (v0.2)
 
-No MCP proxy (that is v0.2, the adoption wedge), no HTTP transport, no CLI. No PII
-or secrets detector, no rate-limit, no kill-switch, no threat feed, no
-human-approval, no LLM-judge detector, no dashboard. The roadmap lands as future
-detectors, policies, and transports — never as growth of the core (ADR 0004).
+No HTTP/SSE transport. No PII or secrets detector — so **no egress detection at
+all**, and the outbound seam is honestly empty. No rate-limit, no kill-switch, no
+threat feed, no human-approval, no LLM-judge detector, no dashboard. The roadmap
+lands as future detectors, policies, and transports — never as growth of the core
+(ADR 0004).
 
 ## Architecture
 
 - **Core** (`src/limes/`): the verdict algebra (`verdict.py`), the hash-chained
   ledger (`record.py`), the detector protocol (`detector.py`), the pipeline
-  (`guard.py`).
+  (`guard.py`). Unchanged since v0.1, and a ratchet says so.
 - **Detectors** (`src/limes/detectors/`): plugins behind one protocol, discovered
-  by entry point. v0.1: `injection`.
-- **Transports** (`src/limes/transports/`): adapters. v0.1: in-process.
+  by entry point. One: `injection`.
+- **Transports** (`src/limes/transports/`): adapters. Two — `in_process` (v0.1)
+  and `mcp` (v0.2, the stdio proxy; needs the `limes[mcp]` extra).
 
-Read the founding decisions first: `docs/decisions/0001`–`0004`.
+Read the founding decisions first: `docs/decisions/0001`–`0005`. The proxy's
+design note, with the three places the shipped code deviates from it and why, is
+`docs/design/mcp-proxy-v0.2.md`.
 
 ## Develop
 
@@ -153,6 +276,8 @@ Read the founding decisions first: `docs/decisions/0001`–`0004`.
 make sync    # uv sync
 make gate    # ruff + ruff format --check + mypy --strict + pytest, naming the tree it judged
 make eval    # run the harness, write the confusion matrix
+
+uv run python -m limes.transports.mcp.bench      # measure the proxy's overhead
 ```
 
 ## Contributing & security
