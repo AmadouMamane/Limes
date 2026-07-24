@@ -12,9 +12,24 @@ carries its evidence: an `Allow` names what it looked at, a `Deny` carries both 
 reason and a redacted, hash-chained record of what fired, and a detector that
 cannot see returns `CannotSay` — never a silent "allow".
 
-> **Working name, pre-publication.** The package name, the PyPI / GitHub
-> identity, the CLA, and the final license split are decisions pending
-> ratification (see *License*). Nothing here is published yet.
+> **Working name, pre-publication.** The PyPI name `limes` is available (checked
+> 2026-07-24); the name, the GitHub identity, the CLA, and the final license split
+> are decisions pending ratification (see *License*). Nothing here is published yet.
+
+## What's in the box (v0.4.0)
+
+| Layer | What ships | What it does **not** do (scope, not backlog) |
+|---|---|---|
+| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1, a ratchet says so |
+| **Detectors** | **one**: `injection` (inbound, rule-based, measured) | no PII / secrets detector yet — ADR 0003 forbids shipping one without its eval corpus and null control |
+| **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
+| **Egress** | redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | masks nothing out of the box (no egress detector); no reversible tokenisation, no FPE encryption |
+| **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
+
+Everything is **pre-1.0 by choice**: the surface is complete, the field use that
+earns a 1.0 is not. The one thing that keeps growing — for ever, under the
+admission rule — is detector *coverage*; that is the nature of an honest guard,
+not an unfinished one.
 
 ## Guard any MCP server — one line of config
 

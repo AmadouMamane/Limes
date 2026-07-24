@@ -4,7 +4,53 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-07-24
+
+The first tagged version. Nothing was published before, so the whole surface —
+three transports, one detector, egress redaction with mask styles, and the CLI —
+arrives as 0.4.0. Pre-1.0 by choice: the surface is complete, the field use that
+earns a 1.0 is not.
+
+### Added — the command-line surface: `limes check`
+
+- **A third way to use limes**, after the library and the proxy: `limes check
+  [--policy P] [--direction inbound|outbound] [--json] [FILE|-]` runs the same
+  pipeline over a file or stdin, no server. **The exit code is the verdict** (0
+  allow, 1 deny, 3 cannot-say), so a CI step gates on it. `--json` emits the
+  canonical verdict fingerprint plus the chain record — no new evidence format.
+  `limes` becomes a dispatcher (`check` | `proxy` | `proxy-http`) that keeps
+  `check` free of the `mcp` extra.
+
+### Added — the third transport: MCP Streamable HTTP (ADR 0007)
+
+- **The same guard on the other wire MCP runs on.** `limes proxy-http --upstream
+  URL --port N` speaks MCP Streamable HTTP to host and server; the relay between
+  is the *same* one the stdio proxy runs — same verdict, evidence, chain,
+  redaction. Only the plumbing is new, and most of it is the SDK's session
+  manager. Proven transparent, blocking, redacting and replayable against real
+  processes. `pip install 'limes[http]'` pins the ASGI server.
+- **Measured overhead**, never asserted: median ~3.3–3.9 ms per guarded
+  `tools/call` — more than stdio's ~0.6 ms, a second HTTP round trip to the
+  upstream. `uv run python -m limes.transports.mcp.bench_http`.
+
+### Added — mask styles for egress redaction (ADR 0008)
+
+- **Per-kind rendering of a masked region**, in the policy: `mask_style: { pii:
+  last4 }`. `full` (the default, unchanged), `last4` (`••••4242`, the PCI-DSS
+  convention; a value of four characters or fewer reveals nothing),
+  `format_preserving` (keep the shape, replace the content). Every style is
+  verified by re-derivation — the transport confirms the sensitive value is gone
+  and blocks otherwise — and the style is recorded in the evidence, never the
+  masked bytes. Deterministic masks only: no reversible tokenisation, no
+  format-preserving encryption.
+
+### Unchanged — the core still did not grow
+
+- The verdict algebra, the ledger, the detector protocol, the pipeline, the
+  `injection` detector and their tests are byte-identical to the v0.1 commit. The
+  frontier ratchet asserts it, and a dedicated ratchet asserts the HTTP transport
+  reuses the stdio relay rather than copying it. Every claim was seen red under a
+  deliberate mutation.
 
 ### Added — v0.3, egress redaction (ADR 0006)
 
@@ -104,10 +150,13 @@ importing the SDK. All four were seen red under deliberate mutation.
   two numbers, never one (ADR 0003).
 - Founding ADRs 0001–0004.
 
-### Not yet — see the README's "What limes does not do" section
+### Not yet at v0.1 — see the later versions above and the README
 
-- No MCP proxy (that is v0.2, the adoption wedge), no HTTP transport, no CLI.
+- No MCP proxy (that arrives in v0.2, the adoption wedge), no HTTP transport and
+  no CLI (both in the 0.4.0 line).
 - No PII or secrets detector, no rate-limit, no kill-switch, no threat feed, no
-  human-approval, no LLM-judge detector, no dashboard.
-- Name, PyPI, GitHub, CLA and the final license split are **not decided** — they
-  are Amadou's calls, pending before any publication.
+  human-approval, no LLM-judge detector, no dashboard — most of these are scope,
+  not backlog (see the README's "What limes does not do").
+- The PyPI name `limes` was **verified available** on 2026-07-24
+  (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
+  license split remain Amadou's calls, pending before any publication.

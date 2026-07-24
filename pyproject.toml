@@ -1,6 +1,6 @@
 [project]
 name = "limes"
-version = "0.1.0"
+version = "0.4.0"
 description = "The guard that can prove what it refused — a transport-agnostic, evidence-carrying policy guard for LLM agents."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -20,11 +20,18 @@ keywords = [
 ]
 authors = [{ name = "Amadou Mamane" }]
 classifiers = [
+    # Pre-1.0 by choice: the surface is complete, the field use that earns a 1.0
+    # is not (see the README). Alpha, honestly, not Beta.
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
 dependencies = [
