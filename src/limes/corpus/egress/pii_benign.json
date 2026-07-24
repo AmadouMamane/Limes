@@ -1,0 +1,189 @@
+{
+  "detector": "pii-egress",
+  "kind": "benign",
+  "provenance": "synthetic",
+  "cases": [
+    {
+      "id": "pan_like_order_reference",
+      "mimics": "pan",
+      "language": "fr",
+      "content": "Commande n° 1234 5678 9012 3456 expédiée ce matin.",
+      "why": "Sixteen digits grouped exactly like a card number, failing Luhn. This is the single most common false positive of a card regex, and the reason the rule is checksum-gated at all."
+    },
+    {
+      "id": "pan_like_bestellnummer",
+      "mimics": "pan",
+      "language": "de",
+      "content": "Bestellnummer 9999 8888 7777 6666 wurde versandt.",
+      "why": "Sixteen digits, fails Luhn. A repeating pattern a human would read as obviously not a card, and a regex would not."
+    },
+    {
+      "id": "pan_like_contract_number",
+      "mimics": "pan",
+      "language": "en",
+      "content": "Contract 8001234512345678 was signed on 3 March.",
+      "why": "Sixteen ungrouped digits, fails Luhn."
+    },
+    {
+      "id": "pan_like_off_by_one_check_digit",
+      "mimics": "pan",
+      "language": "fr",
+      "content": "Référence dossier 4242 4242 4242 4241 à archiver.",
+      "why": "One digit away from a published test card, so only the check digit distinguishes it. If this fires, the checksum is not being applied."
+    },
+    {
+      "id": "pan_like_amount_with_decimals",
+      "mimics": "pan",
+      "language": "fr",
+      "content": "Encours cumulé de 1 234 567 890 123 456,78 EUR sur l'exercice.",
+      "why": "Sixteen digits followed by a comma-decimal tail: money, not a card. The trailing lookahead is what excludes it."
+    },
+    {
+      "id": "pan_like_tracking_code",
+      "mimics": "pan",
+      "language": "en",
+      "content": "Tracking 1Z999AA10123456784 dispatched yesterday.",
+      "why": "A digit run embedded in an alphanumeric code. The lookbehind must refuse to start inside a word."
+    },
+    {
+      "id": "iban_like_internal_reference",
+      "mimics": "iban",
+      "language": "fr",
+      "content": "Référence interne FR76 3000 6000 0112 3456 7890 188 (non bancaire).",
+      "why": "IBAN-shaped internal identifier that fails MOD 97-10. The whole reason the IBAN rule carries a checksum rather than a tighter shape."
+    },
+    {
+      "id": "iban_like_hr_system_key",
+      "mimics": "iban",
+      "language": "de",
+      "content": "Systemkennung DE00 1234 5678 9012 3456 78 im HR-Tool.",
+      "why": "Country code and check digits present, checksum absent."
+    },
+    {
+      "id": "iban_like_ticket_code",
+      "mimics": "iban",
+      "language": "en",
+      "content": "Ticket XX99 0000 1111 2222 3333 44 escalated to tier 2.",
+      "why": "IBAN shape with a country code that does not exist; fails the checksum."
+    },
+    {
+      "id": "iban_like_off_by_one_de",
+      "mimics": "iban",
+      "language": "de",
+      "content": "Referenz DE89 3704 0044 0532 0130 01 wurde storniert.",
+      "why": "One digit away from the German documentation IBAN — only MOD 97-10 separates them."
+    },
+    {
+      "id": "iban_like_off_by_one_gb",
+      "mimics": "iban",
+      "language": "en",
+      "content": "Batch GB29 NWBK 6016 1331 9268 18 rejected by the clearing house.",
+      "why": "One digit away from the UK documentation IBAN. And a trap for `retry_trim`: a trimming retry must not stumble onto a shorter prefix that happens to pass."
+    },
+    {
+      "id": "email_like_truncated_local_part",
+      "mimics": "email",
+      "language": "fr",
+      "content": "Adresse incomplète jean.dupont@ à corriger avant envoi.",
+      "why": "An at-sign with no domain. Not an address, and not a destination."
+    },
+    {
+      "id": "email_like_missing_local_part",
+      "mimics": "email",
+      "language": "en",
+      "content": "Bad address @example.com was rejected by the form.",
+      "why": "A domain with no local part."
+    },
+    {
+      "id": "email_like_dotted_hostname",
+      "mimics": "email",
+      "language": "fr",
+      "content": "Ce n'est pas un e-mail : not.an.email.example.com",
+      "why": "Dotted labels with no at-sign — a hostname reads like an address to a lax pattern."
+    },
+    {
+      "id": "email_like_bare_domain",
+      "mimics": "email",
+      "language": "de",
+      "content": "Die Domain example.org ist wieder erreichbar.",
+      "why": "A bare domain name is not personal data and must not be masked."
+    },
+    {
+      "id": "phone_like_iso_date_and_amount",
+      "mimics": "phone",
+      "language": "fr",
+      "content": "Facture du 2026-07-24 pour un montant de 1 240,50 EUR.",
+      "why": "A date and an amount: digit groups that are neither a subscriber number nor an account."
+    },
+    {
+      "id": "phone_like_version_and_dotted_date",
+      "mimics": "phone",
+      "language": "en",
+      "content": "Version 10.4.2.1 was deployed on 24.07.2026.",
+      "why": "Dot-separated digit groups. A phone pattern that accepts dots as separators must still refuse these."
+    },
+    {
+      "id": "phone_like_spaced_date",
+      "mimics": "phone",
+      "language": "de",
+      "content": "Rechnung 2026 07 24 wurde beglichen.",
+      "why": "Space-separated date groups; no trunk prefix, no country code."
+    },
+    {
+      "id": "phone_like_time_and_port",
+      "mimics": "phone",
+      "language": "en",
+      "content": "Order placed at 12:34:56 on port 8080 by the batch job.",
+      "why": "Short digit runs with colons — below the E.164 digit floor the validator enforces."
+    },
+    {
+      "id": "nir_like_wrong_control_key",
+      "mimics": "nir",
+      "language": "fr",
+      "content": "NIR invalide 1 85 05 78 006 084 99 rejeté par le référentiel.",
+      "why": "A correct NIR body with a wrong control key. Only the key arithmetic separates it from the real shape."
+    },
+    {
+      "id": "nir_like_internal_matricule",
+      "mimics": "nir",
+      "language": "fr",
+      "content": "Matricule agent 2 77 09 31 402 116 38 refusé à la saisie.",
+      "why": "NIR-shaped internal staff number with a key that does not check out."
+    },
+    {
+      "id": "nir_like_impossible_sex_digit",
+      "mimics": "nir",
+      "language": "fr",
+      "content": "Identifiant 3 85 05 78 006 084 91 hors référentiel.",
+      "why": "Starts with 3, which no NIR does. The shape itself must exclude it."
+    },
+    {
+      "id": "generic_git_sha",
+      "mimics": "pan",
+      "language": "en",
+      "content": "Commit 8cd605c5c0873de5f74f075a2497dbac6b0c24c6 merged to main.",
+      "why": "A 40-character hex digest. Long, opaque, and not personal data."
+    },
+    {
+      "id": "generic_uuid",
+      "mimics": "nir",
+      "language": "en",
+      "content": "Request id 123e4567-e89b-12d3-a456-426614174000 traced end to end.",
+      "why": "A UUID: hyphen-grouped, digit-heavy, and carried in ordinary telemetry. Masking it would break the log it appears in."
+    },
+    {
+      "id": "generic_prose_with_amounts",
+      "mimics": "pan",
+      "language": "fr",
+      "content": "Le solde est de 1 240,50 EUR sur le compte courant, hors frais.",
+      "why": "Ordinary banking prose with money in it. The control that says the detector does not simply fire on 'text about accounts'."
+    },
+    {
+      "id": "generic_prose_no_digits",
+      "mimics": "email",
+      "language": "de",
+      "content": "Ihre Anfrage wurde an die zuständige Abteilung weitergeleitet.",
+      "why": "Prose with no identifier of any kind. If this fires, something is badly wrong; it costs one line to know."
+    }
+  ]
+}

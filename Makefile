@@ -15,7 +15,7 @@ help:
 	@echo "  make fmt    — ruff format + ruff check --fix"
 	@echo "  make gate   — ruff + ruff format --check + mypy --strict + pytest, naming the tree it judged"
 	@echo "  make tree   — print the tree fingerprint the gate would judge"
-	@echo "  make eval   — run the injection detector harness; write the dated confusion matrix"
+	@echo "  make eval   — run every admitted detector's harness; write the dated matrices"
 
 sync:
 	$(UV) sync
@@ -30,5 +30,9 @@ gate:
 tree:
 	@UV="$(UV)" bash scripts/gate.sh --tree
 
+# Every admitted detector, not just the first one. A matrix that stops being
+# regenerated stops being evidence, and ADR 0003 admits detectors on their
+# matrices — so the target has to grow with ADMITTED, and does.
 eval:
 	$(UV) run python -m limes.eval.harness --write
+	$(UV) run python -m limes.eval.egress_harness pii-egress --write

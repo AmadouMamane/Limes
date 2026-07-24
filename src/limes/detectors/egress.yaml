@@ -1,0 +1,84 @@
+# limes — egress detection policy (ADR 0004: rules are data, never Python).
+#
+# Every rule is a SHAPE plus a CHECK. The shape says which runs of text are even
+# looked at; the check says whether the shape meant anything. The check is named
+# from a closed registry (limes.detectors.egress_policy.VALIDATORS) — an unknown
+# name is a load error, never a rule that matches a shape and vouches for nothing.
+#
+# `validator: none` is a rule declaring, out loud, that its shape is the whole
+# claim. `retry_trim: true` lets a candidate that failed its check be retried
+# after dropping its trailing group — prose runs an IBAN into the next word, and
+# the retry can only ever SHORTEN a candidate, never loosen the check.
+#
+# The half of a label before the colon is the egress KIND the transport policies
+# by (ADR 0006): `pii:pan` is kind `pii`.
+#
+# The corpus that admits these rules is synthetic by construction and may never
+# hold a real value (ADR 0009).
+
+version: 1
+
+detectors:
+
+  # -- pii-egress (ADR 0003 admission: eval/matrices/pii_egress.md) ------------
+  #
+  # Five fixed categories. Not configurable: a deployment that could add a
+  # category could add one nobody measured, and an unmeasured category is a
+  # capability claimed and never proven.
+  pii-egress:
+    # Beyond this many characters the detector does not scan, and says so:
+    # DetectorBlind -> CannotSay -> the egress leg blocks. Declared here rather
+    # than hard-coded because it is a real operational trade-off (an unbounded
+    # regex sweep over an unbounded tool result is a denial-of-service surface),
+    # and because "I did not look at this" must be auditable data, not a magic
+    # number. Never a silent "nothing found" (ADR 0002).
+    max_content_chars: 200000
+    rules:
+
+      # Card number. 13-19 digits with at most one space / no-break space /
+      # hyphen between them, gated by the ISO/IEC 7812 check digit — which is
+      # what tells a card number from a 16-digit order reference. The trailing
+      # lookahead keeps it off decimal amounts (a ",45" tail marks money).
+      - label: pii:pan
+        validator: luhn
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9+])\d(?:[ \xa0-]?\d){12,18}(?![A-Za-z0-9]|[.,]\d)'
+
+      # IBAN. Deliberately broad shape — two letters, two check digits, then up
+      # to thirty grouped alphanumerics — because precision comes from MOD 97-10
+      # (ISO 13616), not from the shape. `retry_trim` recovers the very common
+      # case of prose running straight into the account number ("...0130 00 EUR").
+      - label: pii:iban
+        validator: iban_mod97
+        retry_trim: true
+        pattern: '\b[A-Z]{2}\d{2}(?:[ \xa0]?[A-Z0-9]){10,30}\b'
+
+      # E-mail address. The shape IS the claim here: there is no checksum in an
+      # address, and requiring a local part, an "@", a labelled domain and a
+      # 2+-letter TLD is already what rejects "jean.dupont@" and "@example.com".
+      - label: pii:email
+        validator: none
+        retry_trim: false
+        pattern: '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'
+
+      # Telephone: French, German, and E.164 international, as one category with
+      # three alternatives. The check is a digit count in the E.164 range (9-15),
+      # which is what keeps a date, a reference or an amount out of the findings.
+      #
+      # Kept on ONE line on purpose: a YAML folded scalar (`>-`) turns each line
+      # break into a SPACE, which lands inside the regex and silently requires a
+      # trailing space after every alternative. That shape passed the positive
+      # corpus (prose usually has a space there) and would have missed a number
+      # at the end of a sentence.
+      - label: pii:phone
+        validator: phone_digits
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9+])(?:(?:\+33[ \xa0.-]?|0)[1-9](?:[ \xa0.-]?\d{2}){4}|(?:\+49[ \xa0.-]?|0)[1-9]\d{1,4}[ \xa0./-]?\d{3,9}|\+[1-9]\d{0,2}[ \xa0.-]?(?:\d[ \xa0.-]?){5,12}\d)(?![A-Za-z0-9])'
+
+      # French social-security number (NIR). Fifteen characters, the last two a
+      # control key equal to 97 - (body mod 97) — with Corsica's 2A / 2B
+      # department codes substituted before the arithmetic.
+      - label: pii:nir
+        validator: nir_key
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9])[12][ \xa0.]?\d{2}[ \xa0.]?\d{2}[ \xa0.]?(?:\d{2}|2[AB])[ \xa0.]?\d{3}[ \xa0.]?\d{3}[ \xa0.]?\d{2}(?![A-Za-z0-9])'

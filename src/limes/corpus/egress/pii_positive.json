@@ -1,0 +1,263 @@
+{
+  "detector": "pii-egress",
+  "kind": "positive",
+  "provenance": "synthetic",
+  "cases": [
+    {
+      "id": "pan_01_visa_test_grouped",
+      "category": "pan",
+      "language": "fr",
+      "content": "Carte 4242 4242 4242 4242 renvoyée, solde 1 240,50 EUR.",
+      "locate": "4242 4242 4242 4242",
+      "why": "Stripe's published test card, Luhn-valid and never issued. Grouped by spaces, next to an amount whose comma-decimal tail must not be swallowed."
+    },
+    {
+      "id": "pan_02_mastercard_test_hyphens",
+      "category": "pan",
+      "language": "de",
+      "content": "Kartennummer 5555-5555-5555-4444 wurde gesperrt.",
+      "locate": "5555-5555-5555-4444",
+      "why": "Published Mastercard test number, hyphen-grouped: the separator set must cover what a UI actually emits."
+    },
+    {
+      "id": "pan_03_visa_test_compact",
+      "category": "pan",
+      "language": "en",
+      "content": "Card 4111111111111111 was charged 25.00 EUR.",
+      "locate": "4111111111111111",
+      "why": "Published Visa test number with no separators at all."
+    },
+    {
+      "id": "pan_04_amex_fifteen_digits",
+      "category": "pan",
+      "language": "fr",
+      "content": "Amex 3782 822463 10005 en cours de vérification.",
+      "locate": "3782 822463 10005",
+      "why": "Published American Express test number: fifteen digits in 4-6-5 grouping, so the length range may not assume sixteen."
+    },
+    {
+      "id": "pan_05_discover_test",
+      "category": "pan",
+      "language": "en",
+      "content": "Statement for 6011 1111 1111 1117 attached.",
+      "locate": "6011 1111 1111 1117",
+      "why": "Published Discover test number — a non-Visa, non-Mastercard IIN range."
+    },
+    {
+      "id": "pan_06_mastercard_second_test",
+      "category": "pan",
+      "language": "de",
+      "content": "Ersatzkarte 5105 1051 0510 5100 versandt.",
+      "locate": "5105 1051 0510 5100",
+      "why": "Second published Mastercard test number, ending in a zero check digit."
+    },
+    {
+      "id": "pan_07_end_of_sentence",
+      "category": "pan",
+      "language": "fr",
+      "content": "La carte débitée est la 4242424242424242.",
+      "locate": "4242424242424242",
+      "why": "The value ends the sentence, immediately followed by a full stop: the trailing lookahead must not require a space."
+    },
+    {
+      "id": "iban_01_fr_example",
+      "category": "iban",
+      "language": "fr",
+      "content": "Votre IBAN FR14 2004 1010 0505 0001 3M02 606 a été enregistré.",
+      "locate": "FR14 2004 1010 0505 0001 3M02 606",
+      "why": "The ECBS documentation example for France, MOD 97-10 valid, containing a letter inside the body."
+    },
+    {
+      "id": "iban_02_de_example_runs_into_prose",
+      "category": "iban",
+      "language": "de",
+      "content": "Überweisung an DE89 3704 0044 0532 0130 00 EUR 1240 ausgeführt.",
+      "locate": "DE89 3704 0044 0532 0130 00",
+      "why": "The German documentation example, followed by an upper-case currency code the greedy shape swallows. Only `retry_trim` recovers it — without the retry a real IBAN goes unseen."
+    },
+    {
+      "id": "iban_03_gb_example",
+      "category": "iban",
+      "language": "en",
+      "content": "Account GB29 NWBK 6016 1331 9268 19 credited.",
+      "locate": "GB29 NWBK 6016 1331 9268 19",
+      "why": "The UK documentation example, whose four-letter bank code exercises the alphanumeric expansion."
+    },
+    {
+      "id": "iban_04_be_compact",
+      "category": "iban",
+      "language": "fr",
+      "content": "Compte BE68539007547034 clôturé le 12 mars.",
+      "locate": "BE68539007547034",
+      "why": "The Belgian documentation example written with no grouping — the shortest IBAN length in the corpus."
+    },
+    {
+      "id": "iban_05_nl_end_of_sentence",
+      "category": "iban",
+      "language": "en",
+      "content": "Payout sent to NL91 ABNA 0417 1643 00.",
+      "locate": "NL91 ABNA 0417 1643 00",
+      "why": "Dutch documentation example ending the sentence, so the trailing full stop must not join the candidate."
+    },
+    {
+      "id": "iban_06_at_example",
+      "category": "iban",
+      "language": "de",
+      "content": "Konto AT61 1904 3002 3457 3201 aufgelöst.",
+      "locate": "AT61 1904 3002 3457 3201",
+      "why": "Austrian documentation example."
+    },
+    {
+      "id": "iban_07_es_example",
+      "category": "iban",
+      "language": "en",
+      "content": "Transfer to ES91 2100 0418 4502 0005 1332 confirmed.",
+      "locate": "ES91 2100 0418 4502 0005 1332",
+      "why": "Spanish documentation example."
+    },
+    {
+      "id": "iban_08_ch_example",
+      "category": "iban",
+      "language": "fr",
+      "content": "Le virement part vers CH93 0076 2011 6238 5295 7 ce soir.",
+      "locate": "CH93 0076 2011 6238 5295 7",
+      "why": "Swiss documentation example, whose last group is a single character."
+    },
+    {
+      "id": "iban_09_it_example",
+      "category": "iban",
+      "language": "en",
+      "content": "Supplier IBAN IT60 X054 2811 1010 0000 0123 456 on file.",
+      "locate": "IT60 X054 2811 1010 0000 0123 456",
+      "why": "Italian documentation example, with the CIN letter inside the body."
+    },
+    {
+      "id": "email_01_fr",
+      "category": "email",
+      "language": "fr",
+      "content": "Confirmation envoyée à jean.dupont@example.com hier soir.",
+      "locate": "jean.dupont@example.com",
+      "why": "RFC 2606 reserved domain: example.com can never be a real recipient."
+    },
+    {
+      "id": "email_02_de",
+      "category": "email",
+      "language": "de",
+      "content": "Kontakt: maria.schmidt@example.org wurde bestätigt.",
+      "locate": "maria.schmidt@example.org",
+      "why": "RFC 2606 reserved domain, German context."
+    },
+    {
+      "id": "email_03_plus_tag_subdomain",
+      "category": "email",
+      "language": "en",
+      "content": "Reply to a.b+tag@sub.example.co.uk when convenient.",
+      "locate": "a.b+tag@sub.example.co.uk",
+      "why": "A plus-tagged local part on a multi-label domain — the shape must not stop at the first dot."
+    },
+    {
+      "id": "email_04_end_of_sentence",
+      "category": "email",
+      "language": "en",
+      "content": "Please cc support@example.com.",
+      "locate": "support@example.com",
+      "why": "The address ends the sentence: the trailing full stop must not be absorbed into the TLD."
+    },
+    {
+      "id": "email_05_fr_second",
+      "category": "email",
+      "language": "fr",
+      "content": "Nouvel e-mail au dossier : m.moreau@example.net",
+      "locate": "m.moreau@example.net",
+      "why": "RFC 2606 reserved domain, value at end of content with no punctuation after it."
+    },
+    {
+      "id": "phone_01_fr_international",
+      "category": "phone",
+      "language": "fr",
+      "content": "Nous rappellerons au +33 6 12 34 56 78 demain matin.",
+      "locate": "+33 6 12 34 56 78",
+      "why": "French mobile in international form; 06 12 34 56 78 is the range French documentation uses for examples."
+    },
+    {
+      "id": "phone_02_fr_national_end_of_sentence",
+      "category": "phone",
+      "language": "fr",
+      "content": "Téléphone enregistré : 06 12 34 56 78.",
+      "locate": "06 12 34 56 78",
+      "why": "National form ending the sentence — the case the folded-YAML pattern bug would have missed."
+    },
+    {
+      "id": "phone_03_de_international",
+      "category": "phone",
+      "language": "de",
+      "content": "Rufnummer +49 30 901820 wurde hinterlegt.",
+      "locate": "+49 30 901820",
+      "why": "German number in international form; 030 901820 is a Berlin documentation example."
+    },
+    {
+      "id": "phone_04_de_national",
+      "category": "phone",
+      "language": "de",
+      "content": "Erreichbar unter 030 901820 zwischen 9 und 17 Uhr.",
+      "locate": "030 901820",
+      "why": "German national form with a leading zero trunk prefix."
+    },
+    {
+      "id": "phone_05_us_reserved_range",
+      "category": "phone",
+      "language": "en",
+      "content": "Call +1 202 555 0143 for support.",
+      "locate": "+1 202 555 0143",
+      "why": "555-01xx is the North American range reserved for fiction — it can never reach a real subscriber."
+    },
+    {
+      "id": "phone_06_uk_reserved_range",
+      "category": "phone",
+      "language": "en",
+      "content": "Mobile +44 20 7946 0958 is on file.",
+      "locate": "+44 20 7946 0958",
+      "why": "020 7946 0xxx is the Ofcom range reserved for drama and documentation."
+    },
+    {
+      "id": "nir_01_male_grouped",
+      "category": "nir",
+      "language": "fr",
+      "content": "NIR 1 85 05 78 006 084 91 vérifié auprès de la CNAM.",
+      "locate": "1 85 05 78 006 084 91",
+      "why": "Synthetic NIR: control key recomputed as 97 - (body mod 97) so the checksum is genuinely valid, the identity fictional."
+    },
+    {
+      "id": "nir_02_female_end_of_sentence",
+      "category": "nir",
+      "language": "fr",
+      "content": "Numéro de sécurité sociale : 2 89 07 92 044 021 71.",
+      "locate": "2 89 07 92 044 021 71",
+      "why": "Synthetic NIR with a recomputed key, ending the sentence."
+    },
+    {
+      "id": "nir_03_compact",
+      "category": "nir",
+      "language": "fr",
+      "content": "Assuré 195045918702364 au dossier depuis 2019.",
+      "locate": "195045918702364",
+      "why": "Synthetic NIR written with no grouping at all. Its fifteen digits deliberately FAIL Luhn, so it cannot also read as a card number — a NIR that passed Luhn would fire pii:pan as well and muddy the per-category matrix."
+    },
+    {
+      "id": "nir_04_corsica",
+      "category": "nir",
+      "language": "fr",
+      "content": "Assuré 1 75 12 2A 123 456 53 (Corse-du-Sud).",
+      "locate": "1 75 12 2A 123 456 53",
+      "why": "Corsican department code 2A: the key arithmetic must substitute it for 19 before the modulo, or a whole département goes undetected."
+    },
+    {
+      "id": "nir_05_en_context",
+      "category": "nir",
+      "language": "en",
+      "content": "French social security number 2 77 09 31 402 116 39 on file.",
+      "locate": "2 77 09 31 402 116 39",
+      "why": "Synthetic NIR quoted inside English prose — the value, not the surrounding language, is what the rule keys on."
+    }
+  ]
+}

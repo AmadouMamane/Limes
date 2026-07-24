@@ -7,20 +7,25 @@ pyproject; and the *imports* of every module outside the transports. Not the
 neighbourhood — not "the tests still pass", which would be green over a core
 rewrite (ADR 0026).
 
-It is deliberately written as a **complement**: everything the transports are
-allowed to touch is listed in :data:`ALLOWED`, and *everything else* must be
-byte-identical. An allowlist ratchet has one classic failure mode, though —
-somebody widens the allowlist and the ratchet reports green over the very file it
-was protecting. So the load-bearing modules are *also* named positively, in
-:data:`CORE`, and two things are asserted about them: they are byte-identical,
-and they are **not covered by ALLOWED**. Widening the list no longer buys silence.
+ADR 0004 names **three** places a capability may land — a detector, a policy, or
+a transport — so this file names three perimeters, and *everything else* must be
+byte-identical:
 
-Transports may move, and so may the usage surfaces built on top of the core.
-``limes/transports/in_process.py`` gained an egress leg in v0.3 (ADR 0006),
-``limes/transports/redaction.py`` is new, and ``limes/cli.py`` is the ``limes
-check`` command added in the v1.0 line — a thin caller of the pipeline, no new
-decision. The core, the pipeline, the detectors and their tests are what may not
-move — and have not, since v0.1.
+* :data:`ALLOWED` — the transports and the CLI usage surface (v0.2 → v0.4).
+* :data:`DETECTOR_PERIMETER` — where an admitted detector lives: its rules, its
+  checksums, its corpus, its harness, its baseline, its matrix, its tests. Every
+  entry is an exact path or a directory that did not exist at v0.1, never a
+  prefix that could swallow a core module.
+* :data:`ADMISSION_SURFACE` — the two files that *must* move when a detector is
+  admitted: the registry tuple and its enforcer. Byte-identity is the wrong
+  witness for them (a registry that can never gain an entry makes ADR 0003's
+  admission procedure unreachable), so each has a stronger, specific one below.
+
+An allowlist ratchet has one classic failure mode: somebody widens the list and
+the ratchet reports green over the very file it was protecting. So the
+load-bearing modules are *also* named positively, in :data:`CORE`, and two things
+are asserted about them — they are byte-identical, and they are **not covered by
+any perimeter**. Widening a list no longer buys silence.
 """
 
 from __future__ import annotations
@@ -36,12 +41,12 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 
-#: The v0.1 tip. Everything outside the allowlist must still be byte-identical to it.
+#: The v0.1 tip. Everything outside the perimeters must still be byte-identical to it.
 V0_1_COMMIT = "86bf21dd38eef1cb683a0a124102b6df08381ec7"
 
 #: The perimeter the core is NOT in: the transport modules, the CLI usage surface,
 #: their tests, their docs, and the entry points and packaging metadata that
-#: declare them. Everything outside it must be byte-identical to v0.1.
+#: declare them.
 ALLOWED = (
     "src/limes/transports/mcp/",
     "src/limes/transports/redaction.py",
@@ -63,10 +68,45 @@ ALLOWED = (
     "uv.lock",
 )
 
-#: The load-bearing modules, named rather than merely implied. Whatever ALLOWED
-#: says, these are byte-identical to v0.1 — that is the ADR 0004 claim, and it is
-#: what a reader of this file should be able to check without reconstructing a
-#: set difference in their head.
+#: Where a detector lands (ADR 0004's second bucket). Exact paths, and two
+#: directories that did not exist at v0.1 — deliberately NOT the prefix
+#: ``src/limes/detectors/``, which would cover ``injection.py`` and ``policy.yaml``
+#: and quietly unfreeze the detector this project was built around.
+DETECTOR_PERIMETER = (
+    "src/limes/detectors/checksums.py",
+    "src/limes/detectors/egress_policy.py",
+    "src/limes/detectors/egress_scan.py",
+    "src/limes/detectors/egress.yaml",
+    "src/limes/detectors/pii_egress.py",
+    "src/limes/detectors/secrets_egress.py",
+    "src/limes/corpus/egress/",
+    "src/limes/eval/egress_corpus.py",
+    "src/limes/eval/egress_harness.py",
+    "src/limes/baselines/tessera_pii.py",
+    "tests/unit/egress/",
+    "tests/integration/egress/",
+    # The rendered admission reports. They are *generated* from code that is
+    # itself frozen (harness, corpus, detector, policy are all in CORE), so
+    # freezing the rendering too would add no guarantee and would make `make eval`
+    # break the ratchet by refreshing a date line.
+    "eval/matrices/",
+    "docs/decisions/0009-egress-corpus-synthetic-only.md",
+    "docs/design/detecteurs-egress-reels.md",
+    "Makefile",
+)
+
+#: The two files an admission necessarily touches. They are not in CORE — a file
+#: cannot be in both lists — and what replaces byte-identity for them is asserted
+#: below, one test each. Weaker than "did not change"; stronger than nothing.
+ADMISSION_SURFACE = (
+    "src/limes/detectors/__init__.py",
+    "tests/unit/test_admission_rule.py",
+)
+
+#: The load-bearing modules, named rather than merely implied. Whatever the
+#: perimeters say, these are byte-identical to v0.1 — that is the ADR 0004 claim,
+#: and it is what a reader of this file should be able to check without
+#: reconstructing a set difference in their head.
 CORE = (
     "src/limes/guard.py",
     "src/limes/verdict.py",
@@ -75,7 +115,6 @@ CORE = (
     "src/limes/record.py",
     "src/limes/policy.py",
     "src/limes/registry.py",
-    "src/limes/detectors/__init__.py",
     "src/limes/detectors/injection.py",
     "src/limes/detectors/policy.yaml",
     "src/limes/eval/harness.py",
@@ -86,7 +125,6 @@ CORE = (
     "tests/unit/test_record_chain.py",
     "tests/unit/test_detector_protocol.py",
     "tests/unit/test_injection_detector.py",
-    "tests/unit/test_admission_rule.py",
     "tests/unit/test_power.py",
     "tests/unit/test_corpus_provenance.py",
     "tests/unit/ratchets/test_allow_needs_evidence_mypy.py",
@@ -97,8 +135,7 @@ CORE = (
 
 #: Core modules whose *prose* had to be corrected as the transports grew (they
 #: said "v0.1 ships no MCP proxy"). Their CODE must still be identical — asserted
-#: below, not trusted. They are deliberately absent from CORE, which asserts
-#: byte-identity: a file cannot be in both lists, and this one is the weaker claim.
+#: below, not trusted.
 DOCSTRING_ONLY = (
     "src/limes/__init__.py",
     "src/limes/transports/__init__.py",
@@ -107,6 +144,8 @@ DOCSTRING_ONLY = (
 CORE_PACKAGE = REPO / "src" / "limes"
 TRANSPORTS = CORE_PACKAGE / "transports"
 MCP_TRANSPORT = TRANSPORTS / "mcp"
+
+PERIMETERS = ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE
 
 
 def _git(*arguments: str) -> str:
@@ -141,7 +180,7 @@ def _v0_1_bytes(path: str) -> bytes:
 
 
 def _is_allowed(path: str) -> bool:
-    return any(path == entry or path.startswith(entry) for entry in ALLOWED)
+    return any(path == entry or path.startswith(entry) for entry in PERIMETERS)
 
 
 def _code_without_docstring(source: bytes) -> str:
@@ -176,29 +215,100 @@ def test_every_path_this_ratchet_claims_to_protect_actually_exists():
     assert missing == [], f"CORE names paths that never existed at v0.1: {missing}"
 
 
-def test_the_named_core_is_not_covered_by_the_allowlist():
-    # This is the anti-widening check. Adding "src/limes/" to ALLOWED to make a
-    # red go away would leave this one red.
+def test_the_named_core_is_not_covered_by_any_perimeter():
+    # This is the anti-widening check, and it now polices three lists rather than
+    # one. Adding "src/limes/detectors/" to DETECTOR_PERIMETER to make a red go
+    # away would leave this one red, naming injection.py and its policy.
     escaped = sorted(path for path in CORE if _is_allowed(path))
     assert escaped == [], (
-        "these core paths were made writable by widening ALLOWED; the allowlist is "
-        f"for transports, and the core is not one: {escaped}"
+        "these core paths were made writable by widening a perimeter; the perimeters are "
+        f"for transports, detectors and the admission surface, and the core is none of "
+        f"them: {escaped}"
     )
+
+
+def test_the_admission_surface_is_not_also_claimed_as_core():
+    # A file cannot be in both lists: CORE asserts byte-identity, ADMISSION_SURFACE
+    # asserts something weaker. Claiming both would let the weaker one hide behind
+    # the stronger one's name.
+    overlap = sorted(set(ADMISSION_SURFACE) & set(CORE))
+    assert overlap == [], f"claimed as both frozen and admission surface: {overlap}"
 
 
 @pytest.mark.parametrize("path", CORE)
 def test_the_named_core_is_byte_identical_to_v0_1(path):
     assert (REPO / path).read_bytes() == _v0_1_bytes(path), (
-        f"{path} is the core, the pipeline or a detector (ADR 0004). A transport "
-        "behaviour may not change it — and egress redaction did not need to: the "
-        "offsets it masks by were already in the evidence."
+        f"{path} is the core, the pipeline, the injection detector or its measurement "
+        "(ADR 0004). Neither a transport behaviour nor a new detector may change it — and "
+        "the egress detectors did not need to: they are a plugin, a policy file and a corpus."
+    )
+
+
+# --- the admission surface --------------------------------------------------
+
+
+def _admitted_names(source: bytes) -> list[str]:
+    """The names in the ADMITTED tuple, read from the source rather than imported."""
+    for node in ast.parse(source).body:
+        target = getattr(node, "target", None)
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(target, ast.Name)
+            and target.id == "ADMITTED"
+            and isinstance(node.value, ast.Tuple)
+        ):
+            return [element.id for element in node.value.elts if isinstance(element, ast.Name)]
+    raise AssertionError("no ADMITTED tuple found")
+
+
+def test_the_registry_only_ever_gained_detectors():
+    path = "src/limes/detectors/__init__.py"
+    before = _admitted_names(_v0_1_bytes(path))
+    after = _admitted_names((REPO / path).read_bytes())
+    assert before, "v0.1 admitted nothing, which cannot be right"
+    lost = sorted(set(before) - set(after))
+    assert lost == [], f"the registry LOST detectors, which is not a growth: {lost}"
+
+
+def test_the_registry_is_still_a_registry_and_not_a_program():
+    # What replaces byte-identity: this file may gain an import and a tuple entry,
+    # and nothing else. No branch, no call, no function, no try — a registry with
+    # logic in it is a place a detector can be admitted conditionally, which is a
+    # place ADR 0003's enforcer cannot see.
+    tree = ast.parse((REPO / "src/limes/detectors/__init__.py").read_bytes())
+    allowed_nodes = (ast.Expr, ast.ImportFrom, ast.Import, ast.AnnAssign, ast.Assign)
+    offenders = [type(node).__name__ for node in tree.body if not isinstance(node, allowed_nodes)]
+    assert offenders == [], f"the registry grew logic: {offenders}"
+    assigned = [
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+        for target in [node.target]
+    ] + [
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    ]
+    assert sorted(assigned) == ["ADMITTED", "__all__"]
+
+
+def test_the_admission_enforcer_still_measures_every_admitted_detector():
+    # The enforcer's own contract, asked of the file: it parametrises over
+    # ADMITTED rather than naming detectors one by one, so a detector added to the
+    # tuple is measured without anybody remembering to add a test.
+    source = (REPO / "tests/unit/test_admission_rule.py").read_text(encoding="utf-8")
+    assert 'parametrize("detector_cls", ADMITTED' in source, (
+        "the admission enforcer must iterate ADMITTED; a hand-written list of detectors "
+        "is exactly the thing that goes stale the day one is added"
     )
 
 
 # --- the complement ---------------------------------------------------------
 
 
-def test_every_v0_1_file_outside_the_transports_is_byte_identical():
+def test_every_v0_1_file_outside_the_perimeters_is_byte_identical():
     changed = []
     for path in sorted(_v0_1_paths()):
         if _is_allowed(path) or path in DOCSTRING_ONLY:
@@ -208,14 +318,14 @@ def test_every_v0_1_file_outside_the_transports_is_byte_identical():
         if current.read_bytes() != _v0_1_bytes(path):
             changed.append(path)
     assert changed == [], (
-        "a transport (ADR 0004) may not change the core, the detectors, or their "
-        f"tests. These moved: {changed}"
+        "a transport or a detector (ADR 0004) may not change the core, the injection "
+        f"detector, or their tests. These moved: {changed}"
     )
 
 
-def test_no_new_file_landed_outside_the_transports():
+def test_no_new_file_landed_outside_the_perimeters():
     added = sorted(path for path in _working_paths() - _v0_1_paths() if not _is_allowed(path))
-    assert added == [], f"files landed outside the transport perimeter: {added}"
+    assert added == [], f"files landed outside every declared perimeter: {added}"
 
 
 @pytest.mark.parametrize("path", DOCSTRING_ONLY)
@@ -244,6 +354,21 @@ def test_the_mcp_sdk_is_an_optional_extra_and_never_a_core_dependency():
     assert scripts["limes-proxy"].startswith("limes.transports.mcp.")
 
 
+def test_the_detectors_add_no_dependency_at_all():
+    # A detector is a plugin, and this one is rules plus arithmetic. If admitting
+    # it had cost a dependency, `pip install limes` would have grown for everyone
+    # — including the users who only ever run `limes check`.
+    manifest = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    assert manifest["project"]["dependencies"] == ["pyyaml>=6.0"]
+
+
+def test_every_admitted_entry_point_resolves_to_the_detector_perimeter_or_the_core():
+    manifest = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    for name, target in manifest["project"]["entry-points"]["limes.detectors"].items():
+        module = target.split(":")[0].replace(".", "/") + ".py"
+        assert (REPO / "src" / module).exists(), f"entry point {name} names a missing module"
+
+
 def test_no_module_outside_the_mcp_transport_imports_the_sdk():
     offenders = {}
     for module in sorted(CORE_PACKAGE.rglob("*.py")):
@@ -265,6 +390,20 @@ def test_the_shared_redaction_module_is_reachable_without_the_sdk():
     assert redaction.__file__ is not None
     assert not redaction.__file__.startswith(str(MCP_TRANSPORT))
     assert "mcp" not in _imported_roots(Path(redaction.__file__).read_bytes())
+
+
+def test_the_detectors_do_not_import_a_transport():
+    # The dependency runs one way: a transport consumes detectors, never the
+    # reverse. A detector that imported `limes.transports` would make the egress
+    # rules unusable from `limes check`, which has no transport at all.
+    offenders = {}
+    for module in sorted((CORE_PACKAGE / "detectors").rglob("*.py")):
+        imported = _imported_roots(module.read_bytes())
+        if "limes" in imported:
+            source = module.read_text(encoding="utf-8")
+            if "limes.transports" in source:
+                offenders[str(module.relative_to(REPO))] = "imports limes.transports"
+    assert offenders == {}, offenders
 
 
 def test_the_sdk_is_not_shadowed_by_the_transport_package_name():

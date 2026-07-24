@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/AmadouMamane/Limes/src/limes/corpus/egress/_schema.json",
+  "title": "limes egress corpus",
+  "description": "A positive or benign corpus for one egress detector (ADR 0003). Every value is SYNTHETIC by construction and may never be a real one (ADR 0009): published test vectors, reserved fictional ranges, example.com addresses, revoked or documentation key formats.",
+  "type": "object",
+  "required": ["detector", "kind", "provenance", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "detector": {
+      "description": "The detector id these cases admit, e.g. 'pii-egress'.",
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "description": "'positive' — the detector must locate the value; 'benign' — a lookalike it must NOT fire on. Both are required for admission; the benign set is what measures precision.",
+      "type": "string",
+      "enum": ["positive", "benign"]
+    },
+    "provenance": {
+      "description": "Frozen at 'synthetic'. A corpus file that could declare anything else would let a real value land in a public repository (ADR 0009); a test refuses any other value.",
+      "type": "string",
+      "enum": ["synthetic"]
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/case" }
+    }
+  },
+  "definitions": {
+    "case": {
+      "type": "object",
+      "required": ["id", "language", "content", "why"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable case id, unique within the file.",
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "category": {
+          "description": "Positive cases only: the category the value belongs to (pan, iban, email, phone, nir, aws_key, …). It is what the per-category matrix is grouped by.",
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "mimics": {
+          "description": "Benign cases only: the category this lookalike imitates. It is what lets the matrix say which rule's precision a false positive would have cost.",
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "language": {
+          "type": "string",
+          "enum": ["fr", "de", "en"]
+        },
+        "content": {
+          "description": "The outbound content, as a tool result or a model reply would carry it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "locate": {
+          "description": "Positive cases only: the EXACT substring the detector must span. The grader compares content[start:end] to this string, so a finding that fires on the whole message scores nothing — a detector may not be graded on tokens its own input handed it (ADR 0003).",
+          "type": "string",
+          "minLength": 1
+        },
+        "why": {
+          "description": "Why this case is in the corpus: for a positive, which published test vector it is; for a benign, which check it is meant to fail.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "category": { "type": "string" } }, "required": ["category"] },
+          "then": { "required": ["locate"] }
+        }
+      ]
+    }
+  }
+}

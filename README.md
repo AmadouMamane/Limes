@@ -16,14 +16,14 @@ cannot see returns `CannotSay` — never a silent "allow".
 > 2026-07-24); the name, the GitHub identity, the CLA, and the final license split
 > are decisions pending ratification (see *License*). Nothing here is published yet.
 
-## What's in the box (v0.4.0)
+## What's in the box (v0.5.0)
 
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
 | **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1, a ratchet says so |
-| **Detectors** | **one**: `injection` (inbound, rule-based, measured) | no PII / secrets detector yet — ADR 0003 forbids shipping one without its eval corpus and null control |
+| **Detectors** | **two**: `injection` (inbound) and `pii-egress` (outbound: PAN, IBAN, e-mail, phone, NIR — checksum-gated, measured per category) | names, addresses, dates of birth — no check separates them from prose, so none is claimed; no secrets detector yet |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
-| **Egress** | redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | masks nothing out of the box (no egress detector); no reversible tokenisation, no FPE encryption |
+| **Egress** | redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
 | **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
 
 Everything is **pre-1.0 by choice**: the surface is complete, the field use that
@@ -121,8 +121,8 @@ In CI, that exit code *is* the gate — no output to parse:
 `--json` emits the canonical verdict fingerprint — the same serialisation the
 ledger hashes — plus the chain record, so a pipeline can diff or archive a
 decision. There is no new evidence format. `limes check` runs the shipped
-`injection` detector on the inbound leg; `--direction outbound` routes to egress
-detectors, of which limes ships none yet, so outbound is clean out of the box.
+`injection` detector on the inbound leg; `--direction outbound` runs `pii-egress`
+over a response, so a CI step can gate on a fixture that leaks a card number.
 
 ## Also over HTTP — `limes proxy-http`
 
@@ -192,7 +192,8 @@ scanning. What it assembles, and what others do not:
 2. **An admission rule on every detector** — none ships without its eval corpus
    and its null control. A detector unmeasured against doing nothing is a
    decoration. *Two numbers, never one:* attacks blocked **and** legitimate
-   traffic killed (ADR 0003).
+   traffic killed (ADR 0003). It is enforced rather than promised: the enforcer
+   iterates the admitted set, so a detector added without a corpus turns it red.
 3. **A transport-agnostic core** — the *same* decision core guards an in-process
    agent and any MCP host: one machine, two transports, so a `Deny` re-derives
    identically whichever way it was reached (ADR 0004, ADR 0005).
@@ -252,6 +253,101 @@ before commit (the "no unverified citation" discipline it inherits from Tessera)
 - [Promptfoo](https://github.com/promptfoo/promptfoo) — an eval / red-team
   harness for LLM apps. limes's eval harness draws on the same "publish the
   matrix" discipline, applied to detectors rather than prompts.
+
+## v0.5 — the egress detector: `pii-egress`
+
+Until v0.4 the outbound leg was machinery with nobody to feed it. limes knew how
+to mask a finding and shipped nothing that produced one, so "egress redaction"
+masked nothing out of the box and every proof used a test double. This is the
+detector, and it is admitted the same way `injection` was: a positive corpus, a
+benign corpus of **lookalikes**, a null control, and a matrix per category
+(ADR 0003) — with the corpus synthetic by construction (ADR 0009).
+
+Five fixed categories, each gated by arithmetic rather than by a tighter regex,
+because the shapes are shared with things that are not personal data:
+
+| category | shape | what makes it a detection |
+|---|---|---|
+| **PAN** | 13–19 grouped digits | ISO/IEC 7812 **Luhn** check digit |
+| **IBAN** | `LLdd` + up to 30 grouped alphanumerics | ISO 13616 **MOD 97-10** |
+| **e-mail** | local part `@` labelled domain | the shape *is* the claim — stated, not implied |
+| **telephone** | FR / DE / E.164 | digit count in the E.164 range (9–15) |
+| **NIR** | 15 characters, FR social security | control key `97 − (body mod 97)`, Corsica `2A`/`2B` substituted |
+
+### The two numbers
+
+Measured over the synthetic corpus (32 positive cases across 5 categories,
+fr/de/en; 26 benign lookalikes). Reproduce with `make eval`; the dated matrix is
+`eval/matrices/pii_egress.md`.
+
+| configuration | located | flagged | benign killed | recall | precision | F1 |
+|---|---|---|---|---|---|---|
+| unplugged (null control) | 0/32 | 0/32 | 0/26 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/32 | 32/32 | 26/26 | 0.00 | 0.00 | 0.00 |
+| tessera-pii baseline (`apply_output_guard`) | 21/32 | 27/32 | 15/26 | 0.66 | 0.58 | 0.62 |
+| **limes pii-egress** | **32/32** | 32/32 | **1/26** | **1.00** | **0.97** | **0.98** |
+
+Per category, `located`: PAN 7/7, IBAN 9/9, e-mail 5/5, phone 6/6, NIR 5/5
+(baseline: 7/7, 3/9, 5/5, 2/6, 4/5).
+
+**`located`, not `flagged` — and that distinction is the grader.** A positive case
+declares the exact substring that must be spanned; a finding counts only when its
+`[start, end)` reproduces it at that offset. So `block-everything` is *flagged* on
+every case and *located* on none: it fires on the whole message, which is not the
+card number. No token a case handed the detector can be mistaken for evidence
+that the detector found something — the egress form of the corrected-grader rule
+limes inherits from Tessera (ADR 0003).
+
+**The baseline is Tessera's shipping output guard**, transcribed verbatim
+(`src/limes/baselines/tessera_pii.py`, Tessera tree `823b0c71`) and run over the
+same corpus with the same grader. limes locates **32/32 against its 21/32** and
+kills **1 benign input against its 15**. The gap is one thing: the baseline has
+no checksum anywhere, so every 16-digit order reference and every IBAN-shaped
+internal identifier is masked, and its broad IBAN pattern under-locates the real
+ones (3/9) by grazing past their boundaries.
+
+**The one false positive, with its cause** (never rounded away — ADR 0003):
+`iban_like_off_by_one_de`, "Referenz DE89 3704 0044 0532 0130 01 wurde
+storniert." The IBAN rule correctly rejects it — MOD 97-10 fails on every prefix.
+What fires is `pii:pan` on `3704 0044 0532 0130 01`, eighteen digits that pass
+Luhn by coincidence, and `pii:phone` on a 10-digit run inside the same reference.
+The obvious fix — suppress a PAN candidate that sits behind an IBAN head — was
+**refused**: it would let a real card number hide behind `DE12 `, and trading a
+false negative for a false positive is the wrong direction for a guard. The
+matrix regenerates that diagnosis from the detector rather than quoting it, so it
+stays true when the rules change.
+
+**Fail-closed, and where.** Beyond the `max_content_chars` its policy declares
+(200 000), the detector does not scan: it raises `DetectorBlind`, the core
+answers `CannotSay`, and the egress leg **blocks**. An unbounded regex sweep over
+an unbounded tool result is a denial-of-service surface, and "I stopped looking"
+has to be sayable and closed rather than silent. One honest limit found by this
+work: content carrying unpaired surrogates cannot be hashed, and
+`limes.guard.decide` raises `UnicodeEncodeError` *before* it can render that
+blind spot as a verdict. It fails loudly, never open — nothing is forwarded — but
+it is a crash rather than a `CannotSay`, and fixing it means editing the core,
+which ADR 0004 does not allow from a detector. Pinned by a test so nobody has to
+rediscover it.
+
+### End to end, over both transports
+
+A published test card in a real MCP server's tool result, detected and masked
+before it reaches the host — with, for each transport, the **unproxied control
+run** that shows the server really does send it in the clear
+(`tests/integration/egress/test_pii_egress_e2e.py`):
+
+```
+# what the server sent
+Carte 4242 4242 4242 4242 débitée, confirmation à jean.dupont@example.com. Commande n° 1234 5678 9012 3456, solde 1 240,50 EUR.
+
+# what the host received, guarded (on_egress_finding: {by_kind: {pii: redact}})
+Carte [REDACTED:pii] débitée, confirmation à [REDACTED:pii]. Commande n° 1234 5678 9012 3456, solde 1 240,50 EUR.
+```
+
+The order reference survives untouched: it fails Luhn, so it is not a card
+number, and masking it would be exactly the false positive the checksum exists to
+prevent. The masked bytes are byte-identical over stdio and over HTTP, because
+the decision is the same core and only the wire changed.
 
 ## v0.3 — egress redaction
 
@@ -332,12 +428,12 @@ in the evidence, never the masked bytes.
 
 ### What redaction does **not** do
 
-- **It masks nothing out of the box**, because limes ships **no egress
-  detector** — see "What limes does NOT do" below. The behaviour is machinery
-  waiting for a detector: `serve(config, outbound=[...])` installs one, and the
-  proofs in `tests/` use doubles that are explicitly not shippable (ADR 0003).
-  Told `on_egress_finding: redact` with an empty outbound leg, the proxy says so
-  on stderr rather than looking like it is masking.
+- **It masks nothing until a detector is installed.** The behaviour and the
+  detector are separate on purpose (ADR 0004/0006): `serve(config,
+  outbound=[PiiEgressDetector()])` wires the shipped one, and *which* detectors
+  run on a deployment's outbound leg is that deployment's decision, not a default
+  the proxy makes for it. Told `on_egress_finding: redact` with an empty outbound
+  leg, the proxy still says so on stderr rather than looking like it is masking.
 - **No reversible tokenisation, no format-preserving encryption.** The masks are
   deterministic and one-way: `last4` and `format_preserving` keep a little of the
   shape but no bits you could decode the value back from. A mask you can undo
@@ -378,14 +474,12 @@ What it does:
 ### What the proxy does **not** do (v0.2)
 
 - **stdio only.** No HTTP/SSE, and no skeleton pretending to anticipate it.
-- **No new detector.** It consumes the existing `injection` detector. The
-  **outbound seam is wired but empty**: limes ships no egress detector, so
-  responses pass through untouched and *no outbound record is written*. It
-  deliberately does not run the pipeline over zero detectors, because that would
-  answer `Allow` with no witness — a pass that reads like a verdict. An
-  unwatched leg is a blind spot, and this is it, stated rather than simulated.
-  v0.3 gives that seam a *behaviour* (block or mask) — it still does not give it
-  a detector.
+- **No new detector** *at v0.2*. It consumed the existing `injection` detector,
+  and the **outbound seam was wired but empty**: responses passed through
+  untouched and *no outbound record was written*. It deliberately did not run the
+  pipeline over zero detectors, because that would answer `Allow` with no witness
+  — a pass that reads like a verdict. That blind spot was stated rather than
+  simulated, and v0.5 closes it: `pii-egress` is a real witness on that leg.
 - **Arguments only, string values only.** The inbound pipeline inspects the
   string *values* of a tool call's arguments, walked in canonical order. Object
   *keys* and non-string scalars are not inspected. A declared blind spot.
@@ -440,13 +534,22 @@ detector; an egress detector is future work), `41_rag_poison` (de/en) and
 `11_base64` (de) — adversarial wording the current patterns miss. Every one is
 also missed by the Tessera baseline; limes regresses on none of them.
 
-## What limes does NOT do (v0.3)
+## What limes does NOT do (v0.5)
 
-**No PII or secrets detector — so no egress detection at all.** v0.3 added what a
-transport *does* with an outbound finding; it added nobody to produce one, so out
-of the box nothing is ever masked. No rate-limit, no kill-switch, no threat feed,
-no human-approval, no LLM-judge detector, no dashboard. The roadmap lands as
-future detectors, policies, and transports — never as growth of the core
+**No secrets detector yet.** API keys, PEM private keys and JWTs are not detected;
+`pii-egress` covers personal data only. It will land the same way `pii-egress`
+did or not at all — with a corpus, a benign set of lookalikes, a null control and
+a published matrix (ADR 0003).
+
+**No PII category beyond the five.** Names, postal addresses and dates of birth
+are *not* claimed. Not because they do not matter, but because nothing separates
+them from ordinary prose the way a checksum separates a card number from an order
+reference — so nothing here would measure them, and an unmeasured category is a
+capability claimed and never proven.
+
+**No generic high-entropy scanning**, no rate-limit, no kill-switch, no threat
+feed, no human-approval, no LLM-judge detector, no dashboard. The roadmap lands
+as future detectors, policies, and transports — never as growth of the core
 (ADR 0004).
 
 ## Architecture
@@ -455,7 +558,11 @@ future detectors, policies, and transports — never as growth of the core
   ledger (`record.py`), the detector protocol (`detector.py`), the pipeline
   (`guard.py`). Unchanged since v0.1, and a ratchet says so.
 - **Detectors** (`src/limes/detectors/`): plugins behind one protocol, discovered
-  by entry point. One: `injection`.
+  by entry point. Two: `injection` (inbound) and `pii-egress` (outbound). Their
+  rules are YAML (`policy.yaml`, `egress.yaml`); the arithmetic a regex cannot
+  express — Luhn, MOD 97-10, the NIR key — lives in `checksums.py` and is *named*
+  from the YAML, so an auditor reads which shapes are scanned and which check
+  gates each without reading Python.
 - **Transports** (`src/limes/transports/`): adapters. Three — `in_process` (v0.1),
   the `mcp` stdio proxy (v0.2, `limes[mcp]`), and the `mcp` Streamable HTTP proxy
   (`http.py`, `limes[http]`, ADR 0007), which reuses the stdio proxy's relay —
@@ -463,7 +570,7 @@ future detectors, policies, and transports — never as growth of the core
   on the way out. A command-line surface, `limes check` (`cli.py`), runs the same
   pipeline with no transport at all.
 
-Read the founding decisions first: `docs/decisions/0001`–`0007`. The proxy's
+Read the founding decisions first: `docs/decisions/0001`–`0009`. The proxy's
 design note, with the three places the shipped code deviates from it and why, is
 `docs/design/mcp-proxy-v0.2.md`.
 

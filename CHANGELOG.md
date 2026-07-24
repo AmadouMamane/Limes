@@ -4,6 +4,100 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-24
+
+**One detector became two.** v0.4 shipped the outbound machinery and nobody to
+feed it: limes knew how to mask a finding and produced none, so "egress
+redaction" masked nothing out of the box and every end-to-end proof used a test
+double. `pii-egress` closes that. It is admitted the same way `injection` was,
+and the admission — not the regex — is the work (ADR 0003).
+
+### Added — `pii-egress`, the first outbound detector
+
+- **Five fixed categories, each gated by arithmetic**: PAN (ISO/IEC 7812 Luhn),
+  IBAN (ISO 13616 MOD 97-10), e-mail, telephone (FR / DE / E.164, digit count in
+  range), NIR (control key `97 − (body mod 97)`, with Corsica's `2A`/`2B`
+  substituted). The shapes are **data** — `src/limes/detectors/egress.yaml` — and
+  each rule *names* its check from a closed registry; an unknown validator is a
+  load error, never a rule that matches a shape and vouches for nothing
+  (ADR 0004).
+- **Measured against the null control and against Tessera's shipping output
+  guard**, over the same corpus with the same grader: limes locates **32/32**
+  where the ported `apply_output_guard` baseline locates 21/32, and kills **1/26**
+  benign lookalikes where the baseline kills 15/26. Per category, all five at
+  full recall. Dated matrix: `eval/matrices/pii_egress.md`, via `make eval`.
+- **The grader reads offsets, not text.** A positive case declares the exact
+  substring that must be spanned, and a finding counts only when its
+  `[start, end)` reproduces it there. `block-everything` is therefore *flagged* on
+  32/32 and *located* on 0/32 — no token a case handed the detector can pass for
+  evidence that the detector found something.
+- **A benign corpus of lookalikes** is half the corpus: 16-digit order references
+  failing Luhn, IBAN-shaped internal identifiers failing MOD 97-10, truncated
+  addresses, dates, versions, UUIDs, git digests, NIRs with a wrong key. It is
+  what measures precision, and it is the half that is tempting to skip.
+- **The one false positive is published with its cause and its refused fix**:
+  `pii:pan` fires on eighteen digits inside an IBAN-shaped reference that pass
+  Luhn by coincidence. Suppressing PAN candidates behind an IBAN head would fix
+  it and would let a real card hide behind `DE12 ` — the wrong trade for a guard.
+- **`retry_trim`**: a candidate that fails its check may be retried after dropping
+  its trailing group, because prose runs an IBAN into the next word
+  (`…0130 00 EUR`). It can only ever shorten, and every shortened candidate must
+  pass the same check.
+- **Fail-closed, with a declared budget.** Beyond `max_content_chars` (200 000)
+  the detector raises `DetectorBlind`, the core answers `CannotSay`, and the
+  egress leg blocks. An unbounded sweep over an unbounded tool result is a
+  denial-of-service surface; "I stopped looking" is auditable data, not silence.
+- **End to end, over stdio *and* HTTP**, against real processes, each with the
+  unproxied control run that shows the server does return the card in the clear
+  (`tests/integration/egress/test_pii_egress_e2e.py`). The masked bytes are
+  identical over both transports.
+- **Zero raw value in any record.** A test sweeps the entire corpus through the
+  verdict fingerprint, the chain record, the redaction annotation and the JSONL a
+  proxy actually writes, and asserts the values appear in none of them.
+
+### Added — ADR 0009: the egress corpus is synthetic, admission is per category
+
+- Every value is synthetic **by construction**: published processor test PANs,
+  documentation IBANs, RFC 2606 reserved domains, phone ranges reserved for
+  fiction, NIR keys recomputed over fictional identities. Enforced by the
+  *loader* (a file may only declare `provenance: synthetic`) and by tests that
+  refuse any Luhn-valid number that is not a published test vector and any
+  address off a reserved domain.
+
+### Changed — the admission enforcer, and the frontier ratchet
+
+- `tests/unit/test_admission_rule.py` no longer asserts "there is exactly one
+  detector" — which said nothing about a *second* one being measured. It now
+  iterates `ADMITTED` and refuses any member whose positive corpus, benign
+  corpus, beaten null control or published matrix it cannot produce. A detector
+  added to the tuple without a corpus turns it red, naming the detector.
+- The frontier ratchet grew from one perimeter to **three** — transports,
+  detectors, admission surface — because ADR 0004 names three places a capability
+  may land. The anti-widening check now polices all three: adding
+  `src/limes/detectors/` to the detector perimeter to silence a red would turn
+  the anti-widening test red instead, naming `injection.py` and its policy. The
+  registry itself is held to a stronger witness than byte-identity: it may gain
+  an import and a tuple entry and **nothing else** — no branch, no call, no
+  function — so no detector can ever be registered conditionally.
+- `make eval` now writes every admitted detector's matrix, not just the first.
+
+### Unchanged — the core still did not grow
+
+The verdict algebra, the ledger, the detector protocol, the pipeline, the
+`injection` detector, its policy and its harness are **byte-identical to v0.1**
+(`86bf21dd`), and the ratchet was seen red under eight deliberate mutations
+before being believed green. `pip install limes` still has exactly one
+dependency: the detector is rules plus arithmetic, and cost nothing.
+
+### Known limitation, found by this work
+
+`limes.guard.decide` hashes the inspected content *after* running the detectors,
+so content carrying unpaired surrogates raises `UnicodeEncodeError` before the
+detector's blind spot can be rendered as `CannotSay`. It fails loudly and never
+open — nothing is forwarded — but it is a crash rather than a verdict. Fixing it
+means editing the core, which ADR 0004 does not allow from a detector. Pinned by
+a test rather than left to be rediscovered.
+
 ## [0.4.0] - 2026-07-24
 
 The first tagged version. Nothing was published before, so the whole surface —
