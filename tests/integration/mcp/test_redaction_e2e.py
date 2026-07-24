@@ -39,6 +39,7 @@ EMAIL = "alice@example.com"
 KEY = "sk-live-AB12cd34"
 ANSWER = f"Carte {CARD} renvoyée, confirmation à {EMAIL}. Solde 1 240,50 EUR."
 LEAKY = f"La clé du connecteur est {KEY}, ne la partagez pas."
+CARD_ONLY = f"Votre carte se terminant par {CARD} a été débitée."
 
 _RULES = (
     "rules:\n  - label: 'injection:never'\n    origin: limes\n    pattern: 'zzz-never-matches'\n"
@@ -153,6 +154,25 @@ def test_without_a_declared_policy_the_same_response_is_blocked(tmp_path):
 
     assert result["isError"] is True, "masking is asked for; it is never the default"
     assert CARD not in json.dumps(result)
+
+
+# --- mask style (ADR 0008) --------------------------------------------------
+
+
+def test_the_last4_style_masks_the_card_in_place_over_stdio(tmp_path):
+    policy = _policy(
+        tmp_path,
+        "on_egress_finding:\n  by_kind:\n    pii: redact\n  mask_style:\n    pii: last4\n",
+    )
+
+    result = _call(_proxied(tmp_path / "e.jsonl", policy=policy), CARD_ONLY)
+
+    assert result["isError"] is False
+    assert _text(result) == "Votre carte se terminant par ••••1111 a été débitée."
+    assert CARD not in json.dumps(result), "the full PAN never leaves, only the last four"
+    assert result["_meta"]["limes"]["redaction"]["spans"][0]["style"] == "last4", (
+        "the style is recorded in the annotation"
+    )
 
 
 # --- the record -------------------------------------------------------------

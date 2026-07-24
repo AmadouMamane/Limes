@@ -123,7 +123,12 @@ def _mask_leaf(text: str, start: int, redaction: Redaction) -> str:
     for masking in reversed(overlapping):
         local_start = max(masking.start, start) - start
         local_end = min(masking.end, end) - start
-        masked = masked[:local_start] + masking.token + masked[local_end:]
+        # The same rendering the flat `apply_masking` uses, over the same original
+        # bytes: a masking that sits inside this leaf sees its full original here,
+        # and one that straddles two leaves renders a partial — which the bridge's
+        # re-derivation check then catches, and blocks.
+        replacement = masking.render(masked[local_start:local_end])
+        masked = masked[:local_start] + replacement + masked[local_end:]
     return masked
 
 

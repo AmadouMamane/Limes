@@ -52,6 +52,7 @@ EMAIL = "alice@example.com"
 KEY = "sk-live-AB12cd34"
 ANSWER = f"Carte {CARD} renvoyée, confirmation à {EMAIL}. Solde 1 240,50 EUR."
 LEAKY = f"La clé du connecteur est {KEY}, ne la partagez pas."
+CARD_ONLY = f"Votre carte se terminant par {CARD} a été débitée."
 
 _NEVER = (
     "rules:\n  - label: 'injection:never'\n    origin: limes\n    pattern: 'zzz-never-matches'\n"
@@ -324,6 +325,20 @@ def test_over_http_without_a_declared_policy_the_same_response_is_blocked(tmp_pa
 
     assert result["isError"] is True, "masking is asked for; it is never the default"
     assert CARD not in json.dumps(result)
+
+
+def test_over_http_the_last4_style_masks_the_card_in_place(tmp_path):
+    policy = _policy(
+        tmp_path,
+        "on_egress_finding:\n  by_kind:\n    pii: redact\n  mask_style:\n    pii: last4\n",
+    )
+    with _pair(tmp_path, redacting=True, policy=policy) as pair:
+        result = _session(pair["proxy_url"], [("echo", {"text": CARD_ONLY})])["results"][0]
+
+    assert result["isError"] is False
+    assert _text(result) == "Votre carte se terminant par ••••1111 a été débitée."
+    assert CARD not in json.dumps(result), "the full PAN never leaves, only the last four"
+    assert result["_meta"]["limes"]["redaction"]["spans"][0]["style"] == "last4"
 
 
 # --- replayable evidence over HTTP ------------------------------------------

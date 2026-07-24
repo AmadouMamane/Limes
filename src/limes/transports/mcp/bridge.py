@@ -80,6 +80,7 @@ from limes.transports.redaction import (
     RedactEgress,
     Redaction,
     apply_masking,
+    conceals_all,
     rule_egress,
 )
 from limes.verdict import Deny
@@ -497,6 +498,11 @@ def _masked_response(
         verified — the caller then blocks.
     """
     redaction = egress.redaction
+    if not conceals_all(content, redaction):
+        # A styled mask (last4, format_preserving) that left the sensitive value
+        # recoverable is no mask at all (ADR 0008). Fall closed to the block it
+        # was standing in for, rather than forward it.
+        return None
     sanitised = redact_payload(message.result, redaction)
     if not isinstance(sanitised, dict):
         return None

@@ -295,7 +295,27 @@ Three things worth knowing about how it works:
   to the flat content. A disagreement blocks. An unverified redaction is not a
   redaction.
 
-### What redaction does **not** do (v0.3)
+**Mask styles (ADR 0008).** By default a masked region becomes the fixed
+`[REDACTED:<kind>]` token. A deployment can choose a richer rendering per kind,
+in the same policy:
+
+```yaml
+on_egress_finding:
+  by_kind:
+    pii: redact
+  mask_style:
+    pii: last4              # 4111 1111 1111 1111  ->  ••••1111
+    # or: format_preserving #                          0000 0000 0000 0000
+```
+
+`last4` reveals the last four characters (the PCI-DSS convention; a value of four
+characters or fewer reveals nothing); `format_preserving` keeps the length and
+separators and replaces digits with `0`, letters with `x`. Every style is
+**verified by re-derivation** — the transport confirms the sensitive value is
+unrecoverable from its rendering and blocks otherwise — and the style is recorded
+in the evidence, never the masked bytes.
+
+### What redaction does **not** do
 
 - **It masks nothing out of the box**, because limes ships **no egress
   detector** — see "What limes does NOT do" below. The behaviour is machinery
@@ -303,14 +323,15 @@ Three things worth knowing about how it works:
   proofs in `tests/` use doubles that are explicitly not shippable (ADR 0003).
   Told `on_egress_finding: redact` with an empty outbound leg, the proxy says so
   on stderr rather than looking like it is masking.
-- **The token is fixed.** `[REDACTED:<kind>]`, carrying the kind and nothing
-  else. No reversible tokenisation (that is an encoding, not a redaction), no
-  format-preserving masking (the shape is part of what leaks), no partial reveal
-  like `••••4242`.
+- **No reversible tokenisation, no format-preserving encryption.** The masks are
+  deterministic and one-way: `last4` and `format_preserving` keep a little of the
+  shape but no bits you could decode the value back from. A mask you can undo
+  needs a keystore or a cipher, and is a different feature (ADR 0008 anti-scope).
 - **One blocking kind blocks the whole message.** Masking half of a response
   would forward the other half.
 - **Offsets that do not fit the content block rather than being clamped**, and so
-  does a refusal that located no span. There is no "mask what we can" mode.
+  does a refusal that located no span, and so does a styled mask that would leave
+  the value recoverable. There is no "mask what we can" mode.
 
 ## v0.2 — the MCP stdio proxy
 

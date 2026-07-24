@@ -28,6 +28,7 @@ from limes.transports.redaction import (
     RedactEgress,
     Redaction,
     apply_masking,
+    conceals_all,
     rule_egress,
 )
 from limes.verdict import Allow, CannotSay, Deny, Verdict
@@ -208,7 +209,7 @@ class Guard:
             )
 
         ruling = rule_egress(verdict, policy=self._egress, content_length=len(content))
-        if isinstance(ruling, RedactEgress):
+        if isinstance(ruling, RedactEgress) and conceals_all(content, ruling.redaction):
             return Egress(
                 action=Action.REDACT,
                 content=apply_masking(content, ruling.redaction),
@@ -216,12 +217,21 @@ class Guard:
                 redaction=ruling.redaction,
                 reason=ruling.reason,
             )
+        # Either the policy blocks this kind, or the mask would have left the
+        # sensitive value recoverable (ADR 0008). Both fall closed: an unverified
+        # redaction is not a redaction.
+        if isinstance(ruling, RedactEgress):
+            reason = (
+                f"{ruling.reason} — but the mask left the value recoverable, so limes blocked it"
+            )
+        else:
+            reason = ruling.reason
         return Egress(
             action=Action.BLOCK,
             content=None,
             verdict=verdict,
             redaction=None,
-            reason=ruling.reason,
+            reason=reason,
         )
 
     @staticmethod

@@ -416,7 +416,9 @@ def parse_http_config(argv: Sequence[str], *, prog: str) -> HttpProxyConfig:
         on_cannot_say = OnCannotSay(options.on_cannot_say)
     if options.on_egress_finding is not None:
         egress = EgressPolicy(
-            default=OnEgressFinding(options.on_egress_finding), by_kind=egress.by_kind
+            default=OnEgressFinding(options.on_egress_finding),
+            by_kind=egress.by_kind,
+            mask_style=egress.mask_style,
         )
 
     try:
