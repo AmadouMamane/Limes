@@ -57,10 +57,11 @@ _TOP_LEVEL_USAGE = (
     "usage: limes <command> [options]\n"
     "\n"
     "commands:\n"
-    "  check   run the pipeline over a file or stdin; the exit code is the verdict\n"
-    "  proxy   guard an MCP server over stdio (needs the `mcp` extra)\n"
+    "  check       run the pipeline over a file or stdin; the exit code is the verdict\n"
+    "  proxy       guard an MCP server over stdio (needs the `mcp` extra)\n"
+    "  proxy-http  guard a Streamable HTTP MCP server (needs the `http` extra)\n"
     "\n"
-    "run `limes check --help` or `limes proxy --help` for options."
+    "run `limes check --help`, `limes proxy --help` or `limes proxy-http --help`."
 )
 
 
@@ -229,6 +230,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             from limes.transports.mcp import cli as proxy_cli
 
             return proxy_cli.main(arguments)
+        if arguments[0] == "proxy-http":
+            try:
+                from limes.transports.mcp import http as http_transport
+            except ImportError as exc:
+                print(
+                    "limes proxy-http needs the MCP + HTTP extra:\n"
+                    "    pip install 'limes[http]'      (or:  uv add 'limes[http]')\n"
+                    f"the import failed with: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            return http_transport.main_http(arguments[1:])
         if arguments[0] in ("-h", "--help"):
             print(_TOP_LEVEL_USAGE)
             return 0

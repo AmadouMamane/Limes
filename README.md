@@ -109,6 +109,40 @@ decision. There is no new evidence format. `limes check` runs the shipped
 `injection` detector on the inbound leg; `--direction outbound` routes to egress
 detectors, of which limes ships none yet, so outbound is clean out of the box.
 
+## Also over HTTP — `limes proxy-http`
+
+The same guard, on the wire MCP also runs on. The proxy speaks MCP Streamable
+HTTP to your host and to the real server, and the decision in the middle is the
+*same* one the stdio proxy makes — the same relay, the same evidence, the same
+redaction — because the core is transport-agnostic (ADR 0007). Only the plumbing
+is new, and most of *that* is the SDK's own session manager.
+
+```sh
+pip install 'limes[http]'    # mcp + an ASGI server (uvicorn); the core stays light
+
+limes proxy-http --upstream http://127.0.0.1:9000/mcp --port 8080 \
+                 --policy ~/.limes/policy.yaml
+# then point your MCP host at  http://127.0.0.1:8080/mcp
+```
+
+A guarded `tools/call` over HTTP is proven identical to a direct one (handshake,
+tool list, results, server→host notifications); an injection is refused before it
+reaches the real server; and an outbound finding is masked or blocked exactly as
+over stdio — all against real processes in
+`tests/integration/mcp/test_http_e2e.py`, each with its unproxied control.
+
+**Measured, not asserted:** one guarded `tools/call` over HTTP adds a **median
+~3.3–3.9 ms** over the same call made directly (two runs: +3.88 / +3.30 ms
+median, +5.36 / +3.72 ms p95; macOS arm64, Python 3.12.4, n=200, 256-byte
+payload). That is more than the stdio proxy's ~0.6 ms, and expectedly so: the
+HTTP proxy makes a *second* HTTP round trip to the upstream. Reproduce:
+`uv run python -m limes.transports.mcp.bench_http`.
+
+**What it does not do (v1):** the current Streamable HTTP only (not the deprecated
+HTTP+SSE); one host↔server pair per session; no host authentication beyond the SDK
+transport's, and no upstream credentials forwarded (future work — absent rather
+than stubbed, so nothing reads as guarded that is not); no multiplexing.
+
 ## The verdict
 
 A guard's answer is not a boolean. "Allowed" that cannot say *what it looked at* is
@@ -372,12 +406,12 @@ also missed by the Tessera baseline; limes regresses on none of them.
 
 ## What limes does NOT do (v0.3)
 
-No HTTP/SSE transport. **No PII or secrets detector — so no egress detection at
-all.** v0.3 added what a transport *does* with an outbound finding; it added
-nobody to produce one, so out of the box nothing is ever masked. No rate-limit,
-no kill-switch, no threat feed, no human-approval, no LLM-judge detector, no
-dashboard. The roadmap lands as future detectors, policies, and transports —
-never as growth of the core (ADR 0004).
+**No PII or secrets detector — so no egress detection at all.** v0.3 added what a
+transport *does* with an outbound finding; it added nobody to produce one, so out
+of the box nothing is ever masked. No rate-limit, no kill-switch, no threat feed,
+no human-approval, no LLM-judge detector, no dashboard. The roadmap lands as
+future detectors, policies, and transports — never as growth of the core
+(ADR 0004).
 
 ## Architecture
 
@@ -386,12 +420,14 @@ never as growth of the core (ADR 0004).
   (`guard.py`). Unchanged since v0.1, and a ratchet says so.
 - **Detectors** (`src/limes/detectors/`): plugins behind one protocol, discovered
   by entry point. One: `injection`.
-- **Transports** (`src/limes/transports/`): adapters. Two — `in_process` (v0.1)
-  and `mcp` (v0.2, the stdio proxy; needs the `limes[mcp]` extra) — plus one
-  behaviour they share, `redaction.py` (v0.3): what to do with a finding on the
-  way out.
+- **Transports** (`src/limes/transports/`): adapters. Three — `in_process` (v0.1),
+  the `mcp` stdio proxy (v0.2, `limes[mcp]`), and the `mcp` Streamable HTTP proxy
+  (`http.py`, `limes[http]`, ADR 0007), which reuses the stdio proxy's relay —
+  plus one behaviour they share, `redaction.py` (v0.3): what to do with a finding
+  on the way out. A command-line surface, `limes check` (`cli.py`), runs the same
+  pipeline with no transport at all.
 
-Read the founding decisions first: `docs/decisions/0001`–`0006`. The proxy's
+Read the founding decisions first: `docs/decisions/0001`–`0007`. The proxy's
 design note, with the three places the shipped code deviates from it and why, is
 `docs/design/mcp-proxy-v0.2.md`.
 

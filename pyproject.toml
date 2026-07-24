@@ -34,9 +34,14 @@ dependencies = [
 [project.optional-dependencies]
 # The MCP stdio proxy transport (ADR 0005). NEVER a core dependency: `pip install
 # limes` stays at one dependency (PyYAML); the proxy is `pip install limes[mcp]`.
-# A ratchet (tests/unit/mcp/test_boundary.py) asserts `mcp` is absent from
+# A ratchet (tests/unit/test_frontier.py) asserts `mcp` is absent from
 # [project].dependencies and that no module outside transports/mcp/ imports it.
 mcp = ["mcp>=1.28,<2"]
+# The MCP Streamable HTTP proxy transport (ADR 0007). It reuses the stdio proxy's
+# decision (Relay) and adds only HTTP plumbing, most of it the SDK's own session
+# manager. `mcp` already depends on starlette + uvicorn, so this extra pins the
+# ASGI server explicitly and is otherwise `limes[mcp]` — `limes[http]` ⊇ `limes[mcp]`.
+http = ["mcp>=1.28,<2", "uvicorn>=0.31.1"]
 
 # `limes` is the command dispatcher: `limes check` runs the pipeline over a file
 # or stdin (core only, no extra), and `limes proxy` guards an MCP server (needs

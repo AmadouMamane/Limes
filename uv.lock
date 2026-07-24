@@ -408,6 +408,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+http = [
+    { name = "mcp" },
+    { name = "uvicorn" },
+]
 mcp = [
     { name = "mcp" },
 ]
@@ -423,10 +427,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "mcp", marker = "extra == 'http'", specifier = ">=1.28,<2" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.28,<2" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "uvicorn", marker = "extra == 'http'", specifier = ">=0.31.1" },
 ]
-provides-extras = ["mcp"]
+provides-extras = ["mcp", "http"]
 
 [package.metadata.requires-dev]
 dev = [

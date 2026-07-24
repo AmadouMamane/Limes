@@ -10,11 +10,15 @@ transport. v0.2 adds a second transport and nothing else: the MCP stdio proxy
 unchanged. v0.3 adds a *behaviour* to both transports' outbound leg and, again,
 nothing to the core: under a redacting egress policy a refused response is masked
 at the offsets its evidence already carried, and forwarded
-(:mod:`limes.transports.redaction`, ADR 0006).
+(:mod:`limes.transports.redaction`, ADR 0006). The v1.0 line adds a third
+transport — the MCP Streamable HTTP proxy (``limes proxy-http``, extra
+``limes[http]``, ADR 0007) — which reuses the stdio proxy's decision unchanged,
+and a command-line surface, ``limes check`` (:mod:`limes.cli`); the core does not
+move.
 
-Still not shipped: an HTTP transport, an egress detector — so nothing exercises
-that behaviour out of the box — or any detector beyond ``injection``. See the
-README's "What limes does not do".
+Still not shipped: an egress detector — so the egress behaviour masks nothing out
+of the box — or any detector beyond ``injection``. See the README's "What limes
+does not do".
 """
 
 from __future__ import annotations

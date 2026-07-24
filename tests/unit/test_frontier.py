@@ -54,6 +54,7 @@ ALLOWED = (
     "tests/integration/mcp/",
     "docs/decisions/0005-mcp-proxy-transport.md",
     "docs/decisions/0006-egress-redaction.md",
+    "docs/decisions/0007-mcp-streamable-http-transport.md",
     "docs/design/mcp-proxy-v0.2.md",
     "README.md",
     "CHANGELOG.md",
