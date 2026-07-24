@@ -4,6 +4,76 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-24
+
+**Two detectors became three, and the README's "1 detector" is now honestly
+"3".** `secrets-egress` completes the outbound leg: personal data was v0.5, and
+credentials are what actually ends a company's week.
+
+### Added — `secrets-egress`
+
+- **Prefixed API keys** (AWS `AKIA`/`ASIA`… , OpenAI `sk-`/`sk-proj-`, GitHub
+  `gh[pousr]_`, Stripe `[sr]k_(live|test)_`, Google `AIza`, Slack `xox[baprse]-`),
+  **PEM private-key blocks**, and **JWTs**. Rules are data in
+  `src/limes/detectors/egress.yaml` like every other rule.
+- **15/15 located, 0/20 benign killed, F1 1.00** over the synthetic corpus, per
+  category: AWS 2/2, OpenAI 2/2, GitHub 2/2, Stripe 2/2, Google 1/1, Slack 2/2,
+  PEM 2/2, JWT 2/2. Dated matrix: `eval/matrices/secrets_egress.md`.
+- **No baseline, and the report says so.** Tessera's guard policy declares
+  `tools`, `prompt_injection` and `pii` and nothing else — checked, not assumed —
+  so nothing comparable ships elsewhere and the **null control is the baseline**.
+  A test asserts that exactly one of the two egress detectors has a ported
+  baseline, so neither an invented comparison nor a silently dropped one passes.
+- **A PEM finding spans the whole block**, never the armour line: a finding that
+  located only `-----BEGIN … PRIVATE KEY-----` would be masked to exactly that and
+  would forward the key material underneath it. An unterminated block swallows to
+  the end of the content. `CERTIFICATE` and `PUBLIC KEY` armour is not matched.
+- **A JWT is decided by its header, not its shape.** Three dot-separated
+  base64url segments is also `limes.detectors.egress_policy`, `backup.tar.gz` and
+  `1.2.3`; the claim is entirely that the first segment decodes to a JSON object
+  declaring `alg`.
+- **End to end over stdio and HTTP**: one policy file, two dispositions —
+  `pii: redact` keeps the answer with the card masked, `secret: block` loses the
+  answer rather than let a key leave — each with its unproxied control run.
+
+### Not added, deliberately — generic high-entropy scanning
+
+A UUID, a git digest, a `sha256:` image pin and a base64 blob are all
+high-entropy and none is a secret. An entropy rule with no context is a
+false-positive generator that teaches its operator to switch the detector off, so
+it is **deferred** and all of those live in the benign corpus as lookalikes
+instead. The consequence — an *unprefixed* credential (AWS secret access key,
+database password, bare bearer token) is not detected — is a declared blind spot
+with a test pinning it, stated in the README rather than implied away.
+
+### Changed — the enforcers grew with the second detector
+
+- ADR 0009's corpus rules now cover both corpora, plus one the secrets corpus
+  needs: every credential-shaped string must visibly say `EXAMPLE` (or be AWS's
+  own published documentation key), and every PEM body must base64-decode to
+  placeholder text. A contributor pasting the value that caused a bug is the
+  failure mode; this is what stops it being a live key in a public repository.
+- The frontier ratchet gained an **anti-phantom** check: a perimeter entry naming
+  a path that exists neither at v0.1 nor on disk now fails, because such an entry
+  reads as "covered" and covers nothing (ADR 0026). One had already crept in
+  while writing this release, and this is what found it.
+
+### The ratchets, seen red
+
+27 deliberate mutations, each **asserted to have actually applied** before its
+verdict was believed — a mutation that silently fails to apply runs the test on
+the original tree and reports green, which is "I did not look" wearing the
+costume of "nothing is wrong". That happened once during this work and is why the
+check exists. All 27 red: 13 core files by byte identity, three perimeter
+widenings, three registry mutations, three corpus-rule violations, three detector
+validators removed, the grader's own located-span test, and a new file outside
+every perimeter.
+
+### Unchanged — the core still did not grow
+
+Byte-identical to v0.1 (`86bf21dd`). `pip install limes` still has exactly one
+dependency.
+
 ## [0.5.0] - 2026-07-24
 
 **One detector became two.** v0.4 shipped the outbound machinery and nobody to

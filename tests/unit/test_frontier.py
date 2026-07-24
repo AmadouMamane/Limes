@@ -91,6 +91,7 @@ DETECTOR_PERIMETER = (
     # break the ratchet by refreshing a date line.
     "eval/matrices/",
     "docs/decisions/0009-egress-corpus-synthetic-only.md",
+    "docs/decisions/0010-vendor-key-vectors-are-stored-assembled.md",
     "docs/design/detecteurs-egress-reels.md",
     "Makefile",
 )
@@ -213,6 +214,20 @@ def test_every_path_this_ratchet_claims_to_protect_actually_exists():
     # green about it (ADR 0026). CORE is checked against the v0.1 tree it freezes.
     missing = sorted(set(CORE) - _v0_1_paths())
     assert missing == [], f"CORE names paths that never existed at v0.1: {missing}"
+
+
+def test_no_perimeter_entry_names_a_path_that_does_not_exist():
+    # A perimeter that names a phantom is a perimeter nobody can audit: the entry
+    # reads as "this is covered" and covers nothing, and the next reader cannot
+    # tell a deliberate reservation from a typo (ADR 0026). Every entry is either
+    # a v0.1 path or one that landed since.
+    known = _v0_1_paths() | _working_paths()
+    phantoms = sorted(
+        entry
+        for entry in PERIMETERS
+        if entry not in known and not any(path.startswith(entry) for path in known)
+    )
+    assert phantoms == [], f"perimeter entries naming nothing on disk or at v0.1: {phantoms}"
 
 
 def test_the_named_core_is_not_covered_by_any_perimeter():

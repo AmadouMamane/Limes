@@ -1,6 +1,6 @@
 [project]
 name = "limes"
-version = "0.5.0"
+version = "0.6.0"
 description = "The guard that can prove what it refused — a transport-agnostic, evidence-carrying policy guard for LLM agents."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -70,6 +70,7 @@ Changelog = "https://github.com/AmadouMamane/Limes/blob/main/CHANGELOG.md"
 [project.entry-points."limes.detectors"]
 injection = "limes.detectors.injection:InjectionDetector"
 pii-egress = "limes.detectors.pii_egress:PiiEgressDetector"
+secrets-egress = "limes.detectors.secrets_egress:SecretsEgressDetector"
 
 [dependency-groups]
 dev = [

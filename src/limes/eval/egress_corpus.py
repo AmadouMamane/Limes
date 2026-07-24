@@ -14,6 +14,15 @@ reserved fictional phone ranges, recomputed NIR keys over fictional identities,
 and — for secrets — documentation or revoked key *formats*. What is being
 measured is the detection of a **shape and its checksum**, never of a real datum,
 so nothing is lost by the constraint and a whole class of accident is prevented.
+
+A vendor-prefixed secret vector is stored **assembled** (ADR 0010): the case
+declares ``content_template`` (with a ``{token}`` placeholder) and ``token_parts``
+(fragments joined at load), never a contiguous ``sk_live_…`` literal. The literal
+would trip a host secret scanner and commit a credential-shaped string into a
+public repository, while proving nothing the reconstructed value does not. The
+loader assembles the real token, so the detector still runs on the true format.
+The two shapes are mutually exclusive, and the loader refuses a case that mixes
+them — a rule enforced only by a test that restates it is not enforced (ADR 0026).
 """
 
 from __future__ import annotations
@@ -106,8 +115,14 @@ def corpus_path(detector: str, kind: str, *, root: Path | None = None) -> Path:
     return (root or _CORPUS) / f"{detector.replace('-egress', '')}_{kind}.json"
 
 
-def _read(detector: str, kind: str, *, root: Path | None = None) -> list[dict[str, str]]:
-    """Read and structurally validate one corpus file."""
+def _read(detector: str, kind: str, *, root: Path | None = None) -> list[dict[str, object]]:
+    """Read and structurally validate one corpus file.
+
+    Values are returned **as parsed**, not stringified: an assembled positive case
+    carries ``token_parts`` as a list, and flattening it to ``str`` would destroy
+    exactly the field whose point is to keep a credential-shaped literal out of the
+    file (ADR 0010). The keys are normalised to ``str`` (JSON keys always are).
+    """
     path = corpus_path(detector, kind, root=root)
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -127,12 +142,67 @@ def _read(detector: str, kind: str, *, root: Path | None = None) -> list[dict[st
     cases = raw.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError(f"corpus {path}: 'cases' must be a non-empty list")
-    out: list[dict[str, str]] = []
+    out: list[dict[str, object]] = []
     for case in cases:
         if not isinstance(case, dict):
             raise ValueError(f"corpus {path}: each case must be a mapping")
-        out.append({str(key): str(value) for key, value in case.items()})
+        out.append({str(key): value for key, value in case.items()})
     return out
+
+
+def _positive_content(raw: dict[str, object]) -> tuple[str, str]:
+    """Return ``(content, locate)`` for one positive case, assembling if declared.
+
+    Two mutually exclusive shapes (ADR 0010):
+
+    * a **literal** case declares ``content`` and ``locate`` verbatim (PANs, IBANs,
+      PEM blocks, JWTs — values no host scanner push-protects);
+    * an **assembled** case declares ``content_template`` (holding ``{token}``) and
+      ``token_parts`` (joined into the token), so the file never carries a
+      contiguous vendor-key literal.
+
+    Raises:
+        ValueError: If a case mixes the two shapes, if ``token_parts`` is not a
+            list of at least two non-empty strings, or if ``content_template`` is
+            not a string containing ``{token}``. Enforced here, in the loader, so a
+            forged file is refused by the thing that reads it (ADR 0026).
+    """
+    case_id = raw.get("id")
+    assembled = "token_parts" in raw or "content_template" in raw
+    if assembled:
+        if "content" in raw or "locate" in raw:
+            raise ValueError(
+                f"corpus case {case_id!r}: an assembled case declares content_template and "
+                f"token_parts, never content/locate — the two shapes are mutually exclusive "
+                f"(ADR 0010)."
+            )
+        parts = raw.get("token_parts")
+        template = raw.get("content_template")
+        if (
+            not isinstance(parts, list)
+            or len(parts) < 2
+            or not all(isinstance(part, str) and part for part in parts)
+        ):
+            raise ValueError(
+                f"corpus case {case_id!r}: 'token_parts' must be a list of at least two "
+                f"non-empty strings; a single fragment would be the very literal ADR 0010 keeps "
+                f"out of the file."
+            )
+        if not isinstance(template, str) or "{token}" not in template:
+            raise ValueError(
+                f"corpus case {case_id!r}: 'content_template' must be a string containing the "
+                f"'{{token}}' placeholder."
+            )
+        token = "".join(parts)
+        return template.replace("{token}", token), token
+    content = raw.get("content")
+    locate = raw.get("locate")
+    if not isinstance(content, str) or not isinstance(locate, str):
+        raise ValueError(
+            f"corpus case {case_id!r}: a literal positive case needs string 'content' and "
+            f"'locate' (or declare an assembled case with content_template/token_parts)."
+        )
+    return content, locate
 
 
 def load_positive(detector: str, *, root: Path | None = None) -> tuple[PositiveCase, ...]:
@@ -153,13 +223,14 @@ def load_positive(detector: str, *, root: Path | None = None) -> tuple[PositiveC
     """
     cases: list[PositiveCase] = []
     for raw in _read(detector, "positive", root=root):
+        content, locate = _positive_content(raw)
         case = PositiveCase(
-            case_id=raw["id"],
-            category=raw["category"],
-            language=raw["language"],
-            content=raw["content"],
-            locate=raw["locate"],
-            why=raw["why"],
+            case_id=str(raw["id"]),
+            category=str(raw["category"]),
+            language=str(raw["language"]),
+            content=content,
+            locate=locate,
+            why=str(raw["why"]),
         )
         if case.locate not in case.content:
             raise ValueError(
@@ -181,11 +252,11 @@ def load_benign(detector: str, *, root: Path | None = None) -> tuple[BenignCase,
     """
     return tuple(
         BenignCase(
-            case_id=raw["id"],
-            mimics=raw["mimics"],
-            language=raw["language"],
-            content=raw["content"],
-            why=raw["why"],
+            case_id=str(raw["id"]),
+            mimics=str(raw["mimics"]),
+            language=str(raw["language"]),
+            content=str(raw["content"]),
+            why=str(raw["why"]),
         )
         for raw in _read(detector, "benign", root=root)
     )

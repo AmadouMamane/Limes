@@ -18,7 +18,12 @@ from __future__ import annotations
 from limes.detector import Detector
 from limes.detectors.injection import InjectionDetector
 from limes.detectors.pii_egress import PiiEgressDetector
+from limes.detectors.secrets_egress import SecretsEgressDetector
 
-ADMITTED: tuple[type[Detector], ...] = (InjectionDetector, PiiEgressDetector)
+ADMITTED: tuple[type[Detector], ...] = (
+    InjectionDetector,
+    PiiEgressDetector,
+    SecretsEgressDetector,
+)
 
-__all__ = ["ADMITTED", "InjectionDetector", "PiiEgressDetector"]
+__all__ = ["ADMITTED", "InjectionDetector", "PiiEgressDetector", "SecretsEgressDetector"]

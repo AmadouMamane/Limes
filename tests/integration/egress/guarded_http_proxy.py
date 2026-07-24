@@ -20,10 +20,11 @@ def main() -> int:
     """Serve the HTTP proxy with the admitted egress detector on the outbound leg."""
     sys.path.insert(0, str(REPO))
     from limes.detectors.pii_egress import PiiEgressDetector
+    from limes.detectors.secrets_egress import SecretsEgressDetector
     from limes.transports.mcp.http import parse_http_config, run_http
 
     config = parse_http_config(sys.argv[1:], prog="guarded-http-proxy")
-    run_http(config, outbound=(PiiEgressDetector(),))
+    run_http(config, outbound=(PiiEgressDetector(), SecretsEgressDetector()))
     return 0
 
 

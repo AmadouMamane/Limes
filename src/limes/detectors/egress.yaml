@@ -82,3 +82,79 @@ detectors:
         validator: nir_key
         retry_trim: false
         pattern: '(?<![A-Za-z0-9])[12][ \xa0.]?\d{2}[ \xa0.]?\d{2}[ \xa0.]?(?:\d{2}|2[AB])[ \xa0.]?\d{3}[ \xa0.]?\d{3}[ \xa0.]?\d{2}(?![A-Za-z0-9])'
+
+  # -- secrets-egress (ADR 0003 admission: eval/matrices/secrets_egress.md) ----
+  #
+  # PREFIXED credentials only, plus PEM private-key armour and JWTs. What is
+  # DELIBERATELY absent is the obvious feature: generic high-entropy scanning.
+  # A UUID, a git digest, a base64 blob and a content hash are all high-entropy
+  # and none is a secret, so an entropy rule with no context is a false-positive
+  # generator that teaches its operator to switch the detector off. It is
+  # deferred, not forgotten, and the README says so rather than implying coverage
+  # limes does not have.
+  #
+  # Consequence, stated: an unprefixed credential — an AWS *secret access key*, a
+  # database password, a bare bearer token — is NOT detected. The benign corpus
+  # is what proves the rules that are here do not fire on the lookalikes.
+  secrets-egress:
+    max_content_chars: 200000
+    rules:
+
+      # AWS access key id. The four-letter type prefix is assigned by AWS and is
+      # what makes this high-precision without a checksum: twenty upper-case
+      # alphanumerics on their own are an order code, `AKIA` + sixteen is a key.
+      - label: secret:aws-access-key-id
+        validator: none
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9])(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[0-9A-Z]{16}(?![A-Za-z0-9])'
+
+      # OpenAI-style API key: `sk-` or `sk-proj-` and a long opaque body.
+      - label: secret:openai-key
+        validator: none
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9_-])sk-(?:proj-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])'
+
+      # GitHub personal / OAuth / server / user / refresh token.
+      - label: secret:github-token
+        validator: none
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{36,}(?![A-Za-z0-9])'
+
+      # Stripe secret and restricted keys, live and test alike: the format is the
+      # claim, and a test key in a tool result is still a credential leaving.
+      - label: secret:stripe-key
+        validator: none
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9_-])[sr]k_(?:live|test)_[A-Za-z0-9]{24,}(?![A-Za-z0-9])'
+
+      # Google API key.
+      - label: secret:google-api-key
+        validator: none
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])'
+
+      # Slack bot / user / app / workspace token.
+      - label: secret:slack-token
+        validator: none
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9-])xox[baprse]-[A-Za-z0-9-]{10,}(?![A-Za-z0-9-])'
+
+      # PEM private key. The span is the WHOLE BLOCK, not the armour line: a
+      # finding that located only `-----BEGIN … PRIVATE KEY-----` would be masked
+      # to exactly that and would forward the key material underneath it. If the
+      # END line is missing the alternation swallows the rest of the content —
+      # masking too much beats forwarding a truncated key. `CERTIFICATE` and
+      # `PUBLIC KEY` armour is deliberately not matched: neither is a secret.
+      - label: secret:private-key-pem
+        validator: none
+        retry_trim: false
+        pattern: '-----BEGIN (?:[A-Z][A-Z0-9 ]*)?PRIVATE KEY-----(?:[\s\S]*?-----END (?:[A-Z][A-Z0-9 ]*)?PRIVATE KEY-----|[\s\S]*)'
+
+      # JSON Web Token. The three-dot-separated-base64url SHAPE is shared with
+      # file names, version strings and package coordinates, so the shape alone
+      # is worthless here — precision comes entirely from the validator, which
+      # requires the first segment to decode to a JSON object declaring `alg`.
+      - label: secret:jwt
+        validator: jwt_header
+        retry_trim: false
+        pattern: '(?<![A-Za-z0-9_.-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}(?![A-Za-z0-9_.-])'

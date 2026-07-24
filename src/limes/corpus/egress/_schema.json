@@ -31,7 +31,7 @@
   "definitions": {
     "case": {
       "type": "object",
-      "required": ["id", "language", "content", "why"],
+      "required": ["id", "language", "why"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -54,14 +54,26 @@
           "enum": ["fr", "de", "en"]
         },
         "content": {
-          "description": "The outbound content, as a tool result or a model reply would carry it.",
+          "description": "Literal-shape cases: the outbound content verbatim, as a tool result or a model reply would carry it. Mutually exclusive with content_template (ADR 0010).",
           "type": "string",
           "minLength": 1
         },
         "locate": {
-          "description": "Positive cases only: the EXACT substring the detector must span. The grader compares content[start:end] to this string, so a finding that fires on the whole message scores nothing — a detector may not be graded on tokens its own input handed it (ADR 0003).",
+          "description": "Literal positive cases only: the EXACT substring the detector must span. The grader compares content[start:end] to this string, so a finding that fires on the whole message scores nothing — a detector may not be graded on tokens its own input handed it (ADR 0003).",
           "type": "string",
           "minLength": 1
+        },
+        "content_template": {
+          "description": "Assembled-shape cases (ADR 0010): the outbound content with a single '{token}' placeholder. The loader substitutes the token joined from token_parts; the located substring IS that token. A vendor-key vector is stored this way so the file never carries a contiguous credential-shaped literal a host secret scanner would flag.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\{token\\}"
+        },
+        "token_parts": {
+          "description": "Assembled-shape cases (ADR 0010): the token fragments joined (in order, no separator) to form the located value. At least two, so no single fragment is itself the literal the split exists to avoid.",
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string", "minLength": 1 }
         },
         "why": {
           "description": "Why this case is in the corpus: for a positive, which published test vector it is; for a benign, which check it is meant to fail.",
@@ -69,10 +81,22 @@
           "minLength": 1
         }
       },
-      "allOf": [
+      "oneOf": [
         {
-          "if": { "properties": { "category": { "type": "string" } }, "required": ["category"] },
-          "then": { "required": ["locate"] }
+          "description": "Literal shape: content (+ locate when it is a positive category).",
+          "required": ["content"],
+          "not": { "anyOf": [{ "required": ["content_template"] }, { "required": ["token_parts"] }] },
+          "allOf": [
+            {
+              "if": { "properties": { "category": { "type": "string" } }, "required": ["category"] },
+              "then": { "required": ["locate"] }
+            }
+          ]
+        },
+        {
+          "description": "Assembled shape (ADR 0010): content_template + token_parts, never content/locate.",
+          "required": ["content_template", "token_parts", "category"],
+          "not": { "anyOf": [{ "required": ["content"] }, { "required": ["locate"] }] }
         }
       ]
     }

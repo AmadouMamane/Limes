@@ -31,11 +31,13 @@ def main() -> int:
     """Parse the same command line the proxy does, and serve with pii-egress wired."""
     sys.path.insert(0, str(REPO))
     from limes.detectors.pii_egress import PiiEgressDetector
+    from limes.detectors.secrets_egress import SecretsEgressDetector
     from limes.transports.mcp.bridge import serve
     from limes.transports.mcp.cli import parse_config
 
     config = parse_config(sys.argv[1:], prog="guarded-proxy")
-    anyio.run(partial(serve, config, outbound=(PiiEgressDetector(),)))
+    outbound = (PiiEgressDetector(), SecretsEgressDetector())
+    anyio.run(partial(serve, config, outbound=outbound))
     return 0
 
 

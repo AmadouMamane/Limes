@@ -17,7 +17,7 @@ import pytest
 from limes.detectors.checksums import compact, luhn_valid
 from limes.eval.egress_corpus import SYNTHETIC, corpus_path, load_benign, load_positive
 
-DETECTORS = ["pii-egress"]
+DETECTORS = ["pii-egress", "secrets-egress"]
 KINDS = ["positive", "benign"]
 
 #: Card numbers a positive case may carry: the vectors payment processors publish
@@ -40,6 +40,24 @@ PUBLISHED_TEST_PANS = frozenset(
 RESERVED_DOMAINS = ("example.com", "example.org", "example.net", "example.co.uk", "example.")
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+#: Anything carrying a vendor's credential prefix. Whatever follows it in this
+#: repository must be visibly placeholder text — see the test below.
+_VENDOR_PREFIXED = re.compile(
+    r"(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[0-9A-Z]{16}"
+    r"|sk-(?:proj-)?[A-Za-z0-9_-]{20,}"
+    r"|gh[pousr]_[A-Za-z0-9]{36,}"
+    r"|[sr]k_(?:live|test)_[A-Za-z0-9]{24,}"
+    r"|AIza[0-9A-Za-z_-]{35}"
+    r"|xox[baprse]-[A-Za-z0-9-]{10,}"
+)
+
+#: The one credential-shaped string in the corpus that does not say EXAMPLE in
+#: its body: AWS publishes it verbatim in its own documentation.
+AWS_DOCUMENTATION_KEY = "AKIAIOSFODNN7EXAMPLE"
+
+#: A line that is plausibly PEM key material rather than the prose around it.
+_BASE64_LINE = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
 _DIGIT_RUN = re.compile(r"(?:\d[ \xa0-]?){12,18}\d")
 
 
@@ -84,7 +102,14 @@ def test_the_loader_accepts_the_same_file_once_provenance_is_restored(detector, 
 @pytest.mark.parametrize("detector", DETECTORS)
 def test_every_luhn_valid_card_number_is_a_published_test_vector(detector):
     for case_id, content in _every_case_content(detector):
+        # A placeholder key body is a long run of zeros, and a run of zeros passes
+        # Luhn. Those are credential FORMATS, checked by their own rule below;
+        # this one is about card numbers, so it does not look inside them.
+        credentials = [match.span() for match in _VENDOR_PREFIXED.finditer(content)]
         for match in _DIGIT_RUN.finditer(content):
+            start, end = match.span()
+            if any(begin <= start and end <= stop for begin, stop in credentials):
+                continue
             digits = compact(match.group(0))
             if luhn_valid(digits):
                 assert digits in PUBLISHED_TEST_PANS, (
@@ -121,3 +146,42 @@ def test_case_ids_are_unique_within_a_file(detector):
     for cases in (load_positive(detector), load_benign(detector)):
         ids = [case.case_id for case in cases]
         assert len(set(ids)) == len(ids)
+
+
+@pytest.mark.parametrize("detector", DETECTORS)
+def test_every_credential_shaped_string_is_visibly_a_placeholder(detector):
+    # The secrets analogue of the published-test-PAN rule. A contributor
+    # reproducing a bug will paste the value that caused it; this is what stops
+    # that value being a live key in a public repository for ever (ADR 0009).
+    for case_id, content in _every_case_content(detector):
+        for match in _VENDOR_PREFIXED.finditer(content):
+            found = match.group(0)
+            assert "EXAMPLE" in found.upper() or found == AWS_DOCUMENTATION_KEY, (
+                f"{case_id} carries the credential-shaped string {found!r}, whose body does "
+                f"not say EXAMPLE. Every key in this corpus is a FORMAT with placeholder "
+                f"content; a body that looks real has no legitimate way in (ADR 0009)."
+            )
+
+
+@pytest.mark.parametrize("detector", DETECTORS)
+def test_no_pem_block_carries_decodable_key_material(detector):
+    # A PEM body that is not obviously placeholder text is a key somebody may
+    # have pasted. The corpus bodies base64-decode to English sentences.
+    import base64
+    import binascii
+
+    for case_id, content in _every_case_content(detector):
+        if "PRIVATE KEY-----" not in content:
+            continue
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not _BASE64_LINE.fullmatch(stripped):
+                continue
+            try:
+                decoded = base64.b64decode(stripped, validate=True).decode("ascii")
+            except (binascii.Error, UnicodeDecodeError, ValueError):
+                decoded = ""
+            assert "EXAMPLE" in decoded.upper() or "PLACEHOLDER" in decoded.upper(), (
+                f"{case_id} carries a PEM body that does not decode to placeholder text: "
+                f"{stripped[:24]!r}… (ADR 0009)"
+            )

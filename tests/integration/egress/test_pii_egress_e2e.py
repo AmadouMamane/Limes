@@ -268,6 +268,45 @@ def test_over_http_the_default_policy_blocks_the_card_outright(tmp_path):
     assert CARD not in json.dumps(result)
 
 
+# --- secrets: masked kind and blocked kind, one policy ------------------------
+
+#: A published AWS documentation key id — it authenticates nothing (ADR 0009).
+AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
+LEAKY = f"Le connecteur utilise AWS_ACCESS_KEY_ID={AWS_KEY}, ne le partagez pas."
+
+
+def test_over_stdio_a_secret_blocks_while_pii_in_the_same_session_is_masked(tmp_path):
+    # Two dispositions from one policy file, proven in one session against real
+    # processes: a customer's card is worth masking to keep the answer, a
+    # credential is worth losing the answer over.
+    policy = _policy(
+        tmp_path,
+        "on_egress_finding:\n  default: block\n  by_kind:\n    pii: redact\n    secret: block\n",
+    )
+    masked = _stdio_call(_stdio_proxied(tmp_path / "m.jsonl", policy=policy), ANSWER)
+    blocked = _stdio_call(_stdio_proxied(tmp_path / "b.jsonl", policy=policy), LEAKY)
+
+    assert masked["isError"] is False
+    assert "[REDACTED:pii]" in _text(masked)
+
+    assert blocked["isError"] is True, "a credential is worth losing the response over"
+    assert AWS_KEY not in json.dumps(blocked)
+    assert "secret" in _text(blocked)
+
+
+def test_over_http_a_secret_blocks_with_its_unproxied_control(tmp_path):
+    policy = _policy(
+        tmp_path, "on_egress_finding:\n  default: block\n  by_kind:\n    secret: block\n"
+    )
+    with _http_pair(tmp_path, policy=policy) as pair:
+        direct = _http_call(pair["upstream_url"], LEAKY)
+        proxied = _http_call(pair["proxy_url"], LEAKY)
+
+    assert AWS_KEY in _text(direct), "the control: unguarded, the credential leaves the server"
+    assert proxied["isError"] is True
+    assert AWS_KEY not in json.dumps(proxied)
+
+
 # --- the same decision, both transports --------------------------------------
 
 

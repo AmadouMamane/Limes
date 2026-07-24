@@ -16,14 +16,14 @@ cannot see returns `CannotSay` — never a silent "allow".
 > 2026-07-24); the name, the GitHub identity, the CLA, and the final license split
 > are decisions pending ratification (see *License*). Nothing here is published yet.
 
-## What's in the box (v0.5.0)
+## What's in the box (v0.6.0)
 
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
 | **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1, a ratchet says so |
-| **Detectors** | **two**: `injection` (inbound) and `pii-egress` (outbound: PAN, IBAN, e-mail, phone, NIR — checksum-gated, measured per category) | names, addresses, dates of birth — no check separates them from prose, so none is claimed; no secrets detector yet |
+| **Detectors** | **three**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR) and `secrets-egress` (prefixed API keys, PEM private keys, JWTs) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; unprefixed credentials. Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
-| **Egress** | redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
+| **Egress** | two detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
 | **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
 
 Everything is **pre-1.0 by choice**: the surface is complete, the field use that
@@ -121,8 +121,9 @@ In CI, that exit code *is* the gate — no output to parse:
 `--json` emits the canonical verdict fingerprint — the same serialisation the
 ledger hashes — plus the chain record, so a pipeline can diff or archive a
 decision. There is no new evidence format. `limes check` runs the shipped
-`injection` detector on the inbound leg; `--direction outbound` runs `pii-egress`
-over a response, so a CI step can gate on a fixture that leaks a card number.
+`injection` detector on the inbound leg; `--direction outbound` runs the egress
+detectors over a response, so a CI step can gate on a fixture that leaks a card
+number or a committed file that carries an API key.
 
 ## Also over HTTP — `limes proxy-http`
 
@@ -329,6 +330,52 @@ it is a crash rather than a `CannotSay`, and fixing it means editing the core,
 which ADR 0004 does not allow from a detector. Pinned by a test so nobody has to
 rediscover it.
 
+## v0.6 — `secrets-egress`: credentials on the way out
+
+Prefixed API keys (AWS, OpenAI, GitHub, Stripe, Google, Slack), **PEM private-key
+blocks** and **JWTs**. Admitted the same way, with one difference stated rather
+than glossed: **there is no baseline.** Tessera's guard policy declares `tools`,
+`prompt_injection` and `pii` and nothing else — checked, not assumed — so nothing
+comparable ships elsewhere and **the null control *is* the baseline**. The report
+says exactly that instead of inventing a comparison.
+
+| configuration | located | flagged | benign killed | recall | precision | F1 |
+|---|---|---|---|---|---|---|
+| unplugged (null control) | 0/15 | 0/15 | 0/20 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/15 | 15/15 | 20/20 | 0.00 | 0.00 | 0.00 |
+| **limes secrets-egress** | **15/15** | 15/15 | **0/20** | **1.00** | **1.00** | **1.00** |
+
+Per category, `located`: AWS 2/2, OpenAI 2/2, GitHub 2/2, Stripe 2/2, Google 1/1,
+Slack 2/2, PEM 2/2, JWT 2/2. Dated matrix: `eval/matrices/secrets_egress.md`.
+
+Where the precision comes from differs per rule, and saying which is the point:
+
+- **a prefixed key needs no checksum** — the vendor's type prefix is the
+  discriminator. Twenty upper-case alphanumerics on their own are an order code;
+  `AKIA` + sixteen is a key;
+- **a JWT is the opposite** — its shape (three dot-separated base64url segments)
+  is shared with module paths, file names and version strings, so the shape is
+  worth *nothing* and the whole claim is the validator: the first segment must
+  decode to a JSON object declaring `alg`. `limes.detectors.egress_policy` and
+  `backup_2026_07.tar.gz` do not fire;
+- **a PEM finding spans the whole block**, never the armour line. A finding that
+  located only `-----BEGIN … PRIVATE KEY-----` would be masked to exactly that and
+  would forward the key material underneath it. An unterminated block swallows to
+  the end of the content: masking too much beats forwarding a partial key.
+  `CERTIFICATE` and `PUBLIC KEY` armour is not matched — neither is a secret.
+
+### What `secrets-egress` deliberately does not do
+
+**Generic high-entropy scanning is deferred, not forgotten.** A UUID, a git
+digest, a `sha256:` image pin and a base64 blob are all high-entropy and none is
+a secret. An entropy rule with no context is a false-positive generator that
+teaches its operator to switch the detector off. All of those are in the benign
+corpus instead, as the lookalikes the shipped rules must not fire on.
+
+**Consequence, stated: an *unprefixed* credential is not detected** — an AWS
+*secret access key*, a database password, a bare bearer token. That is a declared
+blind spot with a test pinning it, not an oversight.
+
 ### End to end, over both transports
 
 A published test card in a real MCP server's tool result, detected and masked
@@ -348,6 +395,10 @@ The order reference survives untouched: it fails Luhn, so it is not a card
 number, and masking it would be exactly the false positive the checksum exists to
 prevent. The masked bytes are byte-identical over stdio and over HTTP, because
 the decision is the same core and only the wire changed.
+
+The same session proves the two dispositions from one policy file: `pii: redact`
+keeps the answer with the card masked, `secret: block` loses the answer rather
+than let an `AKIA…` key leave — each with its own unproxied control run.
 
 ## v0.3 — egress redaction
 
@@ -534,12 +585,11 @@ detector; an egress detector is future work), `41_rag_poison` (de/en) and
 `11_base64` (de) — adversarial wording the current patterns miss. Every one is
 also missed by the Tessera baseline; limes regresses on none of them.
 
-## What limes does NOT do (v0.5)
+## What limes does NOT do (v0.6)
 
-**No secrets detector yet.** API keys, PEM private keys and JWTs are not detected;
-`pii-egress` covers personal data only. It will land the same way `pii-egress`
-did or not at all — with a corpus, a benign set of lookalikes, a null control and
-a published matrix (ADR 0003).
+**No generic high-entropy secret scanning**, and no *unprefixed* credential
+detection — see "What `secrets-egress` deliberately does not do" above. Both are
+declared blind spots with tests pinning them, not backlog dressed as coverage.
 
 **No PII category beyond the five.** Names, postal addresses and dates of birth
 are *not* claimed. Not because they do not matter, but because nothing separates
@@ -547,10 +597,9 @@ them from ordinary prose the way a checksum separates a card number from an orde
 reference — so nothing here would measure them, and an unmeasured category is a
 capability claimed and never proven.
 
-**No generic high-entropy scanning**, no rate-limit, no kill-switch, no threat
-feed, no human-approval, no LLM-judge detector, no dashboard. The roadmap lands
-as future detectors, policies, and transports — never as growth of the core
-(ADR 0004).
+**No rate-limit, no kill-switch, no threat feed, no human-approval, no LLM-judge
+detector, no dashboard.** The roadmap lands as future detectors, policies, and
+transports — never as growth of the core (ADR 0004).
 
 ## Architecture
 
@@ -558,7 +607,8 @@ as future detectors, policies, and transports — never as growth of the core
   ledger (`record.py`), the detector protocol (`detector.py`), the pipeline
   (`guard.py`). Unchanged since v0.1, and a ratchet says so.
 - **Detectors** (`src/limes/detectors/`): plugins behind one protocol, discovered
-  by entry point. Two: `injection` (inbound) and `pii-egress` (outbound). Their
+  by entry point. Three: `injection` (inbound), `pii-egress` and `secrets-egress`
+  (outbound). Their
   rules are YAML (`policy.yaml`, `egress.yaml`); the arithmetic a regex cannot
   express — Luhn, MOD 97-10, the NIR key — lives in `checksums.py` and is *named*
   from the YAML, so an auditor reads which shapes are scanned and which check
