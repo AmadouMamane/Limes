@@ -15,10 +15,12 @@ was protecting. So the load-bearing modules are *also* named positively, in
 :data:`CORE`, and two things are asserted about them: they are byte-identical,
 and they are **not covered by ALLOWED**. Widening the list no longer buys silence.
 
-Transports may move. ``limes/transports/in_process.py`` gained an egress leg in
-v0.3 (ADR 0006) and ``limes/transports/redaction.py`` is new; that is what a
-transport layer is for. The core, the pipeline, the detectors and their tests are
-what may not move — and have not, since v0.1.
+Transports may move, and so may the usage surfaces built on top of the core.
+``limes/transports/in_process.py`` gained an egress leg in v0.3 (ADR 0006),
+``limes/transports/redaction.py`` is new, and ``limes/cli.py`` is the ``limes
+check`` command added in the v1.0 line — a thin caller of the pipeline, no new
+decision. The core, the pipeline, the detectors and their tests are what may not
+move — and have not, since v0.1.
 """
 
 from __future__ import annotations
@@ -37,14 +39,17 @@ REPO = Path(__file__).resolve().parents[2]
 #: The v0.1 tip. Everything outside the allowlist must still be byte-identical to it.
 V0_1_COMMIT = "86bf21dd38eef1cb683a0a124102b6df08381ec7"
 
-#: Paths the transports are allowed to add or change: the transport modules, their
-#: tests, their docs, the entry points and the packaging metadata that declare them.
+#: The perimeter the core is NOT in: the transport modules, the CLI usage surface,
+#: their tests, their docs, and the entry points and packaging metadata that
+#: declare them. Everything outside it must be byte-identical to v0.1.
 ALLOWED = (
     "src/limes/transports/mcp/",
     "src/limes/transports/redaction.py",
     "src/limes/transports/in_process.py",
+    "src/limes/cli.py",
     "tests/unit/mcp/",
     "tests/unit/redaction/",
+    "tests/unit/cli/",
     "tests/unit/test_frontier.py",
     "tests/integration/mcp/",
     "docs/decisions/0005-mcp-proxy-transport.md",
@@ -230,7 +235,10 @@ def test_the_mcp_sdk_is_an_optional_extra_and_never_a_core_dependency():
     extra = manifest["project"]["optional-dependencies"]["mcp"]
     assert any(name.startswith("mcp") for name in extra), extra
     scripts = manifest["project"]["scripts"]
-    assert scripts["limes"].startswith("limes.transports.mcp.")
+    assert scripts["limes"] == "limes.cli:main", (
+        "`limes` dispatches from the core CLI, which must import without the mcp extra "
+        "(`limes check` is core only); the proxy is reached lazily on the `proxy` path"
+    )
     assert scripts["limes-proxy"].startswith("limes.transports.mcp.")
 
 

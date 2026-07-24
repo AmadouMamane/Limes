@@ -63,6 +63,52 @@ over the same call made directly (two runs: +0.61 / +0.67 ms median, +0.95 /
 +0.63 ms p95; macOS arm64, Python 3.12.4, n=200, 256-byte payload, default
 config). Reproduce: `uv run python -m limes.transports.mcp.bench`.
 
+## Scan from the command line — `limes check`
+
+The third way to use limes, after the in-process library and the MCP proxy: run
+the *same* pipeline over a file or stdin, with no server and no transport. **The
+exit code is the verdict** — `0` allow, `1` deny, `3` cannot-say — so a CI step
+gates on it without parsing anything.
+
+```sh
+pip install limes          # no extra needed; `check` is core only
+
+limes check prompt.txt                       # inspect a file
+echo "$USER_INPUT" | limes check -           # …or stdin
+limes check --direction outbound reply.txt   # inspect a response instead
+limes check --json prompt.txt                # verdict + evidence as one JSON object
+```
+
+An injection is refused, with its evidence, and a non-zero exit:
+
+```
+$ limes check attack.txt ; echo "exit=$?"
+[DENY] 2 rule match(es) on inbound content: injection:disable-control, injection:embedded-system-directive
+decision: seq 0, record 901227d65a6d…
+policy: sha256 84fc75f1d51e…
+inspected content: sha256 f1b51bbe89b6…
+matched: injection:embedded-system-directive at [53,71) sha256 c39dd723dc3a…
+matched: injection:disable-control at [61,94) sha256 98933a71331c…
+(evidence carries hashes and offsets, never the payload)
+exit=1
+```
+
+*(real output for corpus case 08 written to a file; hashes are full 64-hex on the
+wire and abbreviated here for the page.)*
+
+In CI, that exit code *is* the gate — no output to parse:
+
+```yaml
+# fail the job if a committed prompt template trips the guard
+- run: limes check prompts/system.txt
+```
+
+`--json` emits the canonical verdict fingerprint — the same serialisation the
+ledger hashes — plus the chain record, so a pipeline can diff or archive a
+decision. There is no new evidence format. `limes check` runs the shipped
+`injection` detector on the inbound leg; `--direction outbound` routes to egress
+detectors, of which limes ships none yet, so outbound is clean out of the box.
+
 ## The verdict
 
 A guard's answer is not a boolean. "Allowed" that cannot say *what it looked at* is
