@@ -72,6 +72,7 @@ Changelog = "https://github.com/AmadouMamane/Limes/blob/main/CHANGELOG.md"
 injection = "limes.detectors.injection:InjectionDetector"
 pii-egress = "limes.detectors.pii_egress:PiiEgressDetector"
 secrets-egress = "limes.detectors.secrets_egress:SecretsEgressDetector"
+injection-egress = "limes.detectors.injection_egress:InjectionEgressDetector"
 
 [dependency-groups]
 dev = [

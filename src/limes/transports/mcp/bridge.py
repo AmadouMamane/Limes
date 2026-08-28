@@ -14,24 +14,24 @@ What the relay does, message by message:
   and the ruling is either *forward* or *block*. A blocked call is **never
   forwarded**: the real server does not see it, and the host gets a
   ``CallToolResult`` with ``isError: true`` carrying the reason and the evidence.
-* the *result* of a ``tools/call`` / ``resources/read`` (server → host) — the
-  **outbound** leg. The seam is wired: it runs the same core pipeline over the
-  response and enforces the same way, with one behaviour of its own — under a
-  redacting egress policy a refusal is *masked and forwarded* rather than
+* the *result* of a ``tools/call`` / ``resources/read`` / ``tools/list``
+  (server → host) — the **outbound** leg. The seam runs the same core pipeline
+  over the response and enforces the same way, with one behaviour of its own —
+  under a redacting egress policy a refusal is *masked and forwarded* rather than
   blocked (ADR 0006). The masked result is a **normal** result: the matched
   offsets read ``[REDACTED:<kind>]``, everything else is the server's own bytes,
   and ``_meta`` says what was masked. The masking is verified before it is sent:
   the sanitised payload is re-derived and compared to the plan applied to the
-  flat content, and a disagreement blocks. It is also **empty**, because limes ships
-  no egress detector: with no outbound detector the relay passes the response
-  through *untouched and unrecorded*. It deliberately does **not** call
-  ``decide()`` over an empty detector list, because that returns an ``Allow``
-  whose evidence names no witness — a pass that reads like a verdict. An
-  unwatched leg is a blind spot, and it is declared in the README, not simulated
-  here.
-* **everything else** — ``initialize``, ``tools/list``, ``prompts/*``,
-  capabilities, notifications, errors, unknown methods — is relayed byte-faithful
-  in both directions, ids preserved. The host sees the wrapped server's real
+  flat content, and a disagreement blocks. ``tools/list`` is guarded because a
+  poisoned tool description reaches the model through it (ADR 0012). When a
+  deployment wires **no** outbound detector the relay passes the response through
+  *untouched and unrecorded*: it deliberately does **not** call ``decide()`` over
+  an empty detector list, because that returns an ``Allow`` whose evidence names
+  no witness — a pass that reads like a verdict. An unwatched leg is a blind
+  spot, declared rather than simulated.
+* **everything else** — ``initialize``, ``prompts/*``, capabilities,
+  notifications, errors, unknown methods — is relayed byte-faithful in both
+  directions, ids preserved. The host sees the wrapped server's real
   capabilities, not the proxy's.
 
 The relay owns no protocol state of its own: it does not implement ``initialize``
@@ -105,8 +105,11 @@ type OutgoingStream = MemoryObjectSendStream[SessionMessage]
 #: only for a blocked response on a method that has no ``isError`` affordance.
 BLOCKED_ERROR_CODE: Final = -32001
 
-#: Requests whose *response* the outbound seam inspects.
-_OUTBOUND_METHODS: Final = frozenset({"tools/call", "resources/read"})
+#: Requests whose *response* the outbound seam inspects. ``tools/list`` is here
+#: because a poisoned tool description reaches the model through it (ADR 0012);
+#: the canonical payload walk already reaches every description string, so no
+#: special-casing is needed beyond guarding the method.
+_OUTBOUND_METHODS: Final = frozenset({"tools/call", "resources/read", "tools/list"})
 
 _TOOLS_CALL: Final = "tools/call"
 

@@ -185,9 +185,13 @@ def test_the_record_names_what_was_masked_and_still_says_deny(tmp_path):
     _call(_proxied(tmp_path / "d.jsonl", policy=policy, record=record), ANSWER)
 
     entries = _records(record)
-    assert [entry["mcp"]["action"] for entry in entries] == ["forward", "redact"]
+    # tools/list is screened during session setup now (ADR 0012): a clean listing
+    # forwards. The tool call is still forwarded inbound and its result redacted.
+    actions = [(entry["direction"], entry["mcp"]["action"]) for entry in entries]
+    assert ("inbound", "forward") in actions, "the tool call reached the server"
+    assert ("outbound", "redact") in actions, "its result was masked"
 
-    outbound = entries[-1]
+    outbound = next(entry for entry in entries if entry["mcp"]["action"] == "redact")
     assert outbound["direction"] == "outbound"
     assert '"kind":"deny"' in outbound["verdict_fingerprint"], (
         "the content left the proxy, masked — the chain still records the refusal"

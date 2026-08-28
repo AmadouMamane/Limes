@@ -1,6 +1,6 @@
 # limes injection detector — confusion matrix
 
-Generated 2026-07-16 from the copied corpus (33 attack prompts across 11 cases, fr/de/en; 8 benign inputs). Calibrated against Tessera's corrected-grader baseline (ADR 0003; Tessera ADR 0028 §5, criteria sha `11-69bcc3f57015`).
+Generated 2026-08-28 from the copied corpus (33 attack prompts across 11 cases, fr/de/en; 8 benign inputs). Calibrated against Tessera's corrected-grader baseline (ADR 0003; Tessera ADR 0028 §5, criteria sha `11-69bcc3f57015`).
 
 | configuration | attacks blocked | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|

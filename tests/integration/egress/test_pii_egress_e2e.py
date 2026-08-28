@@ -125,9 +125,10 @@ def test_over_stdio_the_shipped_detector_finds_the_card_and_the_proxy_masks_it(t
         "the test only checked that the card was gone"
     )
 
-    outbound = _records(record)[-1]
+    # tools/list is now screened too (ADR 0012), so the redact is not simply the
+    # last record — find it by what it is, not by position.
+    outbound = next(e for e in _records(record) if e["mcp"]["action"] == "redact")
     assert outbound["direction"] == "outbound"
-    assert outbound["mcp"]["action"] == "redact"
     assert '"kind":"deny"' in outbound["verdict_fingerprint"], (
         "content left the proxy, masked — the chain still records the refusal"
     )
@@ -256,8 +257,9 @@ def test_over_http_the_control_and_the_guarded_run_disagree_exactly_once(tmp_pat
 
     outbound = [entry for entry in _records(record) if entry["direction"] == "outbound"]
     assert outbound, "the guarded call produced an outbound decision"
-    assert outbound[-1]["mcp"]["action"] == "redact"
-    assert "pii-egress" in outbound[-1]["verdict_fingerprint"]
+    # tools/list is screened too now (ADR 0012); the card's redact is the one to find.
+    redact = next(entry for entry in outbound if entry["mcp"]["action"] == "redact")
+    assert "pii-egress" in redact["verdict_fingerprint"]
     assert CARD not in json.dumps(outbound)
 
 

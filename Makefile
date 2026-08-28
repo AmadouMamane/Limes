@@ -37,3 +37,4 @@ eval:
 	$(UV) run python -m limes.eval.harness --write
 	$(UV) run python -m limes.eval.egress_harness pii-egress --write
 	$(UV) run python -m limes.eval.egress_harness secrets-egress --write
+	$(UV) run python -m limes.eval.egress_harness injection-egress --write

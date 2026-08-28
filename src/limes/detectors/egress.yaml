@@ -158,3 +158,72 @@ detectors:
         validator: jwt_header
         retry_trim: false
         pattern: '(?<![A-Za-z0-9_.-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}(?![A-Za-z0-9_.-])'
+
+  # -- injection-egress (ADR 0012; admission: eval/matrices/injection_egress.md)
+  #
+  # Instructions ARRIVING on the server->host leg: poisoned tool descriptions
+  # (tools/list) and indirect injection in tool results. Four categories, each
+  # `validator: none` out loud — there is no checksum for a directive, so every
+  # shape is scoped by markers, verbs and named sensitive sources instead, and
+  # the benign corpus holds the lookalikes (quoted attack strings, lowercase
+  # admonition tags, 'System:' status prose, dotfile config paths) that measure
+  # the shapes' precision.
+  injection-egress:
+    max_content_chars: 200000
+    rules:
+
+      # Uppercase attack markers (the Invariant Labs tool-poisoning shape).
+      # Case-SENSITIVE: published attacks shout their tags, and the lowercase
+      # <important> of ordinary documentation must survive.
+      - label: injection:hidden-tag
+        validator: none
+        retry_trim: false
+        pattern: '<(?:IMPORTANT|HIDDEN|SECRET)>[\s\S]*?</(?:IMPORTANT|HIDDEN|SECRET)>'
+
+      # "Ignore previous instructions", one rule per language surface.
+      - label: injection:ignore-instructions-en
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\bignore\s+(?:all\s+|any\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|rules)\b'
+      - label: injection:ignore-instructions-fr
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\bignore[sz]?\s+(?:toutes\s+les\s+|les\s+)?(?:instructions|consignes|directives)\s+précédentes\b'
+      - label: injection:ignore-instructions-de
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\bignoriere\s+(?:alle\s+)?(?:vorherigen|bisherigen|früheren)\s+(?:anweisungen|instruktionen|regeln)\b'
+
+      # Embedded SYSTEM: directive (the Tessera case-08 trick, on this leg).
+      # Uppercase-sensitive so 'System:' status prose survives; the span stops
+      # at a quote or line end, which is where the smuggled directive ends.
+      - label: injection:embedded-system-directive
+        validator: none
+        retry_trim: false
+        pattern: "\\bSYSTEM\\s*:[ \\t][^\"'«»„“”\\n]{4,60}"
+
+      # A tool asking the model to keep its principal in the dark.
+      - label: injection:concealment-en
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\b(?:do\s+not|don''t|never)\s+(?:tell|mention|inform|reveal|show)\b[^.\n]{0,60}?\buser\b'
+      - label: injection:concealment-hide-en
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\bhide\s+(?:this|it)\s+from\s+the\s+user\b'
+      - label: injection:concealment-fr
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\bne\s+(?:le\s+|la\s+|les\s+)?(?:mentionne|dis|révèle|signale)[sz]?\s+(?:pas|jamais)\b[^.\n]{0,60}?\butilisateur\b'
+      - label: injection:concealment-de
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\berwähne\b[^.\n]{0,60}?\b(?:nutzer|benutzer)\b[^.\n]{0,30}?\bnicht\b'
+
+      # A directive verb within reach of a NAMED sensitive source. The names
+      # are the precision: '~/.config/…' plus 'pass' in one sentence is a
+      # tool description, '.ssh' after 'read' is not.
+      - label: injection:exfiltration
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\b(?:read|include|append|send|pass|attach|copy|transmets|envoie|ajoute|lis|füge|hänge|sende|lies)\b[^.\n]{0,80}?(?:\.ssh\b|id_rsa\b|credentials\b|\.env\b|api[_ -]?keys?\b|api-schlüssel\b|conversation\s+history\b|historique\s+de\s+la\s+conversation|mots?\s+de\s+passe|passwords?\b)'

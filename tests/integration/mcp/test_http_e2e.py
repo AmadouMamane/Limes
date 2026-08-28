@@ -358,4 +358,6 @@ def test_a_replayed_http_session_re_derives_identical_digests(tmp_path):
     second = digests(tmp_path / "run-b")
 
     assert first == second, "a fixed clock and a pure core re-derive identical digests over HTTP"
-    assert len(first) == 2, "one inbound forward, one outbound redact"
+    # tools/list is screened during session setup now (ADR 0012): its clean
+    # forward joins the inbound forward and the outbound redact.
+    assert len(first) == 3, "tools/list forward, then one inbound forward, one outbound redact"

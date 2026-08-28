@@ -86,6 +86,7 @@ DETECTOR_PERIMETER = (
     "src/limes/detectors/egress.yaml",
     "src/limes/detectors/pii_egress.py",
     "src/limes/detectors/secrets_egress.py",
+    "src/limes/detectors/injection_egress.py",
     "src/limes/corpus/egress/",
     "src/limes/eval/egress_corpus.py",
     "src/limes/eval/egress_harness.py",
@@ -99,6 +100,8 @@ DETECTOR_PERIMETER = (
     "eval/matrices/",
     "docs/decisions/0009-egress-corpus-synthetic-only.md",
     "docs/decisions/0010-vendor-key-vectors-are-stored-assembled.md",
+    "docs/decisions/0012-the-egress-leg-scans-for-injection.md",
+    "docs/decisions/0013-a-classifier-layer-enters-by-the-same-gate.md",
     "docs/design/detecteurs-egress-reels.md",
     "Makefile",
 )
