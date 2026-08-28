@@ -336,6 +336,17 @@ scanning. What it assembles, and what others do not:
    agent and any MCP host: one machine, two transports, so a `Deny` re-derives
    identically whichever way it was reached (ADR 0004, ADR 0005).
 
+**Where "Tessera" comes from, since the tables below name it.** limes was
+extracted from **Tessera** — a reference implementation of a multilingual
+(FR/DE/EN) EU retail-banking support agent, whose guard layer this package *is*,
+lifted into its own repo. Two things cross over, and both are named so you can
+check them: the **corpus** (limes v0.1 ships a functional default copied from
+Tessera, `src/limes/corpus/PROVENANCE.md`), and the **baselines**. Wherever a
+table reads *Tessera baseline*, it means Tessera's own shipping guard —
+transcribed verbatim into `src/limes/baselines/` and run over the same corpus
+with the same grader. It is the honest yardstick limes measures itself against,
+not a strawman invented to win.
+
 ### Prior art — the MCP proxy
 
 limes did not invent the MCP proxy. Verified on **2026-07-23**, one by one,
