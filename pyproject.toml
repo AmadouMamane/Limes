@@ -20,8 +20,9 @@ keywords = [
 ]
 authors = [{ name = "Amadou Mamane" }]
 classifiers = [
-    # Pre-1.0 by choice: the surface is complete, the field use that earns a 1.0
-    # is not (see the README). Alpha, honestly, not Beta.
+    # Pre-1.0 by choice: the surface is complete; what's missing is the
+    # real-world usage needed to earn a 1.0 (see the README). Alpha, honestly,
+    # not Beta.
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",

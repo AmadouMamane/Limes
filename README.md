@@ -65,10 +65,10 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 | **Egress** | two detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
 | **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
 
-Everything is **pre-1.0 by choice**: the surface is complete, the field use that
-earns a 1.0 is not. The one thing that keeps growing — for ever, under the
-admission rule — is detector *coverage*; that is the nature of an honest guard,
-not an unfinished one.
+Everything is **pre-1.0 by choice**: the surface is complete; what's missing is
+the real-world usage needed to earn a 1.0. The one thing that will keep growing
+forever — under the admission rule — is detector *coverage*. That is the nature
+of an honest guard, not an unfinished one.
 
 ## Use it in Python
 
