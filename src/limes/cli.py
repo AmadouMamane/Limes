@@ -113,8 +113,9 @@ def build_check_parser(prog: str = "limes check") -> argparse.ArgumentParser:
         "--direction",
         choices=[member.value for member in Direction],
         default=Direction.INBOUND.value,
-        help="which leg to inspect (default: inbound). Outbound routes to egress "
-        "detectors; limes ships none yet, so outbound is clean out of the box.",
+        help="which leg to inspect (default: inbound). This command wires the "
+        "injection detector only; the egress detectors (pii, secrets) run in "
+        "the proxy transports (`limes proxy`), not here.",
     )
     parser.add_argument(
         "--json",
