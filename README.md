@@ -123,6 +123,38 @@ else:
                                     # a redacting policy (see *Egress redaction*)
 ```
 
+A redacting policy, both egress detectors, and the ledger — the commented
+results are real output, not a sketch:
+
+```python
+from limes.detectors.secrets_egress import SecretsEgressDetector
+from limes.transports.redaction import EgressPolicy, MaskStyle, OnEgressFinding
+
+policy = EgressPolicy(
+    default=OnEgressFinding.BLOCK,            # fail closed for any other kind
+    by_kind={"pii": OnEgressFinding.REDACT},  # a card number is masked…
+    mask_style={"pii": MaskStyle.LAST4},      # …to ••••1111 (the PCI-DSS convention)
+)                                             # secrets stay BLOCK: a key never leaves
+guard = Guard(
+    [PiiEgressDetector(), SecretsEgressDetector()],
+    policy_hash=my_policy_sha,                # sha256 of the policy you declare active;
+    egress=policy,                            # recorded into every piece of evidence
+)
+
+guard.check_egress("Carte 4242 4242 4242 4242 renvoyée.", ...).content
+# 'Carte ••••4242 renvoyée.'  — masked, forwarded, and still recorded as a Deny
+
+guard.ledger.records()                        # the hash-chained decisions, in order
+guard.ledger.verify().verified                # recompute every link → True
+```
+
+To guard a content type limes does not cover, implement the `Detector` protocol
+(`limes.detector`: an `inspect()` that returns findings and raises
+`DetectorBlind` when it cannot look) and hand the instance to `Guard` — the
+verdict algebra, the ledger and the egress dispositions come for free. The
+admission rule below binds what *limes itself* ships as a detector; what you
+wire privately is your deployment's decision.
+
 `Guard.require_allow(verdict)` is the hard-gate helper for callers who would
 rather catch one `Blocked` exception than match.
 
