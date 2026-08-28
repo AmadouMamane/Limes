@@ -18,9 +18,11 @@ card numbers and API keys on the way out — and, when it refuses, can show
 exactly why. limes is that checkpoint: use it as a Python library, as a proxy
 in front of any MCP server, or as a CLI in CI.
 
-> **Working name, pre-publication.** The PyPI name `limes` is available (checked
-> 2026-08-28); the name, the GitHub identity, the CLA, and the final license split
-> are decisions pending ratification (see *License*). Nothing here is published yet.
+> **Working name, not yet on PyPI.** The source is public on GitHub
+> ([AmadouMamane/Limes](https://github.com/AmadouMamane/Limes)); the package is
+> not published to PyPI yet, where the name `limes` is still available (checked
+> 2026-08-28). The name, the CLA, and the final license split are decisions
+> pending ratification (see *License*).
 
 Design choices are recorded as ADRs — short, binding decision records under
 [`docs/decisions/`](docs/decisions/). The text cites them by number (ADR 0002,
@@ -36,11 +38,12 @@ pip install 'limes[mcp]'      # + the MCP stdio proxy (`limes proxy`)
 pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-http`)
 ```
 
-*(Until the PyPI release lands: `pip install git+https://github.com/AmadouMamane/Limes`.)*
+*(Works today from the public repo; on PyPI after release:
+`pip install git+https://github.com/AmadouMamane/Limes`.)*
 
 ## Contents
 
-- [What's in the box](#whats-in-the-box-v070)
+- [What's in the box](#whats-in-the-box-v080)
 - [Use it in Python](#use-it-in-python)
 - [Guard any MCP server](#guard-any-mcp-server--one-line-of-config)
 - [Scan from the command line](#scan-from-the-command-line--limes-check)
@@ -53,7 +56,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 - [The injection egress detector (v0.8)](#the-injection-egress-detector--injection-egress-outbound-v08)
 - [Egress redaction (v0.3)](#egress-redaction-v03)
 - [The MCP stdio proxy, in detail (v0.2)](#the-mcp-stdio-proxy-in-detail-v02)
-- [What limes does NOT do](#what-limes-does-not-do-v07)
+- [What limes does NOT do](#what-limes-does-not-do-v08)
 - [Architecture](#architecture) · [Develop](#develop) · [License](#license)
 
 ## What's in the box (v0.8.0)
