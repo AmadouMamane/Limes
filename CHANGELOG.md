@@ -4,6 +4,45 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-28
+
+**A fourth detector closes the third corner: instructions arriving on the way
+out.** The proxy inspected inbound tool calls for injection and outbound results
+for data leaving; it did not inspect outbound content for injection *arriving* —
+the corner tool poisoning and indirect injection live in.
+
+### Added — `injection-egress`
+
+- Poisoned tool descriptions (`tools/list`) and indirect injection in tool
+  results, on the server→host leg. Four rule categories — attack-marker tags
+  (case-sensitive), override directives (fr/de/en + embedded `SYSTEM:`),
+  concealment, exfiltration (a directive verb within reach of a named sensitive
+  source). Rules are data in `egress.yaml` like every other detector.
+- **16/16 located, 1/14 benign killed, F1 0.97** over the synthetic corpus, per
+  category: hidden_tag 3/3, override 5/5, concealment 4/4, exfiltration 4/4. The
+  one false positive is a security article quoting the attack string (mention vs
+  use), published with its cause (ADR 0003). Dated matrix:
+  `eval/matrices/injection_egress.md`. No baseline ships elsewhere; the null
+  control is the baseline.
+- `tools/list` joins the outbound seam's guarded methods (ADR 0012): a poisoned
+  listing is refused before the model reads it, on the chain; a clean listing
+  crosses untouched; a deployment with no outbound detector keeps exact
+  pass-through. Proven by two relay tests and the existing e2e suite.
+
+### Added — ADR 0013 (frame only)
+
+- A measured classifier layer for inbound injection is framed as an optional
+  `limes[ml]` extra, admission-gated, core dependency count unchanged. It ships
+  only when its two numbers earn admission — authorised, not presumed. No code
+  yet.
+
+### Changed
+
+- The proxy's "faithful pass-through" now excludes `tools/list` when an egress
+  detector is wired. The inbound detector's residual-miss list reframes
+  `42_email_zeroclick` from "future work" to "caught outbound by
+  injection-egress".
+
 ## [0.7.0] - 2026-08-28
 
 **The one honest limit of v0.5/v0.6 is closed: a crash is not a verdict.**
