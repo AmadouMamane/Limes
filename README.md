@@ -337,9 +337,10 @@ scanning. What it assembles, and what others do not:
    identically whichever way it was reached (ADR 0004, ADR 0005).
 
 **Where "Tessera" comes from, since the tables below name it.** limes was
-extracted from **Tessera** — a reference implementation of a multilingual
-(FR/DE/EN) EU retail-banking support agent, whose guard layer this package *is*,
-lifted into its own repo. Two things cross over, and both are named so you can
+extracted from **[Tessera](https://github.com/AmadouMamane/tessera-app)** — a
+reference implementation of a multilingual (FR/DE/EN) EU retail-banking support
+agent, whose guard layer this package *is*, lifted into its own repo. (That repo
+goes public with limes's release; until then the link waits.) Two things cross over, and both are named so you can
 check them: the **corpus** (limes v0.1 ships a functional default copied from
 Tessera, `src/limes/corpus/PROVENANCE.md`), and the **baselines**. Wherever a
 table reads *Tessera baseline*, it means Tessera's own shipping guard —
