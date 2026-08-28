@@ -126,29 +126,37 @@ def test_content_that_does_not_encode_makes_the_detector_blind(detector):
         detector.inspect(Direction.OUTBOUND, "solde \ud800 EUR", CTX)
 
 
-def test_the_core_cannot_render_the_unencodable_blind_spot_as_a_verdict(detector):
-    # …and the core cannot carry it, because it hashes the content *after*
-    # running the detectors. This pins the real behaviour rather than a hoped-for
-    # one: the pipeline raises instead of answering `CannotSay`. It fails LOUDLY,
-    # never open — nothing is forwarded — but it is a crash, not a verdict, and
-    # fixing it means editing limes/guard.py, which ADR 0004 forbids from here.
-    # Written down as a test so nobody has to rediscover it.
-    with pytest.raises(UnicodeEncodeError):
-        decide(
-            Direction.OUTBOUND,
-            "solde \ud800 EUR",
-            CTX,
-            (detector,),
-            observed_at="2026-07-24T00:00:00Z",
-        )
+def test_the_core_renders_the_unencodable_blind_spot_as_cannot_say(detector):
+    # …and from v0.5 to v0.6 the core could not carry that answer: it hashed the
+    # content *after* running the detectors and raised `UnicodeEncodeError`
+    # before it could render `CannotSay`. This test pinned that crash so nobody
+    # had to rediscover it. ADR 0011 made the digest total, and the same test
+    # now pins the verdict the architecture promised all along.
+    verdict = decide(
+        Direction.OUTBOUND,
+        "solde \ud800 EUR",
+        CTX,
+        (detector,),
+        observed_at="2026-07-24T00:00:00Z",
+    )
+    assert isinstance(verdict, CannotSay)
+    assert "pii-egress" in verdict.blind_spot
+    assert "UTF-8" in verdict.blind_spot
 
 
-def test_the_core_raises_on_unencodable_content_with_no_detector_at_all(detector):
-    # The other half of the diagnosis, and the reason it is not this detector's
-    # bug: the same input takes the same path down with zero detectors wired.
+def test_the_core_answers_unencodable_content_with_no_detector_at_all(detector):
+    # The other half of the old diagnosis, kept: with zero detectors wired the
+    # same input took the same crash path down, which is why it was never this
+    # detector's bug. Post-ADR 0011 it follows the ordinary zero-detector
+    # semantics — an Allow whose evidence names every detector that ran: none.
+    # Scannability is the detectors' concern, and both egress detectors refuse
+    # it; the core does not invent a witness.
     del detector
-    with pytest.raises(UnicodeEncodeError):
-        decide(Direction.OUTBOUND, "solde \ud800 EUR", CTX, (), observed_at="2026-07-24T00:00:00Z")
+    verdict = decide(
+        Direction.OUTBOUND, "solde \ud800 EUR", CTX, (), observed_at="2026-07-24T00:00:00Z"
+    )
+    assert isinstance(verdict, Allow)
+    assert verdict.evidence.witnesses == ()
 
 
 def test_clean_content_still_produces_an_allow_that_names_its_witness(detector):

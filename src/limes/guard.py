@@ -23,7 +23,11 @@ __all__ = ["decide"]
 
 
 def _content_sha(content: str) -> str:
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+    # ``surrogatepass`` makes the digest total over ``str`` (ADR 0011): on every
+    # string that encodes to UTF-8 the bytes are identical to strict encoding,
+    # and unpaired surrogates get their reversible CESU-8-style form instead of
+    # raising before a verdict could be rendered. A crash is not a verdict.
+    return hashlib.sha256(content.encode("utf-8", "surrogatepass")).hexdigest()
 
 
 def decide(

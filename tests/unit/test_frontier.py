@@ -26,11 +26,17 @@ the ratchet reports green over the very file it was protecting. So the
 load-bearing modules are *also* named positively, in :data:`CORE`, and two things
 are asserted about them — they are byte-identical, and they are **not covered by
 any perimeter**. Widening a list no longer buys silence.
+
+One core file has moved once, by decision rather than by drift: ADR 0011 made
+the content digest total, and :data:`AMENDED` pins ``guard.py`` to the sha256 of
+its post-ADR bytes. The witness is the same shape — these exact bytes, nothing
+else — with a different, named reference.
 """
 
 from __future__ import annotations
 
 import ast
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -61,6 +67,7 @@ ALLOWED = (
     "docs/decisions/0006-egress-redaction.md",
     "docs/decisions/0007-mcp-streamable-http-transport.md",
     "docs/decisions/0008-mask-styles.md",
+    "docs/decisions/0011-a-crash-is-not-a-verdict.md",
     "docs/design/mcp-proxy-v0.2.md",
     "README.md",
     "CHANGELOG.md",
@@ -133,6 +140,18 @@ CORE = (
     "tests/unit/ratchets/test_guard_refuses_unknown.py",
     "tests/unit/ratchets/test_null_result_carries_power.py",
 )
+
+#: ADR 0011's single authorised amendment: the content digest became total
+#: (`surrogatepass`), so `guard.py` left byte-identity to v0.1 and is pinned to
+#: the sha256 of its post-ADR bytes instead. The ratchet's strength is intact —
+#: any further drift of the file is red — what changed is the reference bytes,
+#: once, with the authorisation written down. Every key here must be in CORE
+#: and must actually differ from v0.1 (asserted below): an entry that covers a
+#: non-core file would widen a perimeter by another name, and one that covers
+#: an unchanged file would be a phantom nobody can audit (ADR 0026).
+AMENDED = {
+    "src/limes/guard.py": "5a0f155ab741a5f1de2c2b55e277099b793cbf22f09b1a75f6129b4d4d408d86",
+}
 
 #: Core modules whose *prose* had to be corrected as the transports grew (they
 #: said "v0.1 ships no MCP proxy"). Their CODE must still be identical — asserted
@@ -251,12 +270,30 @@ def test_the_admission_surface_is_not_also_claimed_as_core():
 
 
 @pytest.mark.parametrize("path", CORE)
-def test_the_named_core_is_byte_identical_to_v0_1(path):
-    assert (REPO / path).read_bytes() == _v0_1_bytes(path), (
+def test_the_named_core_is_byte_identical_to_its_pin(path):
+    current = (REPO / path).read_bytes()
+    if path in AMENDED:
+        assert hashlib.sha256(current).hexdigest() == AMENDED[path], (
+            f"{path} may differ from v0.1 exactly as ADR 0011 wrote it and no further: it is "
+            "pinned to the digest recorded in AMENDED, and this drift is a new, unauthorised "
+            "core edit."
+        )
+        return
+    assert current == _v0_1_bytes(path), (
         f"{path} is the core, the pipeline, the injection detector or its measurement "
         "(ADR 0004). Neither a transport behaviour nor a new detector may change it — and "
         "the egress detectors did not need to: they are a plugin, a policy file and a corpus."
     )
+
+
+def test_every_amended_entry_is_core_and_actually_moved():
+    # AMENDED is not a fourth perimeter: it may only re-pin a file the ratchet
+    # already names as core, and only one that genuinely differs from v0.1. An
+    # entry violating either half would be a widening or a phantom.
+    not_core = sorted(set(AMENDED) - set(CORE))
+    assert not_core == [], f"AMENDED entries that are not core files: {not_core}"
+    unmoved = sorted(path for path in AMENDED if (REPO / path).read_bytes() == _v0_1_bytes(path))
+    assert unmoved == [], f"AMENDED entries whose file is still byte-identical to v0.1: {unmoved}"
 
 
 # --- the admission surface --------------------------------------------------
@@ -326,7 +363,8 @@ def test_the_admission_enforcer_still_measures_every_admitted_detector():
 def test_every_v0_1_file_outside_the_perimeters_is_byte_identical():
     changed = []
     for path in sorted(_v0_1_paths()):
-        if _is_allowed(path) or path in DOCSTRING_ONLY:
+        # AMENDED files are policed by their pinned digest above, not skipped.
+        if _is_allowed(path) or path in DOCSTRING_ONLY or path in AMENDED:
             continue
         current = REPO / path
         assert current.exists(), f"v0.1 file {path} was deleted"

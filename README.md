@@ -323,12 +323,13 @@ stays true when the rules change.
 answers `CannotSay`, and the egress leg **blocks**. An unbounded regex sweep over
 an unbounded tool result is a denial-of-service surface, and "I stopped looking"
 has to be sayable and closed rather than silent. One honest limit found by this
-work: content carrying unpaired surrogates cannot be hashed, and
-`limes.guard.decide` raises `UnicodeEncodeError` *before* it can render that
-blind spot as a verdict. It fails loudly, never open — nothing is forwarded — but
-it is a crash rather than a `CannotSay`, and fixing it means editing the core,
-which ADR 0004 does not allow from a detector. Pinned by a test so nobody has to
-rediscover it.
+work, open from v0.5 to v0.6 and closed in v0.7: content carrying unpaired
+surrogates could not be hashed, so `limes.guard.decide` raised
+`UnicodeEncodeError` *before* it could render that blind spot as a verdict — a
+crash, loud and never open, but not a `CannotSay`. Fixing it meant editing the
+core, which ADR 0004 does not allow from a detector; ADR 0011 authorised the
+one-line amendment (the digest is total now), the same input answers
+`CannotSay` → **block**, and the test that pinned the crash pins the verdict.
 
 ## v0.6 — `secrets-egress`: credentials on the way out
 

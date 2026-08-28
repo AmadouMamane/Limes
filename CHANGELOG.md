@@ -4,6 +4,27 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-28
+
+**The one honest limit of v0.5/v0.6 is closed: a crash is not a verdict.**
+
+### Fixed
+
+- `limes.guard.decide` no longer raises `UnicodeEncodeError` on content carrying
+  unpaired surrogates. The content digest is total over `str` (ADR 0011,
+  `surrogatepass`), so the detector's refusal to guess — already correct since
+  v0.5 — now reaches the caller as `CannotSay`, which the egress leg turns into
+  **block**. On every string that encodes to UTF-8 the digest is byte-identical
+  to before, so ledgers keep their hashes.
+
+### Changed
+
+- The frontier ratchet pins `guard.py` to the sha256 of its post-ADR bytes
+  instead of byte-identity to v0.1 — the single authorised amendment, recorded
+  in `AMENDED` with two guards: an entry must name a core file and that file
+  must actually differ from v0.1. Every other core file remains pinned to v0.1.
+- The tests that pinned the crash now pin the verdict, in the same file.
+
 ## [0.6.0] - 2026-07-24
 
 **Two detectors became three, and the README's "1 detector" is now honestly

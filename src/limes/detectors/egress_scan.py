@@ -27,14 +27,13 @@ found":
   unbounded tool result is a denial-of-service surface, and "I stopped looking"
   has to be sayable, auditable and closed rather than silent.
 * **unencodable** — content carrying unpaired surrogates cannot be encoded to
-  UTF-8, so it is not the bytes that will leave the process. Worth stating,
-  with one honest caveat: the core hashes the content *after* running the
-  detectors, so on such input :func:`limes.guard.decide` raises
-  ``UnicodeEncodeError` before it can render this blind spot as ``CannotSay``.
-  That is a limitation of the core, found by this work and not fixable from a
-  detector (ADR 0004 forbids the edit). It fails loudly rather than open — no
-  content is forwarded — but it is a crash, not a verdict, and it is written down
-  here rather than left for somebody to discover.
+  UTF-8, so it is not the bytes that will leave the process. Found by this
+  work: the core used to hash the content *after* running the detectors and
+  raised ``UnicodeEncodeError`` before it could render this blind spot as
+  ``CannotSay`` — a crash, not a verdict. Not fixable from a detector (ADR 0004
+  forbids the edit), it stayed pinned as debt until ADR 0011 made the core's
+  digest total: :func:`limes.guard.decide` now renders the refusal as
+  ``CannotSay``, which the egress leg turns into *block*.
 """
 
 from __future__ import annotations
