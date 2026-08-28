@@ -13,14 +13,14 @@ reason and a redacted, hash-chained record of what fired, and a detector that
 cannot see returns `CannotSay` — never a silent "allow".
 
 > **Working name, pre-publication.** The PyPI name `limes` is available (checked
-> 2026-07-24); the name, the GitHub identity, the CLA, and the final license split
+> 2026-08-28); the name, the GitHub identity, the CLA, and the final license split
 > are decisions pending ratification (see *License*). Nothing here is published yet.
 
-## What's in the box (v0.6.0)
+## What's in the box (v0.7.0)
 
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
-| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1, a ratchet says so |
+| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1 (one audited exception, ADR 0011), and a *ratchet* — a test that may only tighten — says so |
 | **Detectors** | **three**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR) and `secrets-egress` (prefixed API keys, PEM private keys, JWTs) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; unprefixed credentials. Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
 | **Egress** | two detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
@@ -171,8 +171,9 @@ Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot)
 ```
 
 - **`Allow` is unconstructible without evidence** — no default, no convenience
-  constructor; `Allow()` is a *type error*. A ratchet asserts mypy rejects it, and
-  it goes red the moment someone gives evidence a default (ADR 0002).
+  constructor; `Allow()` is a *type error*. A ratchet pins this at the type
+  level: it asserts mypy rejects the call, and fails the moment anyone gives the
+  `evidence` field a default (ADR 0002).
 - **`CannotSay` fails closed** — a detector that cannot see (dependency absent,
   content unreadable, timeout) publishes a blind spot; it never degrades to a
   silent `Allow`. A witness that cannot see may never report "ok".
@@ -586,7 +587,7 @@ detector; an egress detector is future work), `41_rag_poison` (de/en) and
 `11_base64` (de) — adversarial wording the current patterns miss. Every one is
 also missed by the Tessera baseline; limes regresses on none of them.
 
-## What limes does NOT do (v0.6)
+## What limes does NOT do (v0.7)
 
 **No generic high-entropy secret scanning**, and no *unprefixed* credential
 detection — see "What `secrets-egress` deliberately does not do" above. Both are
@@ -621,7 +622,7 @@ transports — never as growth of the core (ADR 0004).
   on the way out. A command-line surface, `limes check` (`cli.py`), runs the same
   pipeline with no transport at all.
 
-Read the founding decisions first: `docs/decisions/0001`–`0009`. The proxy's
+Read the founding decisions first: `docs/decisions/0001`–`0011`. The proxy's
 design note, with the three places the shipped code deviates from it and why, is
 `docs/design/mcp-proxy-v0.2.md`.
 
