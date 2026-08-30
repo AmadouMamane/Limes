@@ -4,11 +4,18 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.1] - 2026-08-30
+## [0.9.0] - 2026-08-30
 
-**The release audit: nothing the library does changed, and four things it
-*claimed* did.** Every finding below was measured on the artifact or on the
-running CI, never inferred.
+**The release audit, and the two amendments it forced.** Nothing on the decision
+path changed: `decide`, the verdict algebra, the evidence chain and all four
+detectors are byte-identical. What changed is what the package *claimed* about
+itself, what its CI was actually able to check, and — under two new ADRs — the
+one attribute a published library must have and the rule its own ratchets must
+obey. Every finding below was measured on the artifact or on the running CI,
+never inferred.
+
+The minor bump rather than a patch is `limes.__version__`: a name added to the
+public surface is a minor, and this project does not round its own numbers down.
 
 ### Fixed
 
@@ -49,6 +56,13 @@ running CI, never inferred.
 
 ### Changed
 
+- **A ratchet reports its own blind spot, and never an assertion its missing tool
+  satisfies** (ADR 0015). The type-level ratchet asserted `returncode != 0` to
+  mean "mypy rejected `Allow()`" — and `python -m mypy` exits non-zero when mypy
+  is *not installed*, so the assertion was satisfied by mypy's own absence. Only
+  a second assertion on the message text stood between that ratchet and a green
+  over a hole. Presence is now resolved with `find_spec` before any exit code is
+  read, and its absence is a named skip.
 - **The frontier ratchet reports a blind spot instead of a verdict when it cannot
   see** (ADR 0026). `_git` already skipped when git could not answer; `_v0_1_bytes`
   asserted instead, which is why `pytest` from an unpacked sdist printed 27 reds
@@ -64,10 +78,25 @@ running CI, never inferred.
 
 ### Added
 
+- **`limes.__version__`** (ADR 0014). A published library is asked its version by
+  every bug report and by `SECURITY.md` itself, which wants "the affected version
+  or commit" first. `limes --version` answered; `import limes; limes.__version__`
+  raised `AttributeError`. It is now *read* from the installed distribution's
+  metadata — the same single source the CLI reads, so the two cannot disagree and
+  no version literal enters the source tree. From an uninstalled source tree it
+  is `"0+unknown"`, a PEP 440 local version that sorts below every release: a
+  blind spot named, not an exception escaping out of `import limes`.
 - `.github/workflows/release.yml` — build and publish by Trusted Publishing
   (OIDC), so no long-lived token exists on any machine. It re-runs the full gate
   on the tag rather than trusting that the commit was green when it landed, and
   refuses to publish when the tag and `pyproject.toml` name different versions.
+- Three decision records: **ADR 0014** (the package names its own version, from
+  the one place it is written), **ADR 0015** (a ratchet reports its own blind
+  spot), and **ADR 0016** (Apache-2.0 throughout — ADR 0004 left its licence
+  split as an explicitly unratified *lean*, "before any publication", and
+  publication is now the thing happening; a distribution declares its licence
+  once, and the wheel ships the corpus). ADRs 0001-0004 are untouched: per
+  ADR 0001 the founding contract is superseded by a new record, never rewritten.
 - `.gitleaks.toml` — the eleven findings on this repository are all synthetic
   detection material, verified one by one; they are exempted file by file, with
   what each holds, and never by a wildcard over `tests/`. A real key in a new test
@@ -454,7 +483,7 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
-[0.8.1]: https://github.com/AmadouMamane/Limes/compare/v0.8.0...v0.8.1
+[0.9.0]: https://github.com/AmadouMamane/Limes/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/AmadouMamane/Limes/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AmadouMamane/Limes/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AmadouMamane/Limes/compare/v0.5.0...v0.6.0

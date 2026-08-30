@@ -7,9 +7,9 @@ pyproject; and the *imports* of every module outside the transports. Not the
 neighbourhood — not "the tests still pass", which would be green over a core
 rewrite (ADR 0026).
 
-ADR 0004 names **three** places a capability may land — a detector, a policy, or
-a transport — so this file names three perimeters, and *everything else* must be
-byte-identical:
+ADR 0004 names **three** places a *capability* may land — a detector, a policy,
+or a transport — so this file names three capability perimeters, and *everything
+else* must be byte-identical:
 
 * :data:`ALLOWED` — the transports and the CLI usage surface (v0.2 → v0.4).
 * :data:`DETECTOR_PERIMETER` — where an admitted detector lives: its rules, its
@@ -21,16 +21,40 @@ byte-identical:
   witness for them (a registry that can never gain an entry makes ADR 0003's
   admission procedure unreachable), so each has a stronger, specific one below.
 
+Two further lists carry no capability at all, and say so:
+
+* :data:`PROJECT_SCAFFOLDING` — how the project is built, tested, published, and
+  how a vulnerability reaches its maintainer. Freezing these was a side effect of
+  "everything outside the perimeters is byte-identical", not a promise anybody
+  made, and it had a price: SECURITY.md kept describing a v0.1 with one inbound
+  detector and no proxy, telling a researcher that three transports and three
+  detectors were out of scope.
+* :data:`AMENDING_RECORDS` — the decision records that authorise the pins below.
+  Listing an ADR makes no code writable; it is the paper a reader follows when a
+  pin names it. ADRs 0001-0004 stay frozen (ADR 0001: the founding contract is
+  superseded, never edited).
+
 An allowlist ratchet has one classic failure mode: somebody widens the list and
 the ratchet reports green over the very file it was protecting. So the
 load-bearing modules are *also* named positively, in :data:`CORE`, and two things
 are asserted about them — they are byte-identical, and they are **not covered by
 any perimeter**. Widening a list no longer buys silence.
 
-One core file has moved once, by decision rather than by drift: ADR 0011 made
-the content digest total, and :data:`AMENDED` pins ``guard.py`` to the sha256 of
-its post-ADR bytes. The witness is the same shape — these exact bytes, nothing
-else — with a different, named reference.
+Core files move only by decision, never by drift, and each move is pinned beside
+the ADR that authorised it. :data:`AMENDED` holds whole-file digests — ``guard.py``
+since ADR 0011 made the content digest total, and the type-level ratchet since ADR
+0015 made it resolve mypy's presence before reading any exit code.
+:data:`DECLARED_CODE_DELTA` holds the same idea for a prose-only module whose code
+was allowed to move once: ``limes/__init__.py`` gained ``__version__`` under ADR
+0014, so its *code* is pinned to a digest while its prose stays free. In every
+case the witness has the same shape — these exact bytes, nothing else — with a
+different, named reference.
+
+And this file is itself subject to ADR 0015: everything here compares against
+v0.1's bytes, read from git history, so a checkout that cannot produce them makes
+every assertion below unfalsifiable. Three states, decided before anything is
+interpreted — no history at all declares a blind spot, a truncated history gets a
+single loud red, a present history is judged normally.
 """
 
 from __future__ import annotations
@@ -154,7 +178,14 @@ CORE = (
 #: non-core file would widen a perimeter by another name, and one that covers
 #: an unchanged file would be a phantom nobody can audit (ADR 0026).
 AMENDED = {
+    # ADR 0011 — the content digest became total (`surrogatepass`).
     "src/limes/guard.py": "5a0f155ab741a5f1de2c2b55e277099b793cbf22f09b1a75f6129b4d4d408d86",
+    # ADR 0015 — the type-level ratchet resolves mypy's presence before it reads
+    # any exit code. `python -m mypy` exits non-zero when mypy is MISSING, so the
+    # assertion meaning "mypy rejected Allow()" was satisfied by mypy's absence.
+    "tests/unit/ratchets/test_allow_needs_evidence_mypy.py": (
+        "2cf4d2134edf8da458779ec2d2069143d46af1da760439c33ee06a69f0d2beee"
+    ),
 }
 
 #: Core modules whose *prose* had to be corrected as the transports grew (they
@@ -164,6 +195,21 @@ DOCSTRING_ONLY = (
     "src/limes/__init__.py",
     "src/limes/transports/__init__.py",
 )
+
+#: The one authorised exception to "prose only": a DOCSTRING_ONLY module whose
+#: CODE was allowed to move, once, by a named ADR — pinned to the sha256 of its
+#: post-ADR code-without-docstring. Prose stays free (that is what DOCSTRING_ONLY
+#: is for, and this file's prose went stale twice), while the code is held to an
+#: exact digest, so any further drift is red. Same two guards as AMENDED, and for
+#: the same reason: an entry must name a DOCSTRING_ONLY file — otherwise it is a
+#: perimeter under another name — and that file's code must genuinely differ from
+#: v0.1, otherwise it is a phantom nobody can audit.
+DECLARED_CODE_DELTA = {
+    # ADR 0014 — `limes.__version__`, read from the installed distribution's
+    # metadata (the same single source `limes --version` reads), so the package
+    # can name the build that is answering a bug report or a security advisory.
+    "src/limes/__init__.py": ("ed074b3c7b25652bb3cc7ef7204fa4926a0e7f9aa353c0da9f47a8cf07c36c9d"),
+}
 
 CORE_PACKAGE = REPO / "src" / "limes"
 TRANSPORTS = CORE_PACKAGE / "transports"
@@ -187,7 +233,22 @@ PROJECT_SCAFFOLDING = (
     "SECURITY.md",
 )
 
-PERIMETERS = ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE + PROJECT_SCAFFOLDING
+#: The decision records that authorise a change to the frontier itself, plus the
+#: one that settles ADR 0004's licence lean. This is NOT a capability perimeter:
+#: an ADR listed here makes no code writable — it is the written authorisation a
+#: reader follows when a pin above names it. ADRs 0001-0004 are deliberately
+#: absent and stay frozen: per ADR 0001 the founding contract is superseded by a
+#: new record, never edited in place. A new ADR joins a perimeter deliberately,
+#: in the same change that makes the deviation — which is ADR 0001's rule.
+AMENDING_RECORDS = (
+    "docs/decisions/0014-the-package-names-its-own-version.md",
+    "docs/decisions/0015-a-ratchet-reports-its-own-blind-spot.md",
+    "docs/decisions/0016-apache-2-throughout.md",
+)
+
+PERIMETERS = (
+    ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE + PROJECT_SCAFFOLDING + AMENDING_RECORDS
+)
 
 
 def _git(*arguments: str) -> str:
@@ -462,9 +523,35 @@ def test_no_new_file_landed_outside_the_perimeters():
 
 @pytest.mark.parametrize("path", DOCSTRING_ONLY)
 def test_a_touched_core_module_changed_only_its_docstring(path):
-    before = _code_without_docstring(_v0_1_bytes(path))
     after = _code_without_docstring((REPO / path).read_bytes())
+    if path in DECLARED_CODE_DELTA:
+        # Its code was allowed to move once, by the ADR named beside the pin. The
+        # witness is not weaker here, it is differently anchored: an exact digest
+        # instead of v0.1's bytes, so any drift beyond the authorised one is red.
+        digest = hashlib.sha256(after.encode("utf-8")).hexdigest()
+        assert digest == DECLARED_CODE_DELTA[path], (
+            f"{path}'s code drifted from the delta declared for it. Only the change the "
+            "named ADR authorises is pinned here, and this is not it."
+        )
+        return
+    before = _code_without_docstring(_v0_1_bytes(path))
     assert before == after, f"{path} was supposed to change only its prose, but its CODE moved"
+
+
+def test_every_declared_code_delta_is_prose_only_and_actually_moved():
+    # The same two guards AMENDED carries. An entry naming a file the ratchet does
+    # not already treat as prose-only would be a perimeter by another name; one
+    # naming a file whose code still equals v0.1's would be a phantom, reading as
+    # "this was authorised" while authorising nothing anybody can point at.
+    not_prose = sorted(set(DECLARED_CODE_DELTA) - set(DOCSTRING_ONLY))
+    assert not_prose == [], f"DECLARED_CODE_DELTA entries that are not DOCSTRING_ONLY: {not_prose}"
+    unmoved = sorted(
+        path
+        for path in DECLARED_CODE_DELTA
+        if _code_without_docstring((REPO / path).read_bytes())
+        == _code_without_docstring(_v0_1_bytes(path))
+    )
+    assert unmoved == [], f"DECLARED_CODE_DELTA entries whose code still equals v0.1: {unmoved}"
 
 
 # --- the dependency frontier ------------------------------------------------

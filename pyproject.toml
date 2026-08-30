@@ -1,6 +1,6 @@
 [project]
 name = "limes"
-version = "0.8.1"
+version = "0.9.0"
 description = "The guard that can prove what it refused — a transport-agnostic, evidence-carrying policy guard for LLM agents."
 readme = "README.md"
 requires-python = ">=3.12"

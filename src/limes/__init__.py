@@ -35,6 +35,8 @@ limes does not do".
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version
+
 from limes.detector import Context, Detector, DetectorBlind, Direction, Finding
 from limes.guard import decide
 from limes.record import ChainStatus, DecisionRecord, Ledger
@@ -50,6 +52,19 @@ from limes.verdict import (
     fingerprint,
     render,
 )
+
+#: The build that is answering, read from the installed distribution's metadata —
+#: the same single source `limes --version` reads, so the two cannot disagree and
+#: neither can go stale against the wheel a user actually installed (ADR 0014).
+try:
+    __version__ = version("limes")
+except PackageNotFoundError:
+    # A source tree on sys.path rather than an installed distribution. Letting
+    # this escape would make `import limes` fail because the package could not
+    # name itself — a crash where a blind spot is the honest answer (ADR 0011's
+    # lesson, one layer out). "0+unknown" is a valid PEP 440 local version that
+    # sorts below every release and cannot be misread as one.
+    __version__ = "0+unknown"
 
 __all__ = [
     "Allow",
