@@ -101,6 +101,7 @@ ALLOWED = (
     "docs/measuring-detection.md",
     "docs/writing-a-detector.md",
     "docs/threat-model.md",
+    "docs/guarding-an-mcp-server.md",
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",

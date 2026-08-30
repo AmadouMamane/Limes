@@ -16,11 +16,14 @@ You run an LLM agent that calls tools. limes is a checkpoint on the seam between
 the two, and it guards **both directions** — which is the part worth being
 precise about, because it is *not* a filter in front of your model:
 
-- **What a tool sends back is checked before your model reads it.** A poisoned
-  tool description or an "ignore previous instructions" buried in a fetched page
-  is refused; a card number or an API key in a tool's result is stripped or
-  blocked. This is the leg that actually stops injection *reaching* the model —
-  the injection that comes from the tools, not from the user's prompt.
+- **What a tool sends back is checked before your model reads it** — and that
+  includes **the tool list itself**. A poisoned `description` in `tools/list` is
+  the attack a guard that watches *calls* never sees: it is answered before any
+  call exists, and your model reads it first. limes guards that response
+  (ADR 0012), along with an "ignore previous instructions" buried in a fetched
+  page, and a card number or API key in a tool's result. This is the leg that
+  actually stops injection *reaching* the model — the injection that comes from
+  the tools, not from the user's prompt.
 - **Each tool call your model makes is checked before it runs.** Here the model
   has already been prompted, so this is not protecting the model; it is the last
   deterministic gate before an *action* executes, in case the model was talked
@@ -62,7 +65,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 - [The injection detector (v0.1)](#the-injection-detector--injection-inbound-v01)
 - [The PII egress detector (v0.5)](#the-pii-egress-detector--pii-egress-outbound-v05)
 - [The secrets egress detector (v0.6)](#the-secrets-egress-detector--secrets-egress-outbound-v06)
-- [The injection egress detector (v0.8)](#the-injection-egress-detector--injection-egress-outbound-v08)
+- [The injection egress detector (v0.8)](#the-injection-egress-detector--injection-egress-outbound-v08-3-shapes-v010)
 - [Egress redaction (v0.3)](#egress-redaction-v03)
 - [The MCP stdio proxy, in detail (v0.2)](#the-mcp-stdio-proxy-in-detail-v02)
 - [What limes does NOT do](#what-limes-does-not-do)
@@ -75,8 +78,33 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 | **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1 (one audited exception, ADR 0011), and a *ratchet* — a test that may only tighten — says so |
 | **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; unprefixed credentials. Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
-| **Egress** | two detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
+| **Egress** | three detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
 | **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
+
+### Measured against an adversary we did not write
+
+Every other number on this page comes from a corpus limes's author wrote, which
+measures whether the detector does what it was meant to do. This one does not.
+It is NVIDIA's **garak** (Apache-2.0), vendored by value and scored by
+`make eval` (ADR 0017):
+
+| population | `injection` (inbound) | `injection-egress` (outbound) |
+|---|---|---|
+| goal hijacking — **blind**, contents never read | **107/131 (82%)** | **107/131 (82%)** |
+| indirect injection — held out, seen while splitting | 62/280 (22%) | 53/280 (19%) |
+| **matched benign documents** (the same documents, injection removed) | **0/192** | **0/192** |
+| content-policy jailbreak — never claimed | 0/161 | 0/161 |
+
+Read the second row with the fourth: **69 % of that split is one probe family —
+résumés carrying a fabricated recruiter's endorsement, a "hidden competency
+profile", white text addressed to the scanner.** No imperative, nothing for a
+rule to name, and a rule that fired there would be firing on flattery. Excluding
+it, the held-out figure is 60 %. That is the boundary of what rules are, measured
+rather than asserted, and it is the argument for the classifier layer ADR 0013
+frames.
+
+Full table, per probe and with the protocol:
+[`eval/matrices/external_injection.md`](https://github.com/AmadouMamane/Limes/blob/main/eval/matrices/external_injection.md).
 
 Everything is **pre-1.0 by choice**: the surface is complete; what's missing is
 the real-world usage needed to earn a 1.0. The one thing that will keep growing
@@ -230,11 +258,18 @@ gates on it without parsing anything.
 ```sh
 pip install limes          # no extra needed; `check` is core only
 
-limes check prompt.txt                       # inspect a file
-echo "$USER_INPUT" | limes check -           # …or stdin
-limes check --direction outbound reply.txt   # inspect a response instead
+limes check prompt.txt                       # inspect a prompt   -> `injection`
+echo "$TOOL_OUTPUT" | limes check --direction outbound -   # inspect a result
 limes check --json prompt.txt                # verdict + evidence as one JSON object
 ```
+
+**The leg selects its detectors, exactly as the proxy deploys them** (ADR 0018):
+`--direction inbound` runs `injection`; `--direction outbound` runs `pii-egress`,
+`secrets-egress` and `injection-egress`. Until v0.10 this command ran the inbound
+detector on *both* legs, so scanning a tool result reported a clean `Allow` over
+content nothing capable of judging it had read. It reports a **verdict**, never a
+transformation: redaction is a transport behaviour (ADR 0006), so masking is
+something a proxy does and a scanner does not.
 
 An injection is refused, with its evidence, and a non-zero exit:
 
@@ -337,7 +372,7 @@ content it decided on (a `content_sha`, plus offsets) and **never stores the
 content itself** — so the trail proves what happened without becoming a copy of
 every secret that flowed through it. How it is stored, what you can prove from it
 (sequence integrity, content binding, full deterministic replay), how tampering
-is detected, and how to locate a decision: **[docs/audit-trail.md](docs/audit-trail.md)**.
+is detected, and how to locate a decision: **[docs/audit-trail.md](https://github.com/AmadouMamane/Limes/blob/main/docs/audit-trail.md)**.
 
 ## What limes is — and is not
 
@@ -624,7 +659,7 @@ The same session proves the two dispositions from one policy file: `pii: redact`
 keeps the answer with the card masked, `secret: block` loses the answer rather
 than let an `AKIA…` key leave — each with its own unproxied control run.
 
-## The injection egress detector — `injection-egress` (outbound, v0.8)
+## The injection egress detector — `injection-egress` (outbound, v0.8; +3 shapes v0.10)
 
 The proxy guarded two corners and left the third open. Host→server tool calls are
 inspected for injection; server→host results are inspected for data *leaving*
@@ -640,27 +675,45 @@ server→host leg — and two published attacks live exactly there:
 
 Both are content the agent's model will read, on the egress leg. So `tools/list`
 joins the outbound seam's guarded methods, and a fourth detector — admitted the
-same way, on the same machinery — scans that leg for four categories:
+same way, on the same machinery — scans that leg for **seven** shapes:
 attack-marker tags (`<IMPORTANT>`/`<HIDDEN>`, case-sensitive), override
 directives ("ignore previous instructions" and embedded `SYSTEM:`, fr/de/en),
-concealment ("do not tell the user"), and exfiltration (a directive verb within
-reach of a named sensitive source: `.ssh`, `.env`, credentials, the conversation
-history).
+concealment ("do not tell the user"), exfiltration (a directive verb within reach
+of a named sensitive source: `.ssh`, `.env`, credentials, the conversation
+history) — and three added in v0.10 after the external corpus measured the first
+four at **1.8 %** on somebody else's attacks (ADR 0017):
+
+- **override-and-substitute** — a disregard verb, a reference to the surrounding
+  instructions *and* an imperative to produce something else. The third part is
+  the precision: "please ignore the previous email" has the first two.
+- **injected-dialogue-turn** — a chat role on its own line, mid-document, issuing
+  an instruction. The document has already begun, which is what separates it from
+  a transcript a tool legitimately returns.
+- **session-boundary-marker** — a fabricated `<end of session>`, so what follows
+  reads as a fresh, trusted turn.
 
 | configuration | located | flagged | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|---|
-| unplugged (null control) | 0/16 | 0/16 | 0/14 | 0.00 | 0.00 | 0.00 |
-| block-everything | 0/16 | 16/16 | 14/14 | 0.00 | 0.00 | 0.00 |
-| **limes injection-egress** | **16/16** | 16/16 | **1/14** | 1.00 | 0.94 | 0.97 |
+| unplugged (null control) | 0/16 | 0/16 | 0/20 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/16 | 16/16 | 20/20 | 0.00 | 0.00 | 0.00 |
+| **limes injection-egress** | **16/16** | 16/16 | **4/20** | 1.00 | 0.80 | 0.89 |
 
-Per category, `located`: hidden_tag 3/3, override 5/5, concealment 4/4,
-exfiltration 4/4. Dated matrix: `eval/matrices/injection_egress.md`.
+Dated matrix: `eval/matrices/injection_egress.md`. The external number for the
+same detector is in *[Measured against an adversary we did not
+write](#measured-against-an-adversary-we-did-not-write)* — **1.8 % → 82 % blind**,
+which is what the three families bought and why the benign corpus grew with them.
 
-**The one false positive is mention versus use** (published with its cause, not
-rounded away — ADR 0003): `bn_04`, a fetched security article that *quotes*
-"ignore previous instructions" while explaining the attack. A rule cannot tell
-the quote from the attack, and narrowing it until the quote survives would let
-the real attack hide behind quoting — the wrong trade for a guard. A poisoned
+**The four false positives, with their causes** (published, not rounded away —
+ADR 0003). Three are **mention versus use**: a security article that *quotes* an
+attack while explaining it (`bn_04`, `bn_17`), and documentation that names the
+`<end of session>` marker (`bn_19`). A rule cannot tell the quote from the attack,
+and narrowing until the quote survives would let the real attack hide behind
+quoting — the wrong trade for a guard. The fourth is different and is a **real
+deployment caveat**: `bn_18`, a support transcript, where a genuine `User:` line
+makes a genuine request. **A tool that returns chat transcripts will trip
+`injected-dialogue-turn`.** The rules are data (`egress.yaml`); a deployment that
+returns transcripts should ship a policy without that family rather than discover
+this in production. A poisoned
 listing is refused before the model reads it; kind `injection` is not declared
 `redact` anywhere, so it falls to the blocking default. `prompts/*` listings and
 resource *descriptions* are declared out of scope, not silently covered
@@ -832,16 +885,19 @@ growth of the core (ADR 0004).
 
 Deep dives that go past what this page covers:
 
-- **[The audit trail](docs/audit-trail.md)** — what a decision records, how to
+- **[The audit trail](https://github.com/AmadouMamane/Limes/blob/main/docs/audit-trail.md)** — what a decision records, how to
   prove the content it decided on, how tampering is detected, how to find a
   decision.
-- **[Measuring detection](docs/measuring-detection.md)** — how to trust the
+- **[Measuring detection](https://github.com/AmadouMamane/Limes/blob/main/docs/measuring-detection.md)** — how to trust the
   two-number tables: the null control, `located` vs `flagged`, the synthetic
   corpus, statistical power, reproducing a matrix.
-- **[Writing a detector](docs/writing-a-detector.md)** — the `Detector` contract,
+- **[Writing a detector](https://github.com/AmadouMamane/Limes/blob/main/docs/writing-a-detector.md)** — the `Detector` contract,
   rules-as-data, and the admission bar a shipped detector must clear.
-- **[Threat model](docs/threat-model.md)** — where limes sits, what it defends,
+- **[Threat model](https://github.com/AmadouMamane/Limes/blob/main/docs/threat-model.md)** — where limes sits, what it defends,
   and what it deliberately does not.
+- **[Guarding an MCP server](https://github.com/AmadouMamane/Limes/blob/main/docs/guarding-an-mcp-server.md)** — the runnable
+  recipe: a real server, a poisoned tool description, and what the host receives
+  with and without the proxy in between.
 
 ## Architecture
 

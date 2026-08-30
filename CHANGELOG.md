@@ -4,6 +4,68 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-08-30
+
+**limes got a number it did not choose, and it was 1.8 %.** Then it acted on it.
+This release vendors an adversary corpus limes's author did not write, publishes
+what the detectors score on it, and closes the two holes that number exposed —
+one of which was that the *shipped proxy ran with nothing on its outbound leg*.
+
+### Added
+
+- **An external adversary corpus** (ADR 0017): NVIDIA's garak (Apache-2.0,
+  `garak.probes.latentinjection` + `promptinject`), vendored by value into
+  `eval/corpus/garak/` with provenance, regenerable by
+  `scripts/vendor_garak_corpus.py`. limes does not depend on garak. `make eval`
+  scores it and writes `eval/matrices/external_injection.md`. The corpus splits
+  `dev`/`holdout` by **attack template** (not by prompt — the first attempt did,
+  which would have leaked), derives its benign control from the attacks
+  themselves (192 matched documents, up from 8 general inputs), and carries a
+  strictly **blind** family scored without its contents ever being read. The
+  jailbreak family limes does not claim is measured too, on its own row.
+- **Three attack shapes on the outbound leg** (ADR 0017 Am. 1):
+  `override-and-substitute`, `injected-dialogue-turn`, `session-boundary-marker`,
+  each named by shape and admitted with its benign lookalikes.
+- **An end-to-end proof of the headline claim**: a real host, a real proxy, and a
+  server whose `tools/list` carries a poisoned description, refused before the
+  model reads it (`tests/integration/mcp/test_tools_list_poisoning_e2e.py`).
+- **A runnable recipe**, `docs/guarding-an-mcp-server.md`.
+
+### Fixed
+
+- **The shipped proxy ran with an empty outbound leg** (ADR 0018). `serve()`
+  defaulted its outbound detectors to `()` and the console entry point passed
+  none, so `limes proxy` — the transport limes leads with — ran with nothing on
+  the leg the README described it guarding, for three releases. Its own docstring
+  said so, having been written at v0.4 and never revisited. Now every admitted
+  egress detector is installed by default, derived from `ADMITTED`. Found by the
+  new end-to-end test on its first run; no unit test could, because each built
+  the bridge itself and handed it detectors.
+- **`limes check --direction outbound` ran the inbound detector** and reported a
+  clean `Allow` over an unscanned tool result (ADR 0018). The leg now selects its
+  detectors, exactly as the proxy deploys them.
+- **The inbound leg scored 0/131 where the outbound scored 107/131** on garak's
+  goal-hijacking family (ADR 0019). The override family had been generalised on
+  one leg only; the three shapes are ported verbatim to the inbound policy
+  (`origin: limes`, so the Tessera baseline is untouched). Inbound blind hijack:
+  0 → 82 %. Internal matrix moved by one case, 25/33 → 26/33 — which is the whole
+  argument for measuring against a corpus you did not write.
+
+### Measured
+
+The frozen external numbers, published not rounded:
+
+| population | `injection` | `injection-egress` |
+|---|---|---|
+| goal hijacking (blind) | 107/131 | 107/131 |
+| indirect injection (holdout) | 62/280 | 53/280 |
+| matched benign documents | 0/192 | 0/192 |
+| jailbreak (out of scope) | 0/161 | 0/161 |
+
+Precision cost, on the internal lookalikes: injection-egress 0.94 → 0.80 (three
+mention-versus-use, one a support transcript — a real deployment caveat, now
+documented).
+
 ## [0.9.1] - 2026-08-30
 
 **Two documents still carried a version number, and one of them was already
@@ -515,6 +577,7 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.10.0]: https://github.com/AmadouMamane/Limes/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/AmadouMamane/Limes/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/AmadouMamane/Limes/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/AmadouMamane/Limes/compare/v0.7.0...v0.8.0
