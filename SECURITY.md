@@ -4,7 +4,7 @@ limes is a security tool; we take vulnerabilities in it seriously.
 
 ## Supported versions
 
-limes is pre-1.0 (v0.8, alpha). Security fixes land on `main` and in the next
+limes is pre-1.0 and alpha. Security fixes land on `main` and in the next
 tagged release. There is no back-port guarantee before 1.0.
 
 ## Reporting a vulnerability

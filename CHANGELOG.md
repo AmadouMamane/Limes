@@ -4,6 +4,30 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-08-30
+
+**Two documents still carried a version number, and one of them was already
+wrong.** Found by looking at the rendered 0.9.0 page on TestPyPI rather than at
+the source — which is the point of a rehearsal.
+
+### Fixed
+
+- `SECURITY.md` said "limes is pre-1.0 (v0.8, alpha)" in a 0.9.0 release. The
+  previous fix had reset that counter from v0.1 to v0.8 instead of removing it.
+  A policy document does not need to repeat a number the distribution metadata
+  already carries, and every release would have had to remember to update it, so
+  the number is gone: "limes is pre-1.0 and alpha."
+- Two README headings named the release they described — `What's in the box
+  (v0.8.0)` and `What limes does NOT do (v0.8)` — and were stale for the same
+  reason. Both now describe the current state without dating it, with their table
+  of contents anchors rewired. The remaining `(v0.1)`, `(v0.2)`, `(v0.5)` … in
+  section titles are deliberate and stable: they say *when a capability landed*,
+  which does not change.
+
+0.9.0 was uploaded to TestPyPI as the release rehearsal and is not on PyPI. Its
+number is spent, so the rehearsed artifact and the published one stay the same
+thing — which is the whole reason to rehearse.
+
 ## [0.9.0] - 2026-08-30
 
 **The release audit, and the two amendments it forced.** Nothing on the decision
@@ -491,6 +515,7 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.9.1]: https://github.com/AmadouMamane/Limes/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/AmadouMamane/Limes/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/AmadouMamane/Limes/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AmadouMamane/Limes/compare/v0.6.0...v0.7.0

@@ -52,7 +52,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 
 ## Contents
 
-- [What's in the box](#whats-in-the-box-v080)
+- [What's in the box](#whats-in-the-box)
 - [Use it in Python](#use-it-in-python)
 - [Guard any MCP server](#guard-any-mcp-server--one-line-of-config)
 - [Scan from the command line](#scan-from-the-command-line--limes-check)
@@ -65,10 +65,10 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 - [The injection egress detector (v0.8)](#the-injection-egress-detector--injection-egress-outbound-v08)
 - [Egress redaction (v0.3)](#egress-redaction-v03)
 - [The MCP stdio proxy, in detail (v0.2)](#the-mcp-stdio-proxy-in-detail-v02)
-- [What limes does NOT do](#what-limes-does-not-do-v08)
+- [What limes does NOT do](#what-limes-does-not-do)
 - [Architecture](#architecture) · [Develop](#develop) · [License](#license)
 
-## What's in the box (v0.8.0)
+## What's in the box
 
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
@@ -793,7 +793,7 @@ What it does:
 - One host↔server pair per process — no multiplexing. No dashboard, no rate
   limit, no kill switch, no human approval, no config UI.
 
-## What limes does NOT do (v0.8)
+## What limes does NOT do
 
 **No generic high-entropy secret scanning**, and no *unprefixed* credential
 detection — see "What `secrets-egress` deliberately does not do" above. Both are
