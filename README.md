@@ -18,6 +18,8 @@ card numbers and API keys on the way out — and, when it refuses, can show
 exactly why. limes is that checkpoint: use it as a Python library, as a proxy
 in front of any MCP server, or as a CLI in CI.
 
+![How limes works: one decision core sits on the seam between your agent (the host) and its tools (the MCP server). It checks each inbound tool call for injection and forwards it if clean, or returns a blocked isError; it checks each outbound result for PII, secrets and poisoned tool descriptions and forwards, redacts or blocks it. Every decision is a verdict — Allow, Deny or CannotSay — appended to a hash-chained ledger.](https://raw.githubusercontent.com/AmadouMamane/Limes/main/docs/images/how-it-works.png)
+
 > **Working name, not yet on PyPI.** The source is public on GitHub
 > ([AmadouMamane/Limes](https://github.com/AmadouMamane/Limes)); the package is
 > not published to PyPI yet, where the name `limes` is still available (checked

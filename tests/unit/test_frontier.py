@@ -69,6 +69,7 @@ ALLOWED = (
     "docs/decisions/0008-mask-styles.md",
     "docs/decisions/0011-a-crash-is-not-a-verdict.md",
     "docs/design/mcp-proxy-v0.2.md",
+    "docs/images/",
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",

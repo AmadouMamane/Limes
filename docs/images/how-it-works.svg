@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <!-- solid light card so dark text stays legible on any page background -->
+  <rect x="0" y="0" width="960" height="470" rx="14" fill="#ffffff"/>
+  <rect x="0.5" y="0.5" width="959" height="469" rx="14" fill="none" stroke="#d8dee4" stroke-width="1"/>
+
+  <!-- title -->
+  <text x="32" y="42" font-size="21" font-weight="700" fill="#1b2733">limes — one decision core, on the seam between your agent and its tools</text>
+  <text x="32" y="66" font-size="13.5" fill="#5b6b7b">every call is a verdict that carries its evidence — inbound for injection, outbound for what tries to leave</text>
+
+  <!-- HOST -->
+  <rect x="32" y="150" width="168" height="150" rx="10" fill="#f4f7fa" stroke="#cbd5e0" stroke-width="1.2"/>
+  <text x="116" y="220" font-size="15" font-weight="700" fill="#1b2733" text-anchor="middle">HOST</text>
+  <text x="116" y="241" font-size="12.5" fill="#5b6b7b" text-anchor="middle">your LLM agent</text>
+
+  <!-- limes core -->
+  <rect x="360" y="120" width="240" height="212" rx="12" fill="#eef4ff" stroke="#5a7fb5" stroke-width="1.6"/>
+  <text x="480" y="150" font-size="16" font-weight="700" fill="#1b3a63" text-anchor="middle">limes</text>
+  <text x="480" y="171" font-size="12" fill="#3f5a7a" text-anchor="middle">runs detectors, returns a Verdict</text>
+  <line x1="384" y1="184" x2="576" y2="184" stroke="#c3d3ea" stroke-width="1"/>
+
+  <!-- verdict chips -->
+  <rect x="378" y="196" width="70" height="26" rx="13" fill="#e4f4ea" stroke="#57a06f" stroke-width="1.1"/>
+  <text x="413" y="213" font-size="12" font-weight="600" fill="#2f7c4c" text-anchor="middle">Allow</text>
+  <rect x="454" y="196" width="66" height="26" rx="13" fill="#fbe6e6" stroke="#c56a6a" stroke-width="1.1"/>
+  <text x="487" y="213" font-size="12" font-weight="600" fill="#a83e3e" text-anchor="middle">Deny</text>
+  <rect x="526" y="196" width="70" height="26" rx="13" fill="#fdf2df" stroke="#c79a4a" stroke-width="1.1"/>
+  <text x="561" y="213" font-size="11" font-weight="600" fill="#8a6a1f" text-anchor="middle">CannotSay</text>
+
+  <!-- ledger inside core -->
+  <rect x="378" y="236" width="218" height="80" rx="9" fill="#ffffff" stroke="#c3d3ea" stroke-width="1"/>
+  <text x="487" y="260" font-size="12.5" font-weight="700" fill="#1b3a63" text-anchor="middle">hash-chained ledger</text>
+  <text x="487" y="280" font-size="11" fill="#5b6b7b" text-anchor="middle">every decision — allow, deny,</text>
+  <text x="487" y="296" font-size="11" fill="#5b6b7b" text-anchor="middle">cannot-say — appended, replayable</text>
+
+  <!-- SERVER -->
+  <rect x="760" y="150" width="168" height="150" rx="10" fill="#f4f7fa" stroke="#cbd5e0" stroke-width="1.2"/>
+  <text x="844" y="220" font-size="15" font-weight="700" fill="#1b2733" text-anchor="middle">MCP SERVER</text>
+  <text x="844" y="241" font-size="12.5" fill="#5b6b7b" text-anchor="middle">your tools</text>
+
+  <!-- INBOUND leg: host -> limes -> server (arrowheads drawn as polygons) -->
+  <text x="280" y="150" font-size="11.5" font-weight="700" fill="#3f5a7a" text-anchor="middle">INBOUND — tool call</text>
+  <line x1="200" y1="166" x2="348" y2="166" stroke="#5b6b7b" stroke-width="1.8"/>
+  <polygon points="358,166 348,161 348,171" fill="#5b6b7b"/>
+  <text x="279" y="184" font-size="11" fill="#5b6b7b" text-anchor="middle">checked for injection</text>
+  <line x1="602" y1="166" x2="748" y2="166" stroke="#5b6b7b" stroke-width="1.8"/>
+  <polygon points="758,166 748,161 748,171" fill="#5b6b7b"/>
+  <text x="680" y="184" font-size="11" fill="#5b6b7b" text-anchor="middle">forwarded if clean</text>
+
+  <!-- blocked return (left, red dashed) -->
+  <line x1="358" y1="210" x2="212" y2="210" stroke="#a83e3e" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <polygon points="202,210 212,205 212,215" fill="#a83e3e"/>
+  <text x="285" y="228" font-size="11" fill="#a83e3e" text-anchor="middle">blocked, returned as isError</text>
+
+  <!-- OUTBOUND leg: server -> limes -> host -->
+  <text x="680" y="284" font-size="11.5" font-weight="700" fill="#3f5a7a" text-anchor="middle">OUTBOUND — result</text>
+  <line x1="758" y1="300" x2="612" y2="300" stroke="#5b6b7b" stroke-width="1.8"/>
+  <polygon points="602,300 612,295 612,305" fill="#5b6b7b"/>
+  <text x="680" y="318" font-size="11" fill="#5b6b7b" text-anchor="middle">PII · secrets · poisoned tools</text>
+  <line x1="358" y1="300" x2="212" y2="300" stroke="#5b6b7b" stroke-width="1.8"/>
+  <polygon points="202,300 212,295 212,305" fill="#5b6b7b"/>
+  <text x="285" y="318" font-size="11" fill="#5b6b7b" text-anchor="middle">forward · redact · block</text>
+
+  <!-- detector legend -->
+  <text x="32" y="372" font-size="12" font-weight="700" fill="#1b2733">Detectors — rules as data, arithmetic where a regex cannot decide:</text>
+  <text x="32" y="394" font-size="11.5" fill="#3f5a7a">inbound: injection</text>
+  <text x="250" y="394" font-size="11.5" fill="#3f5a7a">outbound: pii-egress · secrets-egress · injection-egress</text>
+  <text x="32" y="416" font-size="11" fill="#5b6b7b">A detector that cannot look returns CannotSay and the leg fails closed — never a silent “ok”.</text>
+  <text x="32" y="442" font-size="10.5" fill="#8a97a5">Same core in-process or behind the MCP proxy · Apache-2.0 · one runtime dependency</text>
+</svg>
