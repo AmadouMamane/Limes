@@ -46,9 +46,10 @@ since ADR 0011 made the content digest total, and the type-level ratchet since A
 0015 made it resolve mypy's presence before reading any exit code.
 :data:`DECLARED_CODE_DELTA` holds the same idea for a prose-only module whose code
 was allowed to move once: ``limes/__init__.py`` gained ``__version__`` under ADR
-0014, so its *code* is pinned to a digest while its prose stays free. In every
-case the witness has the same shape — these exact bytes, nothing else — with a
-different, named reference.
+0014, and the constant holds the authorised code itself rather than a hash of it,
+so a reader sees what was permitted and the check cannot depend on the
+interpreter running it. In every case the witness has the same shape — this and
+nothing else — with a different, named reference.
 
 And this file is itself subject to ADR 0015: everything here compares against
 v0.1's bytes, read from git history, so a checkout that cannot produce them makes
@@ -65,6 +66,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -197,18 +199,33 @@ DOCSTRING_ONLY = (
 )
 
 #: The one authorised exception to "prose only": a DOCSTRING_ONLY module whose
-#: CODE was allowed to move, once, by a named ADR — pinned to the sha256 of its
-#: post-ADR code-without-docstring. Prose stays free (that is what DOCSTRING_ONLY
-#: is for, and this file's prose went stale twice), while the code is held to an
-#: exact digest, so any further drift is red. Same two guards as AMENDED, and for
-#: the same reason: an entry must name a DOCSTRING_ONLY file — otherwise it is a
-#: perimeter under another name — and that file's code must genuinely differ from
-#: v0.1, otherwise it is a phantom nobody can audit.
+#: CODE was allowed to move, once, by a named ADR. The value is **the authorised
+#: code itself**, not a digest of it — so a reader sees what was permitted without
+#: leaving this file, and so the witness cannot depend on the interpreter running
+#: it. The first version of this pin WAS a sha256, of `ast.dump(...)`, and CI
+#: caught it on the very first matrix run: `ast.dump` is a debugging
+#: representation that changes between CPython releases, so the pin was green on
+#: 3.12 and red on 3.13 and 3.14 over a byte-identical file. The comparison below
+#: parses both sides with the SAME interpreter, which is exactly why the older
+#: docstring check never had the problem.
+#:
+#: Same two guards as AMENDED, for the same reasons: an entry must name a
+#: DOCSTRING_ONLY file — otherwise it is a perimeter under another name — and its
+#: code must genuinely differ from v0.1, otherwise it is a phantom nobody can
+#: audit. Prose stays free, which is what DOCSTRING_ONLY is for, and why this
+#: module's twice-stale docstring could be corrected without an ADR.
 DECLARED_CODE_DELTA = {
     # ADR 0014 — `limes.__version__`, read from the installed distribution's
     # metadata (the same single source `limes --version` reads), so the package
     # can name the build that is answering a bug report or a security advisory.
-    "src/limes/__init__.py": ("ed074b3c7b25652bb3cc7ef7204fa4926a0e7f9aa353c0da9f47a8cf07c36c9d"),
+    "src/limes/__init__.py": """
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("limes")
+except PackageNotFoundError:
+    __version__ = "0+unknown"
+""",
 }
 
 CORE_PACKAGE = REPO / "src" / "limes"
@@ -335,6 +352,26 @@ def _code_without_docstring(source: bytes) -> str:
     ):
         tree.body = tree.body[1:]
     return ast.dump(tree)
+
+
+def _top_level_code(source: bytes) -> list[str]:
+    """Every top-level statement, docstring dropped, as *this* interpreter renders it.
+
+    Both sides of any comparison must come from this function in the same process.
+    :func:`ast.dump` is a debugging representation, not a stable format: it gains
+    fields between CPython releases, so a value recorded from one interpreter and
+    checked by another is a witness that reports on the interpreter, not the code.
+    """
+    tree = ast.parse(source)
+    body = tree.body
+    first = body[0] if body else None
+    if (
+        isinstance(first, ast.Expr)
+        and isinstance(first.value, ast.Constant)
+        and isinstance(first.value.value, str)
+    ):
+        body = body[1:]
+    return [ast.dump(node) for node in body]
 
 
 def _imported_roots(source: bytes) -> set[str]:
@@ -523,19 +560,28 @@ def test_no_new_file_landed_outside_the_perimeters():
 
 @pytest.mark.parametrize("path", DOCSTRING_ONLY)
 def test_a_touched_core_module_changed_only_its_docstring(path):
-    after = _code_without_docstring((REPO / path).read_bytes())
+    current = (REPO / path).read_bytes()
+    v0_1 = _v0_1_bytes(path)
     if path in DECLARED_CODE_DELTA:
-        # Its code was allowed to move once, by the ADR named beside the pin. The
-        # witness is not weaker here, it is differently anchored: an exact digest
-        # instead of v0.1's bytes, so any drift beyond the authorised one is red.
-        digest = hashlib.sha256(after.encode("utf-8")).hexdigest()
-        assert digest == DECLARED_CODE_DELTA[path], (
-            f"{path}'s code drifted from the delta declared for it. Only the change the "
-            "named ADR authorises is pinned here, and this is not it."
+        # Its code was allowed to move once, by the ADR named beside the entry.
+        # The witness is not weaker here, it is differently anchored: the module's
+        # top-level statements must be exactly v0.1's PLUS the authorised ones, as
+        # a multiset — so a reordering by the formatter is not drift, while an
+        # addition, a removal or an edit is. Anything the ADR did not authorise is
+        # red, and a reader can see what it did authorise, above.
+        expected = Counter(_top_level_code(v0_1)) + Counter(
+            _top_level_code(DECLARED_CODE_DELTA[path].encode("utf-8"))
+        )
+        actual = Counter(_top_level_code(current))
+        assert actual == expected, (
+            f"{path}'s code is not v0.1 plus the delta declared for it.\n"
+            f"  unauthorised: {len(list((actual - expected).elements()))} statement(s)\n"
+            f"  missing:      {len(list((expected - actual).elements()))} statement(s)"
         )
         return
-    before = _code_without_docstring(_v0_1_bytes(path))
-    assert before == after, f"{path} was supposed to change only its prose, but its CODE moved"
+    assert _code_without_docstring(v0_1) == _code_without_docstring(current), (
+        f"{path} was supposed to change only its prose, but its CODE moved"
+    )
 
 
 def test_every_declared_code_delta_is_prose_only_and_actually_moved():
@@ -552,6 +598,17 @@ def test_every_declared_code_delta_is_prose_only_and_actually_moved():
         == _code_without_docstring(_v0_1_bytes(path))
     )
     assert unmoved == [], f"DECLARED_CODE_DELTA entries whose code still equals v0.1: {unmoved}"
+
+
+def test_a_declared_delta_is_never_trivially_satisfiable():
+    # A delta that parsed to no statement at all would let the check above pass
+    # over a module whose code equals v0.1's, while reading as an authorisation.
+    empty = sorted(
+        path
+        for path, code in DECLARED_CODE_DELTA.items()
+        if not _top_level_code(code.encode("utf-8"))
+    )
+    assert empty == [], f"DECLARED_CODE_DELTA entries declaring no statement at all: {empty}"
 
 
 # --- the dependency frontier ------------------------------------------------

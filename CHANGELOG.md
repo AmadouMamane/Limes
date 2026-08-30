@@ -90,6 +90,14 @@ public surface is a minor, and this project does not round its own numbers down.
   (OIDC), so no long-lived token exists on any machine. It re-runs the full gate
   on the tag rather than trusting that the commit was green when it landed, and
   refuses to publish when the tag and `pyproject.toml` name different versions.
+- **A pin must record what the code determines, never what an interpreter
+  renders.** The first implementation of ADR 0014's code pin was a sha256 of
+  `ast.dump(...)`; the CI matrix introduced in this same release killed it on its
+  first run — `ast.dump` is a debugging representation that gains fields between
+  CPython releases, so the pin was green on 3.12 and red on 3.13 and 3.14 over a
+  byte-identical file. The constant now holds the authorised code itself, parsed
+  on both sides by the same interpreter and compared as a multiset. A single-
+  Python CI would have carried that silently to the first user on 3.13.
 - Three decision records: **ADR 0014** (the package names its own version, from
   the one place it is written), **ADR 0015** (a ratchet reports its own blind
   spot), and **ADR 0016** (Apache-2.0 throughout — ADR 0004 left its licence

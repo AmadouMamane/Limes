@@ -73,16 +73,30 @@ Three properties, each load-bearing:
 **The frontier keeps its ratchet, with one named delta.**
 `src/limes/__init__.py` stays in `DOCSTRING_ONLY` — its prose must remain free to
 be corrected, which is the whole reason that list exists — and its **code** is
-pinned in `tests/unit/test_frontier.py` to the sha256 of its post-ADR
-code-without-docstring, recorded in `DECLARED_CODE_DELTA` next to a reference to
-this ADR. Any further code drift is red, exactly as before; what moved is the
-reference, once, with its authorisation written down.
+held in `tests/unit/test_frontier.py` to *v0.1's statements plus the authorised
+ones*, recorded in `DECLARED_CODE_DELTA` beside a reference to this ADR. The
+constant holds the authorised code **itself**, not a hash of it, so a reader sees
+what was permitted without leaving the file. Any statement added, removed or
+edited beyond it is red, exactly as before; what moved is the reference, once,
+with its authorisation written down.
+
+The first implementation of that pin was a sha256 of `ast.dump(...)`, and the CI
+matrix this release also introduced killed it on its first run: `ast.dump` is a
+debugging representation, not a stable format — it gains fields between CPython
+releases — so the pin was **green on 3.12 and red on 3.13 and 3.14 over a
+byte-identical file**. A witness must not record a value that depends on the
+interpreter reading it; it reports on the interpreter instead of on the code.
+The check now parses both sides in the same process, which is precisely why the
+older docstring comparison never had the problem, and compares them as a
+multiset — a reformatting is not drift, an edit is.
 
 `DECLARED_CODE_DELTA` carries the same two guards `AMENDED` carries, for the same
 reason: an entry must name a file the ratchet already treats as prose-only, and
 that file's code must genuinely differ from v0.1. An entry violating the first
 would be a perimeter by another name; one violating the second would be a phantom
-nobody can audit (ADR 0026 of Tessera, inherited).
+nobody can audit (ADR 0026 of Tessera, inherited). A third guard is specific to
+holding code rather than a digest: a delta that parses to no statement at all is
+refused, since it would read as an authorisation while authorising nothing.
 
 ## Consequences
 
@@ -94,5 +108,9 @@ nobody can audit (ADR 0026 of Tessera, inherited).
   raising. That string is deliberately not a version anybody could ship: if it
   ever appears in a bug report, the report is about a checkout, not a release.
 - One more pinned constant in the frontier ratchet. The cost is that a future
-  code change to `src/limes/__init__.py` must re-pin it deliberately — which is
-  the intended cost, not a side effect.
+  code change to `src/limes/__init__.py` must be declared there deliberately —
+  which is the intended cost, not a side effect.
+- A rule this ADR paid for and leaves behind: **a pin records something the code
+  determines, never something an interpreter renders.** The CI matrix found it in
+  one run; a single-Python CI would have carried it silently to the first user on
+  3.13.
