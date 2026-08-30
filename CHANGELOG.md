@@ -33,6 +33,14 @@ running CI, never inferred.
   `injection-egress` and declaring all four as entry points. That is what
   `help(limes)` printed. Prose only; the module's code is byte-identical, and the
   ratchet asserts it.
+- **The security policy described a limes that has not existed since v0.2.**
+  `SECURITY.md`'s scope said "limes v0.1 is an in-process guard with a single
+  inbound injection detector … no MCP proxy, no PII or secrets detector, and no
+  egress detection" — telling a security researcher that three transports and
+  three detectors were out of scope. It now names what ships. (One half of this
+  is not fixable in the repository: the document points reporters at GitHub's
+  private vulnerability reporting, which is **disabled** on the repository, so
+  the button it names does not exist. A maintainer has to enable it.)
 - **Six README links pointed at repository-relative paths**, which resolve on
   GitHub and 404 on a PyPI project page (`LICENSE`, `docs/decisions/`,
   `CONTRIBUTING.md`, `CLA.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`). All absolute

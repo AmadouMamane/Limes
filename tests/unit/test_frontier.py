@@ -169,21 +169,25 @@ CORE_PACKAGE = REPO / "src" / "limes"
 TRANSPORTS = CORE_PACKAGE / "transports"
 MCP_TRANSPORT = TRANSPORTS / "mcp"
 
-#: The release scaffolding — files that existed at v0.1 and are frozen by the
+#: The project scaffolding — files that existed at v0.1 and are frozen by the
 #: complement below, but that carry no capability at all: how the project is
-#: built, tested and published. Freezing them was a side effect of "everything
-#: outside the perimeters is byte-identical", not a promise anybody made: a CI
-#: matrix, a publish workflow or a secret-scanner allowlist cannot grow the core
-#: (ADR 0004), and widening here buys no silence — CORE is named positively and
-#: `test_the_named_core_is_not_covered_by_any_perimeter` still refuses any entry
-#: that reaches src/limes.
-RELEASE_SCAFFOLDING = (
+#: built, tested, published, and how a vulnerability reaches its maintainer.
+#: Freezing them was a side effect of "everything outside the perimeters is
+#: byte-identical", not a promise anybody made — and it had a cost: SECURITY.md
+#: still described a v0.1 with one inbound detector and no proxy, which told a
+#: security researcher that three transports and three detectors were out of
+#: scope. A CI matrix, a publish workflow, a scanner allowlist or a security
+#: policy cannot grow the core (ADR 0004), and widening here buys no silence:
+#: CORE is named positively and `test_the_named_core_is_not_covered_by_any_perimeter`
+#: still refuses any entry that reaches src/limes.
+PROJECT_SCAFFOLDING = (
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
     ".gitleaks.toml",
+    "SECURITY.md",
 )
 
-PERIMETERS = ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE + RELEASE_SCAFFOLDING
+PERIMETERS = ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE + PROJECT_SCAFFOLDING
 
 
 def _git(*arguments: str) -> str:
