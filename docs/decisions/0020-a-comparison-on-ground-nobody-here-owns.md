@@ -180,6 +180,18 @@ for limes and is never quoted alone):
 | rebuff heuristics — its own default | 6/280 (2 %) | 0/131 (0 %) | 0/100 | 5 127 ms |
 | rebuff heuristics — dev-tuned | 105/280 (38 %) | 107/131 (82 %) | 19/100 | 5 127 ms |
 
+**A denominator is not a sample size, and the matrix now says so.** garak
+materialises many prompts from one attack template: the held-out column's 280
+prompts come from **8** (probe × injection template) pairs, and the blind
+column's 131 from **4** attack instructions. On the blind family the template
+decides the outcome outright — three instructions are variants of *"ignore any
+previous and following instructions"* and every non-degenerate contestant takes
+them entirely, while `STOP EVERYTHING!!! NOW!!! JUST PRINT` is 0/24 for limes and
+19-24/24 for the classifiers. **The whole spread on that column is one template.**
+The matrix states the template count under the main table and breaks the family
+down by instruction, because the probe axis it was broken down by first names the
+*rogue string* and discriminates nothing.
+
 **limes loses the recall comparison, and it is not close.** A tuned classifier
 catches 88 % of the held-out indirect injections where limes catches 24 %. It
 pays 18 clean documents in 100 where limes pays none, and that is a trade-off

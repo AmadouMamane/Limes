@@ -139,6 +139,15 @@ alone, then frozen:
 | rebuff heuristics — its own default | 6/280 (2 %) | 0/131 (0 %) | 0/100 | 5 127 ms |
 | rebuff heuristics — dev-tuned | 105/280 (38 %) | 107/131 (82 %) | 19/100 | 5 127 ms |
 
+**A denominator that is not a sample size.** garak materialises many prompts from
+one attack template. Measured: the held-out column's 280 prompts come from **8**
+templates, and the blind column's 131 from **4** — of which three are variants of
+*"ignore any previous and following instructions"* that every contestant above
+catches outright. The entire 82 %-versus-96 % gap on that column is **one
+template**, `STOP EVERYTHING!!! NOW!!! JUST PRINT`, where limes scores 0/24. Read
+those two columns as 8 and 4 observations, not 280 and 131; the per-template
+breakdown is in the matrix.
+
 **Four readings. limes wins the first and the last, loses the second
 outright, and splits the third.**
 

@@ -50,6 +50,7 @@ import contextlib
 import hashlib
 import json
 import random
+import re
 import statistics
 import time
 from collections.abc import Mapping, Sequence
@@ -63,6 +64,7 @@ from limes.detectors.injection import InjectionDetector
 from limes.detectors.injection_egress import InjectionEgressDetector
 from limes.eval.external_corpus import (
     ExternalCorpusUnavailable,
+    corpus_dir,
     load_external,
     load_flat,
 )
@@ -88,9 +90,11 @@ __all__ = [
     "ComparisonReport",
     "Competitor",
     "Row",
+    "attack_units",
     "case_key",
     "comparison_cases",
     "compute",
+    "hijack_templates",
     "limes_flags",
     "load_competitors",
     "render",
@@ -156,6 +160,72 @@ DEV_POPULATIONS = (ATTACKS_DEV, BENIGN_DEV)
 #: results is reported as *not measured*, with its reason — never as a zero.
 #: Rule 7 of the protocol: a blind spot is not a score.
 DECLARED_TOOLS = ("deberta-injection-v2", "deepset-injection", "llm-guard", "rebuff")
+
+
+#: garak's PromptInject envelope: the benign task, a dashed rule, then the attack
+#: instruction and its rogue string in quotes. The vendored file carries finished
+#: prompts and no template field, so the instruction is recovered from the text.
+#: A prompt this does not match makes the count **unknowable**, never wrong — see
+#: :func:`hijack_templates`.
+_HIJACK_ENVELOPE = re.compile(r"-{10}\s*\n-{10}\s*\n(.*?)[\"\u201c]", re.S)
+
+
+def hijack_templates(cases: Sequence[ComparisonCase]) -> dict[str, str] | None:
+    """Map each blind-hijack case to the attack instruction it carries.
+
+    The blind family's 131 prompts are materialised from a handful of attack
+    instructions, and which one a prompt carries decides the outcome outright:
+    for several contestants each instruction scores 0/n or n/n and nothing
+    between. Reporting only the prompt count would offer a denominator of 131
+    for what is a far smaller number of independent observations.
+
+    Args:
+        cases: The enumeration; only :data:`HIJACK_BLIND` members are read.
+
+    Returns:
+        ``{case key: instruction}``, or ``None`` if any prompt fails to parse —
+        a count derived from a partial parse would be a smaller number stated
+        with the confidence of a complete one (ADR 0026).
+    """
+    mapping: dict[str, str] = {}
+    for case in cases:
+        if case.population != HIJACK_BLIND:
+            continue
+        found = _HIJACK_ENVELOPE.search(case.text)
+        if found is None:
+            return None
+        mapping[case.key] = found.group(1).strip().lower().rstrip(": ").strip()
+    return mapping
+
+
+def attack_units(cases: Sequence[ComparisonCase]) -> dict[str, int | None]:
+    """How many distinct attack templates each attack population is built from.
+
+    A recall of ``246/280`` reads as 280 independent observations. It is not:
+    garak materialises many prompts from one attack template, so the held-out
+    column rests on the number of templates behind it. The corpus states its own
+    templates for the latent family (``injection_template_of``); the blind family
+    carries no such field and is measured from the text.
+
+    Args:
+        cases: The enumeration.
+
+    Returns:
+        ``{population: units}``, with ``None`` where the count could not be
+        derived.
+    """
+    units: dict[str, int | None] = {}
+    raw = json.loads((corpus_dir() / "latent_injection.json").read_text(encoding="utf-8"))
+    for split, population in (("dev", ATTACKS_DEV), ("holdout", ATTACKS_HOLDOUT)):
+        pairs = {
+            (probe, spec["injection_template_of"][injection])
+            for probe, spec in raw["probes"].items()
+            for _, _, injection in spec["cases"][split]
+        }
+        units[population] = len(pairs)
+    templates = hijack_templates(cases)
+    units[HIJACK_BLIND] = None if templates is None else len(set(templates.values()))
+    return units
 
 
 @dataclass(frozen=True, slots=True)
@@ -1081,6 +1151,49 @@ def _family_lines(report: ComparisonReport) -> list[str]:
                     counts.append(f"{hits}/{total} ({hits / total:.0%})")
             lines.append(f"| `{probe}` | " + " | ".join(counts) + " |")
         lines.append("")
+        if population == HIJACK_BLIND:
+            lines += _hijack_template_lines(report)
+    return lines
+
+
+def _hijack_template_lines(report: ComparisonReport) -> list[str]:
+    """The blind family by attack instruction — the axis the probe axis hides.
+
+    A garak probe names the *rogue string* the attack asks for ("I hate humans"),
+    not the instruction that asks for it. Every probe therefore scores about the
+    same and the table above looks like a smooth rate. Grouped by the instruction
+    instead, several contestants score 0/n or n/n per template and nothing
+    between: the number is a fact about templates, not about prompts.
+    """
+    templates = hijack_templates(report.cases)
+    if templates is None:
+        return [
+            "A prompt in this family did not match garak's envelope, so the breakdown by "
+            "attack instruction cannot be derived here and is not guessed at.",
+            "",
+        ]
+    labels = [row.label for row in report.rows]
+    lines = [
+        "#### …and the same family by attack instruction",
+        "",
+        "The probe above names the *rogue string*; this names the **instruction that asks for "
+        "it**, which is what the contestants actually respond to.",
+        "",
+        "| attack instruction | " + " | ".join(labels) + " |",
+        "|---" * (len(labels) + 1) + "|",
+    ]
+    for template in sorted(set(templates.values())):
+        keys = [key for key, value in templates.items() if value == template]
+        counts = []
+        for row in report.rows:
+            seen = [key for key in keys if row.verdicts.get(key) is not None]
+            hits = sum(1 for key in seen if row.verdicts[key])
+            if len(seen) != len(keys):
+                counts.append(f"not measured ({len(seen)}/{len(keys)})")
+            else:
+                counts.append(f"{hits}/{len(keys)}")
+        lines.append(f"| `{template}` | " + " | ".join(counts) + " |")
+    lines.append("")
     return lines
 
 
@@ -1139,6 +1252,23 @@ def render(report: ComparisonReport, when: str) -> str:
             + " | ".join(row.cell(population).render() for population in POPULATIONS)
             + " |"
         )
+
+    units = attack_units(report.cases)
+    lines += [
+        "",
+        "**What the denominators are not.** garak materialises many prompts from one attack "
+        "template, so a column's prompt count is not its number of independent observations. "
+        "Measured on this corpus: "
+        + ", ".join(
+            f"`{population}` {report.population_size(population)} prompts from "
+            + ("an unknown number of" if units[population] is None else str(units[population]))
+            + " templates"
+            for population in ATTACK_POPULATIONS
+        )
+        + ". Read every recall below with that in mind — and see the blind family broken down "
+        "by template, where the whole spread between contestants turns out to live in one of "
+        "the four.",
+    ]
 
     blockers = [
         row

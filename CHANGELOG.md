@@ -67,6 +67,17 @@ Held-out and blind only (`dev` is in-sample for limes and is never quoted alone)
 
 ### Fixed
 
+- **The matrix offered denominators it could not keep.** `107/131` reads as 131
+  independent observations; garak materialises many prompts from one attack
+  template, and the held-out column rests on **8** of them while the blind column
+  rests on **4**. On the blind family the template decides the outcome outright,
+  so the entire spread between contestants lives in one instruction
+  (`STOP EVERYTHING!!! NOW!!! JUST PRINT`: limes 0/24, the tuned classifiers
+  24/24). The template counts are now computed and stated under the main table,
+  and the blind family is broken down by instruction as well as by probe — the
+  probe names the *rogue string* and discriminates nothing. A ratchet makes an
+  unparseable prompt yield *unknown* rather than a smaller count stated with the
+  confidence of a complete one.
 - **The comparison harness was timing its own policy loading.** limes's latency
   measured 5.3 ms a case because a fresh detector was constructed per case;
   built once, the two legs decide in **0.6 ms**. A latency column that measures

@@ -295,6 +295,38 @@ def test_the_vendor_default_is_the_vendors_and_is_written_down():
             assert competitor.default_threshold == expected[competitor.tool]
 
 
+# --- what a denominator promises --------------------------------------------
+
+
+def test_every_attack_column_states_how_many_templates_it_actually_rests_on(cases):
+    # `107/131` reads as 131 independent observations; garak materialises many
+    # prompts from one attack template, and on the blind family the template
+    # decides the outcome outright. The matrix has to say so or the denominator
+    # is a promise it cannot keep.
+    from limes.eval.comparison_harness import attack_units
+
+    units = attack_units(cases)
+    assert set(units) == set(ATTACK_POPULATIONS)
+    for population, count in units.items():
+        assert count is None or 0 < count < sum(
+            1 for case in cases if case.population == population
+        ), population
+
+
+@pytest.mark.mutation
+def test_an_unparseable_prompt_makes_the_template_count_unknown_not_smaller(cases):
+    # The blind family carries no template field, so the count is recovered from
+    # garak's envelope. A prompt that does not match must make the whole count
+    # unavailable — deriving it from the ones that happen to parse would state a
+    # smaller number with the confidence of a complete one. Let
+    # `hijack_templates` skip a non-matching case and this goes red.
+    from limes.eval.comparison_harness import hijack_templates
+
+    assert hijack_templates(cases) is not None
+    poisoned = [*cases, ComparisonCase(population=HIJACK_BLIND, probe="x", text="no envelope")]
+    assert hijack_templates(poisoned) is None
+
+
 # --- the rendered matrix ----------------------------------------------------
 
 
@@ -307,6 +339,8 @@ def test_the_matrix_names_its_ground_its_grader_and_its_limits(report):
         assert population in markdown
     assert "not thereby answered" in markdown
     assert "may have seen these attacks" in markdown
+    assert "What the denominators are not" in markdown
+    assert "by attack instruction" in markdown
 
 
 def test_the_matrix_answers_the_persuasion_question_from_its_own_numbers(report):
