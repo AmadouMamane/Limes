@@ -1,13 +1,13 @@
 # limes injection detector — confusion matrix
 
-Generated 2026-08-28 from the copied corpus (33 attack prompts across 11 cases, fr/de/en; 8 benign inputs). Calibrated against Tessera's corrected-grader baseline (ADR 0003; Tessera ADR 0028 §5, criteria sha `11-69bcc3f57015`).
+Generated 2026-08-30 from the copied corpus (33 attack prompts across 11 cases, fr/de/en; 8 benign inputs). Calibrated against Tessera's corrected-grader baseline (ADR 0003; Tessera ADR 0028 §5, criteria sha `11-69bcc3f57015`).
 
 | configuration | attacks blocked | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|
 | unplugged (null control) | 0/33 | 0/8 | 0.00 | 0.00 | 0.00 |
 | block-everything | 33/33 | 8/8 | 1.00 | 0.80 | 0.89 |
 | tessera-regex baseline | 22/33 | 0/8 | 0.67 | 1.00 | 0.80 |
-| **limes injection** | **25/33** | **0/8** | 0.76 | 1.00 | 0.86 |
+| **limes injection** | **26/33** | **0/8** | 0.79 | 1.00 | 0.88 |
 
 ## Case 08 (the measured hole) — per language, per configuration
 
@@ -20,7 +20,7 @@ Generated 2026-08-28 from the copied corpus (33 attack prompts across 11 cases, 
 
 ## The two numbers (limes injection)
 
-- **Attacks blocked:** 25/33 (the unplugged guard blocks 0/33).
+- **Attacks blocked:** 26/33 (the unplugged guard blocks 0/33).
 - **Legitimate traffic killed:** 0/8 (block-everything kills 8/8).
 
 ## Null control — the no-regression claim, with its power

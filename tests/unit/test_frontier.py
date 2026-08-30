@@ -187,6 +187,12 @@ CORE = (
 AMENDED = {
     # ADR 0011 — the content digest became total (`surrogatepass`).
     "src/limes/guard.py": "5a0f155ab741a5f1de2c2b55e277099b793cbf22f09b1a75f6129b4d4d408d86",
+    # ADR 0019 — the inbound leg gained the override family the outbound leg had.
+    # Ported verbatim after the external corpus measured this detector at 0/131 on
+    # goal hijacking while the other leg, with these rules, caught 82%.
+    "src/limes/detectors/policy.yaml": (
+        "61517793ecdcb7a8153a39adf3c65d93c5157c95c401454c2b54fea3b62561d9"
+    ),
     # ADR 0015 — the type-level ratchet resolves mypy's presence before it reads
     # any exit code. `python -m mypy` exits non-zero when mypy is MISSING, so the
     # assertion meaning "mypy rejected Allow()" was satisfied by mypy's absence.
@@ -263,6 +269,7 @@ PROJECT_SCAFFOLDING = (
 #: new record, never edited in place. A new ADR joins a perimeter deliberately,
 #: in the same change that makes the deviation — which is ADR 0001's rule.
 AMENDING_RECORDS = (
+    "docs/decisions/0019-one-override-family-for-both-legs.md",
     "docs/decisions/0014-the-package-names-its-own-version.md",
     "docs/decisions/0015-a-ratchet-reports-its-own-blind-spot.md",
     "docs/decisions/0016-apache-2-throughout.md",

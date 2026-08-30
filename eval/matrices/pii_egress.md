@@ -1,6 +1,6 @@
 # limes `pii-egress` — confusion matrix
 
-Generated 2026-08-28 over the synthetic egress corpus (32 positive cases across 5 categories, fr/de/en; 26 benign lookalikes). Every value is synthetic by construction and may never be a real one (ADR 0009).
+Generated 2026-08-30 over the synthetic egress corpus (32 positive cases across 5 categories, fr/de/en; 26 benign lookalikes). Every value is synthetic by construction and may never be a real one (ADR 0009).
 
 **How a hit is counted.** A positive case declares the exact substring that must be spanned. A finding counts only when its `[start, end)` reproduces that substring at that offset — so a detector that fires on the whole message is *flagged* everywhere and *located* nowhere. Read the `located` column, not the `flagged` one.
 
