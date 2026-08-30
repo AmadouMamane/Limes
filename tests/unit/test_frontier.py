@@ -267,8 +267,28 @@ AMENDING_RECORDS = (
     "docs/decisions/0016-apache-2-throughout.md",
 )
 
+#: The external adversary corpus and everything that reads it (ADR 0017). It is a
+#: *measurement* capability, not a detection one: nothing here can change a
+#: verdict. It is named as its own perimeter rather than folded into the detector
+#: one because it answers a different question — the detector perimeter is where
+#: a capability lands, this is where the witness that judges it lands, and a
+#: witness that could edit the thing it judges would be no witness at all.
+EXTERNAL_ADVERSARY = (
+    "eval/corpus/garak/",
+    "scripts/vendor_garak_corpus.py",
+    "src/limes/eval/external_corpus.py",
+    "src/limes/eval/external_harness.py",
+    "tests/unit/external/",
+    "docs/decisions/0017-an-adversary-we-did-not-write.md",
+)
+
 PERIMETERS = (
-    ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE + PROJECT_SCAFFOLDING + AMENDING_RECORDS
+    ALLOWED
+    + DETECTOR_PERIMETER
+    + ADMISSION_SURFACE
+    + PROJECT_SCAFFOLDING
+    + AMENDING_RECORDS
+    + EXTERNAL_ADVERSARY
 )
 
 
@@ -431,7 +451,7 @@ def test_no_perimeter_entry_names_a_path_that_does_not_exist():
 
 
 def test_the_named_core_is_not_covered_by_any_perimeter():
-    # This is the anti-widening check, and it now polices four lists rather than
+    # This is the anti-widening check, and it now polices six lists rather than
     # one. Adding "src/limes/detectors/" to DETECTOR_PERIMETER to make a red go
     # away would leave this one red, naming injection.py and its policy.
     escaped = sorted(path for path in CORE if _is_allowed(path))
