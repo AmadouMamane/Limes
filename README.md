@@ -57,7 +57,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 - [Guard any MCP server](#guard-any-mcp-server--one-line-of-config)
 - [Scan from the command line](#scan-from-the-command-line--limes-check)
 - [Also over HTTP](#also-over-http--limes-proxy-http)
-- [The verdict](#the-verdict)
+- [The verdict](#the-verdict) · [The audit trail](#the-audit-trail)
 - [What limes is — and is not](#what-limes-is--and-is-not)
 - [The injection detector (v0.1)](#the-injection-detector--injection-inbound-v01)
 - [The PII egress detector (v0.5)](#the-pii-egress-detector--pii-egress-outbound-v05)
@@ -66,7 +66,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 - [Egress redaction (v0.3)](#egress-redaction-v03)
 - [The MCP stdio proxy, in detail (v0.2)](#the-mcp-stdio-proxy-in-detail-v02)
 - [What limes does NOT do](#what-limes-does-not-do)
-- [Architecture](#architecture) · [Develop](#develop) · [License](#license)
+- [Guides](#guides) · [Architecture](#architecture) · [Develop](#develop) · [License](#license)
 
 ## What's in the box
 
@@ -327,6 +327,17 @@ Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot)
 A `Deny` therefore carries both a human-readable reason **and** a redacted,
 hash-chained record of exactly what fired — the tagline made mechanical: a
 refusal that can be audited and contested.
+
+### The audit trail
+
+Every decision — allowed, refused or cannot-say — is appended to a hash-chained
+ledger: each record seals the previous one's digest, so nothing can be inserted,
+reordered or altered without breaking the chain. The record **commits** to the
+content it decided on (a `content_sha`, plus offsets) and **never stores the
+content itself** — so the trail proves what happened without becoming a copy of
+every secret that flowed through it. How it is stored, what you can prove from it
+(sequence integrity, content binding, full deterministic replay), how tampering
+is detected, and how to locate a decision: **[docs/audit-trail.md](docs/audit-trail.md)**.
 
 ## What limes is — and is not
 
@@ -816,6 +827,21 @@ ships only when its two numbers earn it — never as an unmeasured claim.
 **No rate-limit, no kill-switch, no threat feed, no human-approval, no dashboard.**
 The roadmap lands as future detectors, policies, and transports — never as
 growth of the core (ADR 0004).
+
+## Guides
+
+Deep dives that go past what this page covers:
+
+- **[The audit trail](docs/audit-trail.md)** — what a decision records, how to
+  prove the content it decided on, how tampering is detected, how to find a
+  decision.
+- **[Measuring detection](docs/measuring-detection.md)** — how to trust the
+  two-number tables: the null control, `located` vs `flagged`, the synthetic
+  corpus, statistical power, reproducing a matrix.
+- **[Writing a detector](docs/writing-a-detector.md)** — the `Detector` contract,
+  rules-as-data, and the admission bar a shipped detector must clear.
+- **[Threat model](docs/threat-model.md)** — where limes sits, what it defends,
+  and what it deliberately does not.
 
 ## Architecture
 
