@@ -134,7 +134,7 @@ alone, then frozen:
 | llm-guard — its own default | 8/280 (3 %) | 126/131 (96 %) | 2/100 | 58 ms |
 | llm-guard — dev-tuned | **246/280 (88 %)** | 131/131 (100 %) | 18/100 | 58 ms |
 | DeBERTa v2, bare — dev-tuned | 246/280 (88 %) | 131/131 (100 %) | 18/100 | 60 ms |
-| deepset, bare — dev-tuned | 174/280 (62 %) | 129/131 (99 %) | 20/100 | 58 ms |
+| deepset, bare — dev-tuned | 174/280 (62 %) | 129/131 (98 %) | 20/100 | 58 ms |
 | deepset, bare — at zero dev FP | 100/280 (36 %) | 113/131 (86 %) | 5/100 | 58 ms |
 | rebuff heuristics — its own default | 6/280 (2 %) | 0/131 (0 %) | 0/100 | 5 127 ms |
 | rebuff heuristics — dev-tuned | 105/280 (38 %) | 107/131 (82 %) | 19/100 | 5 127 ms |
