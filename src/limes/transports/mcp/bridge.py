@@ -55,6 +55,7 @@ from mcp.server.stdio import stdio_server
 from mcp.shared.message import SessionMessage
 
 from limes.detector import Detector, Direction
+from limes.detectors import ADMITTED
 from limes.detectors.injection import InjectionDetector
 from limes.policy import load_injection_policy
 from limes.record import DecisionRecord, Ledger
@@ -112,6 +113,20 @@ BLOCKED_ERROR_CODE: Final = -32001
 _OUTBOUND_METHODS: Final = frozenset({"tools/call", "resources/read", "tools/list"})
 
 _TOOLS_CALL: Final = "tools/call"
+
+
+def outbound_detectors() -> tuple[Detector, ...]:
+    """The admitted detectors that guard the outbound leg (ADR 0018).
+
+    Derived from :data:`limes.detectors.ADMITTED` rather than listed here, so a
+    detector admitted tomorrow reaches this transport without anybody
+    remembering to come back. A test pins what the derivation currently yields,
+    so it cannot quietly select nothing.
+
+    Returns:
+        One instance of each admitted egress detector, in admission order.
+    """
+    return tuple(cls() for cls in ADMITTED if str(cls.id).endswith("-egress"))
 
 
 class _LinkClosed(Exception):
@@ -558,7 +573,7 @@ async def serve(
     *,
     sink: RecordSink | None = None,
     clock: Callable[[], str] = utc_now_iso,
-    outbound: Sequence[Detector] = (),
+    outbound: Sequence[Detector] | None = None,
 ) -> Ledger:
     """Run the proxy on this process's stdio until the host disconnects.
 
@@ -568,15 +583,24 @@ async def serve(
         sink: Override the sink (tests, embedders). Defaults to the one
             ``config`` asks for: stderr, or ``--record``'s file.
         clock: Override the clock (replay). Defaults to UTC now.
-        outbound: Detectors for the outbound leg. **Empty by default, and the
-            console entry point never passes any** — limes ships no egress
-            detector. It is a parameter so an embedder with one of their own can
-            install it (and so the egress behaviour can be proven end to end
-            against a real process, which is how ADR 0006 is evidenced).
+        outbound: Detectors for the outbound leg. ``None`` — the default, and
+            what the console entry point passes — installs every admitted egress
+            detector (ADR 0018: the leg selects its detectors, in every
+            transport). Pass an explicit sequence to override, including ``()``
+            for a deliberately unguarded outbound leg, which the transparency
+            tests use to prove exact pass-through.
+
+            This used to default to ``()``, with a docstring saying limes shipped
+            no egress detector. That was true at v0.4 and had been false since
+            v0.5, so the proxy — the transport this project leads with — ran with
+            its outbound leg empty while the README described what it caught. An
+            end-to-end test of a poisoned ``tools/list`` is what found it.
 
     Returns:
         The session's decision chain.
     """
+    if outbound is None:
+        outbound = outbound_detectors()
     policy = load_injection_policy(config.policy_path)
     owned_sink = sink if sink is not None else open_sink(config.record_path)
     relay = Relay(

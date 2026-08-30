@@ -113,8 +113,8 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         help=f"what to do when a detector fires on a *response* (default: "
         f"{DEFAULT_ON_EGRESS_FINDING.value}). `redact` masks the matched regions with "
         "[REDACTED:<kind>] and forwards the rest. Overrides the policy file's default; "
-        "per-kind rules stay as `on_egress_finding.by_kind` declares them. limes ships no "
-        "egress detector, so nothing exercises this today.",
+        "per-kind rules stay as `on_egress_finding.by_kind` declares them. The "
+        "outbound leg runs every admitted egress detector (ADR 0018).",
     )
     parser.add_argument(
         "--actor",

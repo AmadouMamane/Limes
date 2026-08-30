@@ -94,6 +94,7 @@ ALLOWED = (
     "docs/decisions/0007-mcp-streamable-http-transport.md",
     "docs/decisions/0008-mask-styles.md",
     "docs/decisions/0011-a-crash-is-not-a-verdict.md",
+    "docs/decisions/0018-the-leg-selects-its-detectors.md",
     "docs/design/mcp-proxy-v0.2.md",
     "docs/images/",
     "docs/audit-trail.md",
@@ -273,6 +274,14 @@ AMENDING_RECORDS = (
 #: one because it answers a different question — the detector perimeter is where
 #: a capability lands, this is where the witness that judges it lands, and a
 #: witness that could edit the thing it judges would be no witness at all.
+#: The end-to-end proof of the poisoned-listing claim, and the server that carries
+#: the poison (ADR 0012's headline, ADR 0018's fix). Not a capability: a witness.
+POISONED_LISTING_E2E = (
+    "tests/integration/mcp/poisoned_server.py",
+    "tests/integration/mcp/test_tools_list_poisoning_e2e.py",
+    "tests/unit/mcp/test_outbound_leg_is_wired.py",
+)
+
 EXTERNAL_ADVERSARY = (
     "eval/corpus/garak/",
     "scripts/vendor_garak_corpus.py",
@@ -289,6 +298,7 @@ PERIMETERS = (
     + PROJECT_SCAFFOLDING
     + AMENDING_RECORDS
     + EXTERNAL_ADVERSARY
+    + POISONED_LISTING_E2E
 )
 
 
@@ -451,7 +461,7 @@ def test_no_perimeter_entry_names_a_path_that_does_not_exist():
 
 
 def test_the_named_core_is_not_covered_by_any_perimeter():
-    # This is the anti-widening check, and it now polices six lists rather than
+    # This is the anti-widening check, and it now polices seven lists rather than
     # one. Adding "src/limes/detectors/" to DETECTOR_PERIMETER to make a red go
     # away would leave this one red, naming injection.py and its policy.
     escaped = sorted(path for path in CORE if _is_allowed(path))

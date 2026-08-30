@@ -15,6 +15,18 @@ adds a usage surface, not a decision (ADR 0004). There is no new evidence format
 plus the chain record it produced — the same serialisation the ledger and the
 proxy already publish.
 
+**The direction selects the leg's detectors, exactly as a proxy deploys them**
+(ADR 0018). ``--direction inbound`` runs ``injection``; ``--direction outbound``
+runs the three egress detectors — ``pii-egress``, ``secrets-egress`` and
+``injection-egress`` — because those are what actually guard a tool result. Until
+v0.10 this command wired ``injection`` on *both* legs, so ``--direction outbound``
+ran the one detector that never inspects that leg and reported a clean Allow over
+content nobody had examined.
+
+What it reports is a **verdict**, not a transformation: redaction is a transport
+behaviour (ADR 0006), so a masked-and-forwarded response is something a proxy
+does and a scanner does not.
+
 ``limes`` also dispatches ``limes proxy`` to the MCP transport, importing it only
 on that path, so ``limes check`` stays free of the optional ``mcp`` extra.
 """
@@ -27,11 +39,15 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from enum import IntEnum
+from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from limes.detector import Direction
+from limes.detector import Detector, Direction
 from limes.detectors.injection import InjectionDetector
+from limes.detectors.injection_egress import InjectionEgressDetector
+from limes.detectors.pii_egress import PiiEgressDetector
+from limes.detectors.secrets_egress import SecretsEgressDetector
 from limes.policy import load_injection_policy
 from limes.record import DecisionRecord
 from limes.transports.in_process import Guard
@@ -107,15 +123,16 @@ def build_check_parser(prog: str = "limes check") -> argparse.ArgumentParser:
         type=Path,
         default=None,
         metavar="PATH",
-        help="injection policy YAML (default: the one packaged with limes).",
+        help="injection policy YAML for the inbound leg (default: the packaged "
+        "one). The egress rules are data too, in the packaged egress.yaml.",
     )
     parser.add_argument(
         "--direction",
         choices=[member.value for member in Direction],
         default=Direction.INBOUND.value,
-        help="which leg to inspect (default: inbound). This command wires the "
-        "injection detector only; the egress detectors (pii, secrets) run in "
-        "the proxy transports (`limes proxy`), not here.",
+        help="which leg to inspect (default: inbound). The leg selects its "
+        "detectors, as a proxy deploys them: inbound runs `injection`; outbound "
+        "runs `pii-egress`, `secrets-egress` and `injection-egress`.",
     )
     parser.add_argument(
         "--json",
@@ -124,6 +141,33 @@ def build_check_parser(prog: str = "limes check") -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"limes {_installed_version()}")
     return parser
+
+
+def _detectors_for(direction: Direction, policy: Path | None) -> tuple[list[Detector], str]:
+    """The detectors that actually guard this leg, and one hash for the set (ADR 0018).
+
+    The hash is returned with the detectors rather than derived from them later:
+    ``policy_hash`` is a property of the concrete detectors, not of the
+    :class:`~limes.detector.Detector` protocol, and the protocol is core (ADR
+    0004) — so the CLI computes it where the concrete types are still in view
+    instead of widening the protocol to suit a usage surface.
+
+    Args:
+        direction: The leg to inspect.
+        policy: An override injection policy, for the inbound leg only.
+
+    Returns:
+        The detector set in a stable order, and the digest binding evidence to
+        the rules that produced it.
+    """
+    if direction is Direction.INBOUND:
+        injection = InjectionDetector(load_injection_policy(policy) if policy is not None else None)
+        return [injection], injection.policy_hash
+    egress = (PiiEgressDetector(), SecretsEgressDetector(), InjectionEgressDetector())
+    # With more than one detector on the leg, no single detector's hash describes
+    # the set, so the set's own digest is recorded.
+    joined = "\n".join(f"{d.id}:{d.policy_hash}" for d in egress)
+    return list(egress), sha256(joined.encode("utf-8")).hexdigest()
 
 
 def _read_content(source: str) -> str:
@@ -197,18 +241,15 @@ def run_check(
     """
     parser = build_check_parser(prog)
     options = parser.parse_args(list(argv))
+    direction = Direction(options.direction)
     try:
         content = _read_content(options.content)
-        detector = InjectionDetector(
-            load_injection_policy(options.policy) if options.policy is not None else None
-        )
+        detectors, policy_hash = _detectors_for(direction, options.policy)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))  # argparse exits 2 — a usage error, not a verdict
 
-    guard = Guard([detector], policy_hash=detector.policy_hash)
-    verdict = guard.check(
-        content, actor=None, observed_at=clock(), direction=Direction(options.direction)
-    )
+    guard = Guard(detectors, policy_hash=policy_hash)
+    verdict = guard.check(content, actor=None, observed_at=clock(), direction=direction)
     record = guard.ledger.records()[-1]
     print(_as_json(verdict, record) if options.json else _as_text(verdict, record))
     return int(_exit_for(verdict))

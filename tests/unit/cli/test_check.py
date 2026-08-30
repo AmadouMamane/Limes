@@ -119,18 +119,24 @@ def test_a_benign_json_verdict_is_allow_with_empty_spans(tmp_path, capsys):
 
 
 def test_direction_outbound_routes_to_the_outbound_leg(tmp_path, capsys):
-    # The same payload denies inbound and allows outbound, because the shipped
-    # injection detector inspects only the inbound leg. That the flag changes the
-    # answer proves it routes the pipeline, not that anything is faked.
+    # The flag routes the pipeline, and the proof is that the two legs refuse for
+    # DIFFERENT REASONS: the inbound rule set names the override, the outbound one
+    # names what an egress detector found. Until ADR 0018 this test asserted the
+    # outbound leg ALLOWED — it was pinning a hole, because the CLI ran the inbound
+    # detector against a tool result and reported a clean sheet over content
+    # nothing capable of judging it had read.
     path = _write(tmp_path, "attack.txt", _injection_text())
 
     inbound = run_check([str(path)], clock=_fixed_clock)
-    capsys.readouterr()
+    inbound_out = capsys.readouterr().out
     outbound = run_check(["--direction", "outbound", str(path)], clock=_fixed_clock)
+    outbound_out = capsys.readouterr().out
 
     assert inbound == CheckExit.DENY
-    assert outbound == CheckExit.ALLOW
-    assert capsys.readouterr().out.startswith("[ALLOW]")
+    assert outbound == CheckExit.DENY
+    assert "on inbound content" in inbound_out
+    assert "on outbound content" in outbound_out
+    assert inbound_out != outbound_out
 
 
 # --- stdin, replay, and error paths -----------------------------------------

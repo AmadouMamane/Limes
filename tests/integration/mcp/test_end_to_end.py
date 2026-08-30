@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -163,11 +164,20 @@ def test_the_record_file_carries_the_decisions_and_they_chain(tmp_path):
     )
 
     entries = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
-    assert [entry["mcp"]["action"] for entry in entries] == ["forward", "block"]
-    assert [entry["seq"] for entry in entries] == [0, 1]
+
+    # Both legs are guarded since ADR 0018, so a session records more than the
+    # inbound calls: every guarded response is a decision too. What must hold is
+    # not a count — that would pin today's method list — but the shape.
+    inbound = [entry for entry in entries if entry["direction"] == "inbound"]
+    assert [entry["mcp"]["action"] for entry in inbound] == ["forward", "block"]
+    assert any(entry["direction"] == "outbound" for entry in entries), (
+        "the outbound leg is guarded and must appear on the chain (ADR 0018)"
+    )
+
+    assert [entry["seq"] for entry in entries] == list(range(len(entries)))
     assert entries[0]["prev_hash"] == "0" * 64, "genesis is 64 zeros"
-    assert entries[1]["prev_hash"] == entries[0]["digest"], "each record links to the last"
-    assert all(entry["direction"] == "inbound" for entry in entries)
+    for previous, entry in pairwise(entries):
+        assert entry["prev_hash"] == previous["digest"], "each record links to the last"
     assert all(entry["actor"] is None for entry in entries), (
         "no --actor was asserted, so the records name nobody"
     )
