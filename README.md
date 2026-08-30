@@ -12,19 +12,32 @@ carries its evidence: an `Allow` names what it looked at, a `Deny` carries both 
 reason and a redacted, hash-chained record of what fired, and a detector that
 cannot see returns `CannotSay` — never a silent "allow".
 
-You run an LLM agent that calls tools. Somewhere between the model and your
-tools you want a checkpoint that refuses prompt injections on the way in, stops
-card numbers and API keys on the way out — and, when it refuses, can show
-exactly why. limes is that checkpoint: use it as a Python library, as a proxy
-in front of any MCP server, or as a CLI in CI.
+You run an LLM agent that calls tools. limes is a checkpoint on the seam between
+the two, and it guards **both directions** — which is the part worth being
+precise about, because it is *not* a filter in front of your model:
 
-![How limes works: one decision core sits on the seam between your agent (the host) and its tools (the MCP server). It checks each inbound tool call for injection and forwards it if clean, or returns a blocked isError; it checks each outbound result for PII, secrets and poisoned tool descriptions and forwards, redacts or blocks it. Every decision is a verdict — Allow, Deny or CannotSay — appended to a hash-chained ledger.](https://raw.githubusercontent.com/AmadouMamane/Limes/main/docs/images/how-it-works.png)
+- **What a tool sends back is checked before your model reads it.** A poisoned
+  tool description or an "ignore previous instructions" buried in a fetched page
+  is refused; a card number or an API key in a tool's result is stripped or
+  blocked. This is the leg that actually stops injection *reaching* the model —
+  the injection that comes from the tools, not from the user's prompt.
+- **Each tool call your model makes is checked before it runs.** Here the model
+  has already been prompted, so this is not protecting the model; it is the last
+  deterministic gate before an *action* executes, in case the model was talked
+  into a bad one.
 
-> **Working name, not yet on PyPI.** The source is public on GitHub
-> ([AmadouMamane/Limes](https://github.com/AmadouMamane/Limes)); the package is
-> not published to PyPI yet, where the name `limes` is still available (checked
-> 2026-08-28). The name, the CLA, and the final license split are decisions
-> pending ratification (see *License*).
+And when it refuses, it can show exactly why. Use it as a Python library, as a
+proxy in front of any MCP server, or as a CLI in CI. (limes does not see, and
+does not claim to filter, the user's prompt on its way *into* the model — that
+text never crosses this seam. You *can* run the library there too, but the proxy
+sits between the agent and its tools.)
+
+![How limes works: one decision core sits on the seam between your model (the host) and its tools (the MCP server), and checks both directions. Outgoing — a tool call your model makes — is checked before it runs and blocked as an isError if unsafe. Incoming — a tool's result or tool listing — is checked before your model reads it: injection from tools (poisoned descriptions), PII and secrets are forwarded, redacted or blocked. Every decision is a verdict — Allow, Deny or CannotSay — on a hash-chained ledger.](https://raw.githubusercontent.com/AmadouMamane/Limes/main/docs/images/how-it-works.png)
+
+> **Not yet on PyPI.** The source is public on GitHub
+> ([AmadouMamane/Limes](https://github.com/AmadouMamane/Limes)); no release is
+> published to PyPI yet, where the name `limes` is still available and will be
+> claimed by the first release.
 
 Design choices are recorded as ADRs — short, binding decision records under
 [`docs/decisions/`](docs/decisions/). The text cites them by number (ADR 0002,
@@ -66,7 +79,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
 | **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1 (one audited exception, ADR 0011), and a *ratchet* — a test that may only tighten — says so |
-| **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, PEM private keys, JWTs) and `injection-egress` (poisoned tool descriptions and indirect injection on the way in) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; unprefixed credentials. Declared blind spots, not backlog |
+| **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; unprefixed credentials. Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
 | **Egress** | two detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
 | **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
@@ -106,9 +119,11 @@ match verdict:
         ...                         # the guard could not look: fail closed
 ```
 
-There is no `if verdict:` — `__bool__` raises, so the match above is the way
-(see *The verdict*). Every decision, allowed or not, is appended to
-`guard.ledger`, hash-chained.
+A verdict is a value you *inspect*, not a true/false flag. Writing `if verdict:`
+raises on purpose: a `Deny` is an ordinary Python object and therefore truthy, so
+a boolean test would quietly read a refusal as success. So you `match` it, as
+above (more on why under *The verdict*). Every decision, allowed or not, is
+appended to `guard.ledger`, hash-chained.
 
 On the way out, `check_egress` returns the verdict *plus what may leave*:
 
@@ -311,9 +326,9 @@ Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot)
 - **`CannotSay` fails closed** — a detector that cannot see (dependency absent,
   content unreadable, timeout) publishes a blind spot; it never degrades to a
   silent `Allow`. A witness that cannot see may never report "ok".
-- **`__bool__` raises** — there is no `if verdict:`. Every Python object is truthy,
-  so a bare truthiness test would read a `Deny` (and a `CannotSay`!) as success.
-  Callers pattern-match.
+- **`__bool__` raises** — there is no `if verdict:`. A dataclass instance is
+  truthy by default, so a bare truthiness test would read a `Deny` (and a
+  `CannotSay`!) as success; raising instead forces callers to pattern-match.
 
 A `Deny` therefore carries both a human-readable reason **and** a redacted,
 hash-chained record of exactly what fired — the tagline made mechanical: a
@@ -853,9 +868,8 @@ uv run python -m limes.transports.mcp.bench      # measure the proxy's overhead
 
 ## License
 
-Apache-2.0 for the engine (core + plugin interface + transports). The detection
-corpus and calibration are intended for a separate data license — the curated /
-EU corpus kept closed; v0.1 ships a functional default corpus copied from Tessera
-(itself Apache-2.0, see `src/limes/corpus/PROVENANCE.md`). The final split — and
-the name, PyPI, GitHub org, and CLA — are **pending ratification before any
-publication**.
+**Apache-2.0 throughout** — everything in this package: the engine (core, plugin
+interface, transports) and the default detection corpus it ships, copied from
+Tessera, itself Apache-2.0 (see `src/limes/corpus/PROVENANCE.md`). A separate,
+curated EU corpus may later be published under its own data license; that is
+future work and does not affect anything released here.
