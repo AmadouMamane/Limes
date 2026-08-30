@@ -202,6 +202,39 @@ detectors:
         retry_trim: false
         pattern: "\\bSYSTEM\\s*:[ \\t][^\"'«»„“”\\n]{4,60}"
 
+      # -- Three families added after the first external measurement (ADR 0017).
+      # The rules above blocked 1.8% of garak's indirect injections. The cause was
+      # not "rules cannot do this": it was that the outbound leg carried ONE
+      # override phrasing while the inbound leg carried several, and that two
+      # attack shapes present in the corpus had no rule at all. Each family below
+      # is named by its shape, not by a string, and each arrived with the benign
+      # lookalikes that measure its precision (see injection_benign.json).
+
+      # An override AND the instruction it substitutes. Three parts, all required:
+      # a disregard verb, a reference to the surrounding instructions or content,
+      # and an imperative to do something else. The third part is the precision:
+      # "please ignore the previous email" has the first two and is not an attack.
+      - label: injection:override-and-substitute-en
+        validator: none
+        retry_trim: false
+        pattern: '(?i)\b(?:ignore|disregard|forget|skip)\b[^.\n]{0,60}?\b(?:instructions?|directions?|directives?|rules?|prompts?|guidelines?|above|preceding|previous|prior|earlier|rest\s+of\s+(?:this|the)\s+\w+|this\s+data|the\s+data|other\s+content|all\s+(?:info|information|content))\b[^.\n]{0,60}?\b(?:print|say|repeat|reply|respond|output|translate|focus)\b'
+
+      # A conversation turn smuggled into content the model is reading: a chat
+      # role on its own line, mid-document, issuing an instruction. The leading
+      # newline is load-bearing — a transcript a tool legitimately returns opens
+      # with a role marker; an injected turn appears after the document has begun.
+      - label: injection:injected-dialogue-turn
+        validator: none
+        retry_trim: false
+        pattern: '(?im)\n[ \t>]*(?:user|assistant|system|human|ai)\s*:[^\n]{0,80}?\b(?:ignore|disregard|forget|repeat|print|say|reply|respond|output|write|translate|report|focus)\b'
+
+      # A fabricated end-of-context marker: the attack tells the model the real
+      # input stopped here, so what follows reads as a fresh, trusted turn.
+      - label: injection:session-boundary-marker
+        validator: none
+        retry_trim: false
+        pattern: '(?i)<\s*(?:end\s+of\s+(?:session|prompt|input|document|context|conversation)|/(?:system|prompt|context|instructions?)|(?:system|prompt|context)\s+(?:end|stop))\s*>'
+
       # A tool asking the model to keep its principal in the dark.
       - label: injection:concealment-en
         validator: none

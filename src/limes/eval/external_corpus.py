@@ -40,6 +40,7 @@ __all__ = [
     "available",
     "corpus_dir",
     "load_external",
+    "load_flat",
 ]
 
 #: The literal garak substitutes an injection into. Kept verbatim from the source.
@@ -97,6 +98,43 @@ def corpus_dir() -> Path:
 def available() -> bool:
     """Whether the vendored corpus can be read from here."""
     return (corpus_dir() / "latent_injection.json").is_file()
+
+
+def load_flat(name: str) -> ExternalCorpus:
+    """Load a corpus whose probes hand back finished prompts, with no injection factor.
+
+    PromptInject's hijacks *are* the prompt: there is no surrounding document, so
+    there is nothing to factor out and no matched control to derive. Every case is
+    labelled ``blind`` — the family is held out whole and scored once, which the
+    latent corpus's ``holdout`` can no longer claim (ADR 0017, Amendment 1).
+
+    Args:
+        name: The file stem under ``eval/corpus/garak/``.
+
+    Returns:
+        The corpus, with an empty ``benign`` tuple: this family carries no control
+        of its own, and inventing one here would be a control nobody measured.
+
+    Raises:
+        ExternalCorpusUnavailable: The file is not on disk.
+    """
+    path = corpus_dir() / f"{name}.json"
+    if not path.is_file():
+        raise ExternalCorpusUnavailable(f"{path} is not on disk.")
+    raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    attacks = tuple(
+        ExternalCase(probe=probe, split="blind", text=text)
+        for probe, spec in sorted(raw["probes"].items())
+        for text in spec["prompts"]
+    )
+    return ExternalCorpus(
+        name=name,
+        kind=raw["kind"],
+        source=raw["source"],
+        sampling=raw["sampling"],
+        attacks=attacks,
+        benign=(),
+    )
 
 
 def load_external(name: str) -> ExternalCorpus:

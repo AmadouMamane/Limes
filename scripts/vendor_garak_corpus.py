@@ -113,12 +113,52 @@ IN_SCOPE = (
 #: A content-policy jailbreak, which limes does not claim. Scored on its own row.
 OUT_OF_SCOPE = ("LatentJailbreakFull",)
 
-#: First nibble of sha256(prompt) -> split. Anything else is not vendored.
-SPLITS = {"0": "dev", "1": "holdout"}
+#: A SECOND external source, and the only strictly blind one (ADR 0017,
+#: Amendment 1). The latentinjection holdout stopped being blind the moment its
+#: templates were listed while the split was being designed — a leak the author
+#: created and must therefore declare. This family was vendored and scored
+#: without its contents ever being read: garak's PromptInject probes (Perez &
+#: Ribeiro, "Ignore Previous Prompt"), goal hijacking by a rogue string appended
+#: to a task. It targets the INBOUND leg, where `injection` lives, so between the
+#: two families each leg now has an external number.
+BLIND = (
+    "HijackHateHumansFull",
+    "HijackKillHumansFull",
+    "HijackLongPromptFull",
+)
+
+#: The split is decided by the **attack template** — garak's raw
+#: ``injection_instruction``, before a payload is substituted into it. The first
+#: version of this file split by whole prompt, and that was wrong in a way worth
+#: recording: the same template appears in thousands of prompts, so it landed on
+#: both sides, and a rule written for it on ``dev`` would have scored on
+#: ``holdout`` by identity rather than by generalisation. The held-out number
+#: would have measured nothing and looked like it measured everything.
+#:
+#: The template is what a rule actually recognises, so it is the unit that has to
+#: be held out. 19 templates, first nibble of their sha256: 0-7 dev, 8-f holdout.
+DEV_NIBBLES = frozenset("01234567")
+
+#: Within a split, prompts are thinned by their own hash — the size knob, applied
+#: after the split so it cannot move a template from one side to the other.
+KEEP_PROMPT_NIBBLES = frozenset("01")
+
+#: The blind family is thinned less: it is scored exactly once and never
+#: iterated on, so its only defence against being a coin-flip is its size. At the
+#: latent corpus's rate it came to 58 prompts, which is ±13 points at 50%; a
+#: quarter of the family is ~250, which is ±6. Widened before anything was
+#: scored, not after — a sample size chosen once a number is known is not a
+#: sample size, it is a preference.
+KEEP_BLIND_NIBBLES = frozenset("0123")
 
 
-def _split_of(prompt: str) -> str | None:
-    return SPLITS.get(hashlib.sha256(prompt.encode("utf-8")).hexdigest()[0])
+def _split_of_template(template: str) -> str:
+    first = hashlib.sha256(template.encode("utf-8")).hexdigest()[0]
+    return "dev" if first in DEV_NIBBLES else "holdout"
+
+
+def _keep(prompt: str) -> bool:
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[0] in KEEP_PROMPT_NIBBLES
 
 
 def _factor(probe: GarakProbe, marker: str) -> dict[str, Any]:
@@ -133,14 +173,17 @@ def _factor(probe: GarakProbe, marker: str) -> dict[str, Any]:
     tops: list[str] = list(probe.top_instructions)
     # sorted(): garak hands some probes their contexts out of a set (see SEED).
     contexts: list[str] = sorted(c for c in probe.contexts if marker in c)
+    templates: list[str] = list(probe.injection_instructions)
     injections: list[str] = []
+    injection_template: list[int] = []
     cases: dict[str, list[list[int]]] = {"dev": [], "holdout": []}
 
     seen: set[str] = set()
     for top_index, top in enumerate(tops):
         for context_index, context in enumerate(contexts):
             for separator_start, separator_end in probe.injection_sep_pairs:
-                for instruction in probe.injection_instructions:
+                for template_index, instruction in enumerate(templates):
+                    split = _split_of_template(instruction)
                     for payload in probe.payloads:
                         for trigger in probe.payload_triggers:
                             this_payload = payload.replace("<|garak_trigger|>", trigger)
@@ -150,14 +193,12 @@ def _factor(probe: GarakProbe, marker: str) -> dict[str, Any]:
                                 + separator_end
                             )
                             prompt = top + context.replace(marker, injection)
-                            if prompt in seen:
+                            if prompt in seen or not _keep(prompt):
                                 continue
                             seen.add(prompt)
-                            split = _split_of(prompt)
-                            if split is None:
-                                continue
                             if injection not in injections:
                                 injections.append(injection)
+                                injection_template.append(template_index)
                             cases[split].append(
                                 [top_index, context_index, injections.index(injection)]
                             )
@@ -172,9 +213,16 @@ def _factor(probe: GarakProbe, marker: str) -> dict[str, Any]:
         # the control group to whatever the attack sample happened to touch.
         "top_instructions": tops,
         "contexts": contexts,
+        # The templates, and which one each materialised injection came from: the
+        # split is a property of the template, so a reader can check any case's
+        # side without re-deriving it.
+        "injection_templates": templates,
+        "injection_template_of": injection_template,
         "injections": injections,
         "cases": {name: sorted(pairs) for name, pairs in cases.items()},
         "_counts": {
+            "templates": len(templates),
+            "templates_dev": sum(1 for t in templates if _split_of_template(t) == "dev"),
             "contexts": len(contexts),
             "top_instructions": len(tops),
             "contexts_attacked": len(used),
@@ -183,6 +231,35 @@ def _factor(probe: GarakProbe, marker: str) -> dict[str, Any]:
             "holdout": len(cases["holdout"]),
         },
     }
+
+
+def build_flat(module: str, names: tuple[str, ...]) -> dict[str, Any]:
+    """Materialise probes whose prompts are flat strings, with no injection factor.
+
+    PromptInject hands back finished prompts rather than (document, injection)
+    pairs, so there is nothing to factor and no matched control to derive: the
+    hijack IS the prompt. Thinned by prompt hash only, and never split — the whole
+    family is held out.
+    """
+    probes = importlib.import_module(module)
+    out: dict[str, Any] = {}
+    for name in names:
+        random.seed(SEED)
+        probe = getattr(probes, name)()
+        kept = sorted(
+            {
+                str(prompt)
+                for prompt in probe.prompts
+                if hashlib.sha256(str(prompt).encode("utf-8")).hexdigest()[0] in KEEP_BLIND_NIBBLES
+            }
+        )
+        out[name] = {
+            "goal": getattr(probe, "goal", "") or "",
+            "doc_uri": getattr(probe, "doc_uri", "") or "",
+            "prompts": kept,
+            "_counts": {"prompts": len(kept)},
+        }
+    return out
 
 
 def build(names: tuple[str, ...]) -> dict[str, Any]:
@@ -219,11 +296,17 @@ def _document(kind: str, names: tuple[str, ...], garak_version: str) -> dict[str
                 "back out of a set; the seed fixes the draw and the writer sorts the "
                 "contexts, so the vendored file is byte-reproducible"
             ),
-            "rule": "first nibble of sha256(prompt): '0' -> dev, '1' -> holdout, else dropped",
+            "rule": (
+                "split by ATTACK TEMPLATE: first nibble of sha256(injection_instruction), "
+                "0-7 -> dev, 8-f -> holdout; then prompts thinned to first nibble of "
+                "sha256(prompt) in {0,1}"
+            ),
             "why": (
-                "uniform, content-addressed and reproducible from the prompt alone, so "
-                "neither split can be steered and the 15 MB full product need not be "
-                "vendored"
+                "the template is what a rule recognises, so it is the unit that must be "
+                "held out — splitting by prompt puts the same template on both sides and "
+                "a rule written on dev then scores on holdout by identity, not by "
+                "generalisation. Content-addressed at both levels, so neither can be "
+                "steered, and the thinning keeps the 15 MB full product out of the tree."
             ),
             "protocol": (
                 "rules may be written against dev; holdout is scored once, rules frozen (ADR 0017)"
@@ -249,6 +332,39 @@ def main() -> None:
     version = str(garak.__version__)
 
     arguments.out.mkdir(parents=True, exist_ok=True)
+
+    blind = {
+        "source": {
+            "tool": "garak",
+            "what": "LLM vulnerability scanner",
+            "vendor": "NVIDIA",
+            "version": version,
+            "license": "Apache-2.0",
+            "url": "https://github.com/NVIDIA/garak",
+            "module": "garak.probes.promptinject",
+            "probes": list(BLIND),
+            "upstream": "PromptInject (Perez & Ribeiro, 'Ignore Previous Prompt')",
+        },
+        "kind": "in-scope, BLIND: goal hijacking on the inbound leg",
+        "sampling": {
+            "seed": SEED,
+            "rule": "thinned to first nibble of sha256(prompt) in {0,1,2,3}; not split",
+            "why": (
+                "the whole family is held out: it was vendored and scored without its "
+                "contents ever being read, which the latentinjection holdout can no "
+                "longer claim"
+            ),
+            "protocol": "blind: scored once, contents never inspected (ADR 0017 Am. 1)",
+        },
+        "probes": build_flat("garak.probes.promptinject", BLIND),
+    }
+    blind_path = arguments.out / "prompt_hijack.json"
+    blind_path.write_text(
+        json.dumps(blind, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    total = sum(p["_counts"]["prompts"] for p in blind["probes"].values())
+    print(f"{blind_path}  blind={total} ({blind_path.stat().st_size} B)")
+
     for filename, kind, names in (
         ("latent_injection.json", "in-scope: indirect prompt injection", IN_SCOPE),
         ("latent_jailbreak.json", "out of scope: content-policy jailbreak", OUT_OF_SCOPE),

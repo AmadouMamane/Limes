@@ -39,14 +39,38 @@ def test_the_corpus_loads_and_names_where_it_came_from(name):
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_every_attack_lands_in_the_split_its_own_hash_names(name):
-    # The split rule is the corpus's only defence against being steered: if it
-    # were anything but a function of the prompt's bytes, an author could move a
-    # hard case out of holdout by editing a list.
-    for case in load_external(name).attacks:
-        nibble = hashlib.sha256(case.text.encode("utf-8")).hexdigest()[0]
-        expected = {"0": "dev", "1": "holdout"}[nibble]
-        assert case.split == expected, f"{case.probe}: {case.split} but hash says {expected}"
+def test_every_case_lands_in_the_split_its_template_hash_names(name):
+    # The split rule is the corpus's only defence against being steered: it is a
+    # function of the attack template's own bytes, so an author cannot move an
+    # inconvenient template out of holdout without changing the template.
+    raw = json.loads((corpus_dir() / f"{name}.json").read_text(encoding="utf-8"))
+    for probe, spec in raw["probes"].items():
+        for split, cases in spec["cases"].items():
+            for _, _, injection_index in cases:
+                template = spec["injection_templates"][
+                    spec["injection_template_of"][injection_index]
+                ]
+                nibble = hashlib.sha256(template.encode("utf-8")).hexdigest()[0]
+                expected = "dev" if nibble in set("01234567") else "holdout"
+                assert split == expected, f"{probe}: {split} but the template hashes to {expected}"
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_no_attack_template_appears_on_both_sides(name):
+    # THE property the whole design exists for. Split by prompt instead of by
+    # template and the same attack string lands in both halves; a rule written
+    # for it on dev then "generalises" to holdout by identity, and the held-out
+    # number measures nothing while looking like it measures everything.
+    raw = json.loads((corpus_dir() / f"{name}.json").read_text(encoding="utf-8"))
+    for probe, spec in raw["probes"].items():
+        seen: dict[str, str] = {}
+        for split, cases in spec["cases"].items():
+            for _, _, injection_index in cases:
+                template_index = spec["injection_template_of"][injection_index]
+                template = spec["injection_templates"][template_index]
+                assert seen.setdefault(template, split) == split, (
+                    f"{probe}: a template is in both dev and holdout — the split leaks"
+                )
 
 
 @pytest.mark.parametrize("name", NAMES)

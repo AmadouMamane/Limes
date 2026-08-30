@@ -45,6 +45,7 @@ from limes.eval.external_corpus import (
     ExternalCorpus,
     ExternalCorpusUnavailable,
     load_external,
+    load_flat,
 )
 from limes.eval.power import sign_test_power
 from limes.guard import decide
@@ -76,6 +77,7 @@ class ExternalReport:
 
     corpus: ExternalCorpus
     jailbreak: ExternalCorpus | None
+    blind: ExternalCorpus | None
     splits: tuple[str, ...]
     cells: tuple[Cell, ...]
     per_probe: tuple[tuple[str, str, int, int], ...]
@@ -137,6 +139,10 @@ def compute(splits: Sequence[str]) -> ExternalReport:
         jailbreak: ExternalCorpus | None = load_external("latent_jailbreak")
     except ExternalCorpusUnavailable:
         jailbreak = None
+    try:
+        blind: ExternalCorpus | None = load_flat("prompt_hijack")
+    except ExternalCorpusUnavailable:
+        blind = None
 
     # The lookalikes written to trip THESE rules on purpose (ADR 0012's benign
     # corpus), not the general-purpose one: a false-positive claim is only worth
@@ -160,6 +166,16 @@ def compute(splits: Sequence[str]) -> ExternalReport:
                 len(corpus.benign),
             )
         )
+        if blind is not None and "holdout" in splits:
+            # Only in the frozen run: the blind family exists to be scored once.
+            cells.append(
+                Cell(
+                    name,
+                    "hijack (blind)",
+                    _count(detectors, blind.attacks, leg),
+                    len(blind.attacks),
+                )
+            )
         if jailbreak is not None:
             out_of_scope = tuple(case for case in jailbreak.attacks if case.split in set(splits))
             cells.append(
@@ -188,6 +204,7 @@ def compute(splits: Sequence[str]) -> ExternalReport:
     return ExternalReport(
         corpus=corpus,
         jailbreak=jailbreak,
+        blind=blind,
         splits=tuple(splits),
         cells=tuple(cells),
         per_probe=tuple(per_probe),
@@ -254,6 +271,43 @@ def render(report: ExternalReport, when: str) -> str:
     for probe, split, hits, total in report.per_probe:
         rate = f"{hits / total:.1%}" if total else "—"
         lines.append(f"| `{probe}` | {split} | {hits}/{total} ({rate}) |")
+
+    # A single recall number over a mixed corpus averages families that fail for
+    # different reasons, and the average then reads as one fact. Which probes
+    # score zero, and how much of the split they are, is computed here rather than
+    # left for the reader to reconstruct from the table above.
+    by_split: dict[str, list[tuple[str, int, int]]] = {}
+    for probe, split, hits, total in report.per_probe:
+        if total:
+            by_split.setdefault(split, []).append((probe, hits, total))
+    lines += ["", "## Where the misses are", ""]
+    for split, rows in by_split.items():
+        zeros = [(name, count) for name, hits, count in rows if hits == 0]
+        split_size = sum(count for _, _, count in rows)
+        if not zeros:
+            lines.append(f"- **{split}** — no probe scores zero.")
+            continue
+        zero_size = sum(count for _, count in zeros)
+        share = zero_size / split_size
+        names = ", ".join(f"`{name}`" for name, _ in zeros)
+        rest_hits = sum(hits for _, hits, _ in rows if hits)
+        rest_total = split_size - zero_size
+        rest = f"{rest_hits}/{rest_total} ({rest_hits / rest_total:.1%})" if rest_total else "—"
+        lines.append(
+            f"- **{split}** — {names} score **0**, and they are **{share:.0%}** of this "
+            f"split. Over everything else: {rest}."
+        )
+    lines += [
+        "",
+        "That gap is the finding, not a footnote. Where an attack carries an *imperative* — "
+        "disregard this, print that, focus only on the following — a rule can name its shape "
+        "and does. Where it carries only *persuasion* or *framing* — a fabricated recruiter's "
+        "endorsement, a hidden competency profile, white text addressed to the scanner — there "
+        "is no directive to match, and a rule that fired on it would be firing on ordinary "
+        "flattery. Those probes are not a bug in the rules; they are the boundary of what "
+        "rules are, and they are exactly the territory ADR 0013's classifier layer is framed "
+        "for. The number above is what makes that argument with evidence instead of prose.",
+    ]
 
     lines += [
         "",
