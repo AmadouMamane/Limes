@@ -299,6 +299,25 @@ EXTERNAL_ADVERSARY = (
     "docs/decisions/0017-an-adversary-we-did-not-write.md",
 )
 
+#: The head-to-head comparison and everything that produces or reads it (ADR
+#: 0020). Like EXTERNAL_ADVERSARY it is a *measurement* capability: nothing here
+#: can change a verdict, and the bench script never runs in this repository's
+#: environment — it runs in a throwaway one and commits only its results, so the
+#: dependency frontier below is untouched by a comparison against tools that pull
+#: torch, transformers and presidio.
+HEAD_TO_HEAD = (
+    "src/limes/eval/comparison_harness.py",
+    "scripts/bench_competitors.py",
+    "tests/unit/comparison/",
+    "docs/decisions/0020-a-comparison-on-ground-nobody-here-owns.md",
+    # Already inside DETECTOR_PERIMETER's "eval/matrices/" entry. Named again so
+    # a reader looking for the competitors' verdicts finds them under the record
+    # that authorised them rather than under the one that authorised the egress
+    # matrices.
+    "eval/matrices/comparison/",
+    "eval/matrices/comparison.md",
+)
+
 PERIMETERS = (
     ALLOWED
     + DETECTOR_PERIMETER
@@ -307,6 +326,7 @@ PERIMETERS = (
     + AMENDING_RECORDS
     + EXTERNAL_ADVERSARY
     + POISONED_LISTING_E2E
+    + HEAD_TO_HEAD
 )
 
 

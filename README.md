@@ -56,6 +56,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 ## Contents
 
 - [What's in the box](#whats-in-the-box)
+- [**How limes compares** — measured, head to head](#how-limes-compares--measured-on-ground-nobody-here-owns)
 - [Use it in Python](#use-it-in-python)
 - [Guard any MCP server](#guard-any-mcp-server--one-line-of-config)
 - [Scan from the command line](#scan-from-the-command-line--limes-check)
@@ -110,6 +111,93 @@ Everything is **pre-1.0 by choice**: the surface is complete; what's missing is
 the real-world usage needed to earn a 1.0. The one thing that will keep growing
 forever — under the admission rule — is detector *coverage*. That is the nature
 of an honest guard, not an unfinished one.
+
+## How limes compares — measured, on ground nobody here owns
+
+Every tool named on this page publishes numbers about itself. So does limes.
+**None of them are comparable** — different corpora, different thresholds,
+different definitions of a hit — and putting two of them side by side would
+produce a table that reads like a measurement and is not one. So limes ran them:
+llm-guard, rebuff, and two bare injection classifiers, **here**, on garak's
+corpus, with one grader (ADR 0020). Nothing below is quoted from a vendor.
+
+**limes gives up its entire argument to enter this table.** The grader is a
+boolean — no located span, no policy hash, no evidence that replays, no
+`CannotSay`. Only *did it refuse*, on either leg, the way the proxy deploys them.
+
+Held out and blind. Every threshold and every configuration was chosen on `dev`
+alone, then frozen:
+
+| | held-out indirect injection | blind goal hijacking | clean documents killed | median |
+|---|---|---|---|---|
+| **limes** — rules, both legs | 67/280 (24 %) | 107/131 (82 %) | **0/100** | **0.6 ms** |
+| llm-guard — its own default | 8/280 (3 %) | 126/131 (96 %) | 2/100 | 58 ms |
+| llm-guard — dev-tuned | **246/280 (88 %)** | 131/131 (100 %) | 18/100 | 58 ms |
+| DeBERTa v2, bare — dev-tuned | 246/280 (88 %) | 131/131 (100 %) | 18/100 | 60 ms |
+| deepset, bare — dev-tuned | 174/280 (62 %) | 129/131 (99 %) | 20/100 | 58 ms |
+| deepset, bare — at zero dev FP | 100/280 (36 %) | 113/131 (86 %) | 5/100 | 58 ms |
+| rebuff heuristics — its own default | 6/280 (2 %) | 0/131 (0 %) | 0/100 | 5 127 ms |
+| rebuff heuristics — dev-tuned | 105/280 (38 %) | 107/131 (82 %) | 19/100 | 5 127 ms |
+
+**Four readings. limes wins the first and the last, loses the second
+outright, and splits the third.**
+
+1. **Out of the box, limes catches more indirect injection than llm-guard** —
+   24 % against 3 %. Not because the classifier is weak: llm-guard's shipped
+   `MatchType.FULL` truncates at 512 tokens and garak's résumés run well past it.
+   On the family that *fits* — short goal hijacks — the same default beats limes,
+   96 % against 82 %.
+2. **Tuned, the classifier is simply the better detector, and limes is nowhere
+   near it** — 88 % against 24 %. It costs 18 clean documents per 100 where limes
+   costs none, and a recall gap that size is not something a rules engine argues
+   away.
+3. **Held to limes's own precision — zero false positives on the development
+   controls — the ranking inverts, and limes still does not sweep it.** llm-guard
+   collapses to 0 % (it rounds its score to two decimals, so it cannot separate
+   at the top of its own range); the same checkpoint read unrounded gets 0.4 % /
+   70 %. But **deepset's classifier gets 36 % / 86 % against limes's 24 % / 82 %**
+   — better on *both* attack columns — while killing 5 clean documents per 100
+   where limes kills none.
+4. **The one gap that is not a trade-off is latency**, and it is four orders of
+   magnitude. limes decides in **0.6 ms**; the classifiers take ~58 ms; rebuff's
+   heuristic takes **5 127 ms** on texts of at most 400 characters, and about 90
+   seconds on a 1.6 kB document — it scores 8 800 generated phrases against every
+   window of the input. That is a fair description of an offline check and not of
+   something that can sit in front of every tool call.
+
+### The question this was built to answer
+
+garak's résumé family — a fabricated recommendation in white text, **no
+imperative at all** — is 69 % of the held-out split and the one place a rule has
+nothing to match. ADR 0013 framed a classifier layer on the argument that it
+would help here. **It does: 82 % held out, against limes's 7 %**, and on the
+clean résumés that pair with those attacks it fires on none of them. That stops
+being a hypothesis in a decision record and becomes a measurement, and the layer
+becomes a named gap rather than a hedge.
+
+### What limes therefore claims
+
+Not the best detector — the table above says plainly that it is not. limes is a
+guard whose every refusal names the rule, the span and the policy that produced
+it, replayable from a hash chain, at **0.6 ms and one dependency**, with a
+false-positive floor of **zero** over 100 held-out documents. The classifier
+belongs *above* that floor, not instead of it, and the numbers for putting it
+there are now in the repository instead of in a plan.
+
+Full matrix — per attack family, per operating point, with ROC AUC so a bad
+threshold cannot be mistaken for a bad tool:
+[`eval/matrices/comparison.md`](https://github.com/AmadouMamane/Limes/blob/main/eval/matrices/comparison.md).
+Every version, model revision and fidelity check:
+[`eval/matrices/comparison/PROVENANCE.md`](https://github.com/AmadouMamane/Limes/blob/main/eval/matrices/comparison/PROVENANCE.md).
+
+**Three things this does not measure**, each of which cuts against somebody and
+none of which can be fixed by trying harder. limes's `dev` column is *in-sample*
+for limes — its rules were written against that split — so read the held-out one.
+The classifiers were trained on public injection datasets that may overlap
+garak's sources, which favours them. And **rebuff is under-represented on
+purpose**: its deployed detector is heuristics plus an LLM judge plus a vector
+store of past attacks plus canary tokens, and only the heuristics run offline —
+its row is a floor for rebuff, never a measurement of rebuff.
 
 ## Use it in Python
 
@@ -449,10 +537,16 @@ before commit (the "no unverified citation" discipline it inherits from Tessera)
 - [Rebuff](https://github.com/protectai/rebuff) (Protect AI) — a self-hardening
   prompt-injection detector (heuristics + LLM + vector DB + canary tokens).
   limes's v0.1 injection detector is deliberately rule-only and shipped with a
-  published null control; an LLM layer is out of scope until it is measured.
+  published null control. Its offline half is now **measured head to head**
+  against limes on garak's corpus ([How limes compares](#how-limes-compares--measured-on-ground-nobody-here-owns)),
+  and that row under-states rebuff on purpose: three of its four layers need an
+  OpenAI key and a vector store and do not run offline.
 - [LLM Guard](https://github.com/protectai/llm-guard) (Protect AI) — a broad
   input/output scanner for LLMs. limes ships one measured detector, not a suite,
-  and gates each on its two numbers.
+  and gates each on its two numbers. Its `PromptInjection` scanner is **measured
+  head to head** against limes, on the same corpus with the same grader
+  ([How limes compares](#how-limes-compares--measured-on-ground-nobody-here-owns));
+  tuned, it detects far more than limes's rules do, and it is not free.
 - [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails) (NVIDIA) — a
   programmable guardrail toolkit. limes keeps the core a few hundred lines and
   pushes all behaviour into detectors, policies, and transports.

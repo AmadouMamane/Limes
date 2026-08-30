@@ -15,7 +15,7 @@ help:
 	@echo "  make fmt    — ruff format + ruff check --fix"
 	@echo "  make gate   — ruff + ruff format --check + mypy --strict + pytest, naming the tree it judged"
 	@echo "  make tree   — print the tree fingerprint the gate would judge"
-	@echo "  make eval   — every admitted detector's harness, plus the external adversary; write the dated matrices"
+	@echo "  make eval   — every admitted detector's harness, the external adversary and the head-to-head; write the dated matrices"
 
 sync:
 	$(UV) sync
@@ -39,3 +39,4 @@ eval:
 	$(UV) run python -m limes.eval.egress_harness secrets-egress --write
 	$(UV) run python -m limes.eval.egress_harness injection-egress --write
 	$(UV) run python -m limes.eval.external_harness --split all --write
+	$(UV) run python -m limes.eval.comparison_harness --write
