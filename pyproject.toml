@@ -1,6 +1,6 @@
 [project]
 name = "limes"
-version = "0.8.0"
+version = "0.8.1"
 description = "The guard that can prove what it refused — a transport-agnostic, evidence-carrying policy guard for LLM agents."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -26,17 +26,28 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: Apache Software License",
+    # No "License :: OSI Approved ::" classifier: PEP 639 makes it mutually
+    # exclusive with the `license = "Apache-2.0"` expression above, which is the
+    # authoritative one (Metadata 2.4+). PyPI still accepts both today; declaring
+    # the licence twice, in two vocabularies, is the thing that can drift.
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
 ]
 dependencies = [
-    "pyyaml>=6.0",
+    # 6.0.1, not 6.0. PyYAML 6.0 publishes no cp312/cp313/cp314 wheel at all, so
+    # on every Python limes supports it falls back to its sdist — and that build
+    # dies under Cython 3 ("'build_ext' object has no attribute 'cython_sources'").
+    # A floor nobody can install is not a floor: `uv pip install --resolution
+    # lowest limes` was simply broken. 6.0.1 is the first release that installs
+    # and runs on 3.12, 3.13 and 3.14 — measured on all three, not assumed.
+    "pyyaml>=6.0.1",
 ]
 
 [project.optional-dependencies]

@@ -401,7 +401,7 @@ wheels = [
 
 [[package]]
 name = "limes"
-version = "0.8.0"
+version = "0.8.1"
 source = { editable = "." }
 dependencies = [
     { name = "pyyaml" },
@@ -429,7 +429,7 @@ dev = [
 requires-dist = [
     { name = "mcp", marker = "extra == 'http'", specifier = ">=1.28,<2" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.28,<2" },
-    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "uvicorn", marker = "extra == 'http'", specifier = ">=0.31.1" },
 ]
 provides-extras = ["mcp", "http"]

@@ -1,0 +1,42 @@
+# limes — secret-scanner configuration.
+#
+# limes is a package about credentials leaving a system, so its corpus and its
+# tests necessarily CONTAIN credential-shaped strings: that is the material under
+# test. A scanner reading them as leaks reports eleven findings on a repository
+# with no secret in it, and the cost of that noise is not zero — a reader who
+# learns to dismiss this scanner will dismiss it on the day it is right.
+#
+# So the exemptions are named one file at a time, with what each holds. They are
+# NOT a wildcard over tests/: a real key pasted into a new test must still ring.
+#
+# ADR 0010 already removed the worst of it — vendor key vectors are stored as
+# fragments the loader joins, so no contiguous credential literal sits in the
+# corpus. What remains below is what could not be assembled away: PEM headers,
+# a standard example JWT, and one obviously-fake key reused across four tests.
+#
+# Verify with: gitleaks detect --source . --redact -v
+
+title = "limes"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Synthetic detection material, verified: the base64 bodies decode to
+'EXAMPLE ONLY - not a key - synthetic' and 'PLACEHOLDER - synthetic - not a key',
+the JWT is the canonical example.com token (sub 1234567890, name Example), and
+the API key is the eight-character literal sk-live-AB12cd34. None is or ever was
+live. Each file is the input of a test that must find exactly these strings.
+"""
+paths = [
+  # The egress corpus: PEM headers and an example JWT the secrets detector must span.
+  '''^src/limes/corpus/egress/secrets_positive\.json$''',
+  # The secrets detector's own unit cases (the same PEM headers).
+  '''^tests/unit/egress/test_secrets_detector\.py$''',
+  # KEY = "sk-live-AB12cd34" — the payload the redaction tests mask and assert on.
+  '''^tests/unit/redaction/test_style\.py$''',
+  '''^tests/unit/mcp/test_redaction\.py$''',
+  '''^tests/integration/mcp/test_redaction_e2e\.py$''',
+  '''^tests/integration/mcp/test_http_e2e\.py$''',
+]

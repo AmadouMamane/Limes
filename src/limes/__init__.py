@@ -10,15 +10,27 @@ transport. v0.2 adds a second transport and nothing else: the MCP stdio proxy
 unchanged. v0.3 adds a *behaviour* to both transports' outbound leg and, again,
 nothing to the core: under a redacting egress policy a refused response is masked
 at the offsets its evidence already carried, and forwarded
-(:mod:`limes.transports.redaction`, ADR 0006). The v1.0 line adds a third
-transport — the MCP Streamable HTTP proxy (``limes proxy-http``, extra
-``limes[http]``, ADR 0007) — which reuses the stdio proxy's decision unchanged,
-and a command-line surface, ``limes check`` (:mod:`limes.cli`); the core does not
-move.
+(:mod:`limes.transports.redaction`, ADR 0006). v0.4 adds a third transport — the
+MCP Streamable HTTP proxy (``limes proxy-http``, extra ``limes[http]``, ADR 0007)
+— which reuses the stdio proxy's decision unchanged, and a command-line surface,
+``limes check`` (:mod:`limes.cli`); the core does not move.
 
-Still not shipped: an egress detector — so the egress behaviour masks nothing out
-of the box — or any detector beyond ``injection``. See the README's "What limes
-does not do".
+Three detectors then land on the outbound leg, each a plugin, each with the two
+numbers ADR 0003 demands before admission: ``pii-egress`` (v0.5),
+``secrets-egress`` (v0.6) and ``injection-egress`` (v0.8), which reads tool
+descriptions and tool results for the instructions an attacker plants there
+(ADR 0012). So the v0.3 redaction behaviour has something to mask out of the box.
+One core file has moved since v0.1, once and by decision: ADR 0011 made the
+evidence digest total, so content this runtime cannot encode yields ``CannotSay``
+rather than a crash.
+
+Still not shipped: any detector outside those four. No classifier layer — ADR
+0013 frames one as an optional extra, admitted by the same gate and only on its
+own two numbers. No PII category beyond the five a checksum or a format can
+actually separate from ordinary prose. No generic high-entropy secret scanning.
+And note where the four run: ``limes check`` wires inbound ``injection`` only,
+while the egress detectors run in the proxy transports. See the README's "What
+limes does not do".
 """
 
 from __future__ import annotations

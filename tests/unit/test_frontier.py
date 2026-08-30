@@ -169,7 +169,21 @@ CORE_PACKAGE = REPO / "src" / "limes"
 TRANSPORTS = CORE_PACKAGE / "transports"
 MCP_TRANSPORT = TRANSPORTS / "mcp"
 
-PERIMETERS = ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE
+#: The release scaffolding — files that existed at v0.1 and are frozen by the
+#: complement below, but that carry no capability at all: how the project is
+#: built, tested and published. Freezing them was a side effect of "everything
+#: outside the perimeters is byte-identical", not a promise anybody made: a CI
+#: matrix, a publish workflow or a secret-scanner allowlist cannot grow the core
+#: (ADR 0004), and widening here buys no silence — CORE is named positively and
+#: `test_the_named_core_is_not_covered_by_any_perimeter` still refuses any entry
+#: that reaches src/limes.
+RELEASE_SCAFFOLDING = (
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    ".gitleaks.toml",
+)
+
+PERIMETERS = ALLOWED + DETECTOR_PERIMETER + ADMISSION_SURFACE + RELEASE_SCAFFOLDING
 
 
 def _git(*arguments: str) -> str:
@@ -179,6 +193,32 @@ def _git(*arguments: str) -> str:
     if result.returncode != 0:
         pytest.skip(f"git could not answer `{' '.join(arguments)}`: {result.stderr.strip()}")
     return result.stdout
+
+
+def _git_state() -> str:
+    """Report what this checkout can actually show of its own history.
+
+    Returns:
+        ``"absent"`` when there is no repository at all, ``"shallow"`` when the
+        history is truncated, ``"full"`` when v0.1's bytes are readable.
+    """
+    inside = subprocess.run(
+        ["git", "rev-parse", "--git-dir"], cwd=REPO, capture_output=True, text=True, check=False
+    )
+    if inside.returncode != 0:
+        return "absent"
+    shallow = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return "shallow" if shallow.stdout.strip() == "true" else "full"
+
+
+#: What this checkout can see of v0.1. Read once: the answer cannot change mid-run.
+GIT_STATE = _git_state()
 
 
 def _v0_1_paths() -> set[str]:
@@ -196,6 +236,19 @@ def _working_paths() -> set[str]:
 
 
 def _v0_1_bytes(path: str) -> bytes:
+    # `_git` above already answers "I could not look" with a skip; this reader did
+    # not, and the difference cost six weeks of red CI and 27 meaningless reds from
+    # the sdist. A witness that cannot see reports a blind spot, never a verdict
+    # (ADR 0026) — but only when it genuinely cannot see. With the history present,
+    # a v0.1 object git refuses to produce stays RED: that would mean the pins name
+    # a history this repository no longer has, which is the very thing to catch.
+    if GIT_STATE != "full":
+        detail = (
+            "no git history at all (an sdist ships none)"
+            if GIT_STATE == "absent"
+            else "a shallow git history (`--depth`, or checkout's default fetch-depth: 1)"
+        )
+        pytest.skip(f"cannot read {path} at v0.1: this checkout has {detail}")
     result = subprocess.run(
         ["git", "show", f"{V0_1_COMMIT}:{path}"], cwd=REPO, capture_output=True, check=False
     )
@@ -239,6 +292,24 @@ def test_every_path_this_ratchet_claims_to_protect_actually_exists():
     assert missing == [], f"CORE names paths that never existed at v0.1: {missing}"
 
 
+def test_the_ratchet_can_actually_see_the_v0_1_bytes():
+    # ADR 0026 turned on this file itself. Everything here is a comparison against
+    # v0.1's bytes, so a checkout that cannot produce them makes every assertion
+    # below unfalsifiable — and the skips that follow would read, to a CI summary,
+    # as "nothing wrong". Twice this went the other way: `actions/checkout` fetches
+    # depth 1 by default, so from v0.1 to v0.8 this ratchet never once ran on CI —
+    # 16 red runs whose single cause was the checkout, and one green run, on the
+    # v0.1 commit itself, where the comparison was trivially true.
+    #
+    # An sdist legitimately has no history and is allowed to declare itself blind.
+    # A *truncated* one is a misconfiguration, and it gets a red that names the fix.
+    assert GIT_STATE != "shallow", (
+        "this checkout's git history is truncated, so the frontier ratchet cannot read "
+        "v0.1's bytes and every assertion in this file would skip. Fetch the full "
+        "history — on GitHub Actions: `actions/checkout` with `fetch-depth: 0`."
+    )
+
+
 def test_no_perimeter_entry_names_a_path_that_does_not_exist():
     # A perimeter that names a phantom is a perimeter nobody can audit: the entry
     # reads as "this is covered" and covers nothing, and the next reader cannot
@@ -254,7 +325,7 @@ def test_no_perimeter_entry_names_a_path_that_does_not_exist():
 
 
 def test_the_named_core_is_not_covered_by_any_perimeter():
-    # This is the anti-widening check, and it now polices three lists rather than
+    # This is the anti-widening check, and it now polices four lists rather than
     # one. Adding "src/limes/detectors/" to DETECTOR_PERIMETER to make a red go
     # away would leave this one red, naming injection.py and its policy.
     escaped = sorted(path for path in CORE if _is_allowed(path))
@@ -416,7 +487,12 @@ def test_the_detectors_add_no_dependency_at_all():
     # it had cost a dependency, `pip install limes` would have grown for everyone
     # — including the users who only ever run `limes check`.
     manifest = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
-    assert manifest["project"]["dependencies"] == ["pyyaml>=6.0"]
+    # The floor moved once, by measurement rather than by drift: PyYAML 6.0 ships
+    # no wheel for any Python limes supports and its sdist fails to build under
+    # Cython 3, so `pyyaml>=6.0` named a version nobody could install. The shape
+    # this test defends is unchanged — exactly one runtime dependency, and it is
+    # PyYAML — and it is still an exact string, so the next move is deliberate too.
+    assert manifest["project"]["dependencies"] == ["pyyaml>=6.0.1"]
 
 
 def test_every_admitted_entry_point_resolves_to_the_detector_perimeter_or_the_core():

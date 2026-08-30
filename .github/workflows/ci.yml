@@ -15,21 +15,46 @@ concurrency:
 
 jobs:
   gate:
-    name: gate (ruff · mypy --strict · pytest)
+    name: gate (ruff · mypy --strict · pytest) — py${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    strategy:
+      # Every supported Python reports for itself. One red must not hide the others.
+      fail-fast: false
+      matrix:
+        # These are exactly the `Programming Language :: Python` classifiers in
+        # pyproject.toml, and `requires-python = ">=3.12"` is the claim they witness.
+        # A version claimed and never run is a promise with no witness.
+        python-version: ["3.12", "3.13", "3.14"]
+    env:
+      # uv reads this for both `uv sync` and the `uv run` calls inside make gate,
+      # so the whole gate runs on the matrix version rather than on .python-version.
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # NOT the default depth 1. tests/unit/test_frontier.py compares today's
+          # bytes against the v0.1 commit, read out of git history — and a shallow
+          # checkout cannot produce it. With the default, that ratchet failed on
+          # every push from v0.1 to v0.8: 16 red runs, one green, on v0.1 itself
+          # where the comparison was trivially true. The gate was green locally the
+          # whole time, because a normal clone has the history.
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      - name: Pin Python (from .python-version)
-        run: uv python install
+      - name: Install the matrix Python
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Sync dependencies
         run: uv sync
+
+      - name: Say which tree and which Python this gate judges
+        run: |
+          uv run python -VV
+          make tree
 
       - name: Gate — ruff + ruff format --check + mypy --strict + pytest
         run: make gate

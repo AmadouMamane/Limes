@@ -4,6 +4,67 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-08-30
+
+**The release audit: nothing the library does changed, and four things it
+*claimed* did.** Every finding below was measured on the artifact or on the
+running CI, never inferred.
+
+### Fixed
+
+- **`pyyaml>=6.0` named a version nobody could install.** PyYAML 6.0 publishes no
+  wheel for cp312, cp313 or cp314, so on every Python limes supports it fell back
+  to its sdist — and that build dies under Cython 3 (`'build_ext' object has no
+  attribute 'cython_sources'`). `uv pip install --resolution lowest limes` simply
+  failed. The floor is now `>=6.0.1`, the first release that installs and runs on
+  3.12, 3.13 and 3.14 — measured on all three. Still exactly one runtime
+  dependency.
+- **CI had been red on every push since v0.1, and the badge said so where nobody
+  read it.** `actions/checkout` fetches depth 1 by default, and
+  `tests/unit/test_frontier.py` compares today's bytes against the v0.1 commit
+  read out of git history — which a shallow checkout cannot produce. 16 red runs;
+  the one green run was v0.1 itself, where the comparison was trivially true. The
+  gate was green locally the whole time, because a normal clone has the history.
+  The checkout now fetches the full history, so the frontier ratchet actually runs
+  where it was supposed to.
+- **The package's own docstring predated three of its four detectors.**
+  `limes/__init__.py` still said "Still not shipped: an egress detector … or any
+  detector beyond `injection`" while shipping `pii-egress`, `secrets-egress` and
+  `injection-egress` and declaring all four as entry points. That is what
+  `help(limes)` printed. Prose only; the module's code is byte-identical, and the
+  ratchet asserts it.
+- **Six README links pointed at repository-relative paths**, which resolve on
+  GitHub and 404 on a PyPI project page (`LICENSE`, `docs/decisions/`,
+  `CONTRIBUTING.md`, `CLA.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`). All absolute
+  now. The diagram is pinned to a commit rather than to `main`: a PyPI description
+  is frozen at upload, the image it fetches is not.
+
+### Changed
+
+- **The frontier ratchet reports a blind spot instead of a verdict when it cannot
+  see** (ADR 0026). `_git` already skipped when git could not answer; `_v0_1_bytes`
+  asserted instead, which is why `pytest` from an unpacked sdist printed 27 reds
+  that said nothing about the code — exactly what a downstream packager runs. Now:
+  no history at all (an sdist ships none) declares itself unseen; a *truncated*
+  history is a misconfiguration and gets one loud red naming the fix; and with the
+  history present, a v0.1 object git refuses to produce is still red.
+- **CI runs the whole gate on 3.12, 3.13 and 3.14.** `requires-python = ">=3.12"`
+  was true — measured, 404 tests green on each — and had no witness. Those Pythons
+  are now classifiers too.
+- No `License :: OSI Approved ::` classifier: PEP 639 makes it mutually exclusive
+  with the `license = "Apache-2.0"` expression, which is the authoritative one.
+
+### Added
+
+- `.github/workflows/release.yml` — build and publish by Trusted Publishing
+  (OIDC), so no long-lived token exists on any machine. It re-runs the full gate
+  on the tag rather than trusting that the commit was green when it landed, and
+  refuses to publish when the tag and `pyproject.toml` name different versions.
+- `.gitleaks.toml` — the eleven findings on this repository are all synthetic
+  detection material, verified one by one; they are exempted file by file, with
+  what each holds, and never by a wildcard over `tests/`. A real key in a new test
+  still rings (checked by mutation).
+
 ## [0.8.0] - 2026-08-28
 
 **A fourth detector closes the third corner: instructions arriving on the way
@@ -384,3 +445,10 @@ importing the SDK. All four were seen red under deliberate mutation.
 - The PyPI name `limes` was **verified available** on 2026-07-24
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
+
+[0.8.1]: https://github.com/AmadouMamane/Limes/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/AmadouMamane/Limes/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/AmadouMamane/Limes/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/AmadouMamane/Limes/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/AmadouMamane/Limes/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/AmadouMamane/Limes/releases/tag/v0.4.0

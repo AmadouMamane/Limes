@@ -1,9 +1,9 @@
 # limes
 
 [![ci](https://github.com/AmadouMamane/Limes/actions/workflows/ci.yml/badge.svg)](https://github.com/AmadouMamane/Limes/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
-![PyPI: not yet published](https://img.shields.io/badge/PyPI-not%20yet%20published-lightgrey.svg)
+[![PyPI](https://img.shields.io/pypi/v/limes.svg)](https://pypi.org/project/limes/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/AmadouMamane/Limes/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/downloads/)
 
 **The guard that can prove what it refused.**
 
@@ -32,15 +32,10 @@ does not claim to filter, the user's prompt on its way *into* the model — that
 text never crosses this seam. You *can* run the library there too, but the proxy
 sits between the agent and its tools.)
 
-![How limes works: one decision core sits on the seam between your model (the host) and its tools (the MCP server), and checks both directions. Outgoing — a tool call your model makes — is checked before it runs and blocked as an isError if unsafe. Incoming — a tool's result or tool listing — is checked before your model reads it: injection from tools (poisoned descriptions), PII and secrets are forwarded, redacted or blocked. Every decision is a verdict — Allow, Deny or CannotSay — on a hash-chained ledger.](https://raw.githubusercontent.com/AmadouMamane/Limes/main/docs/images/how-it-works.png)
-
-> **Not yet on PyPI.** The source is public on GitHub
-> ([AmadouMamane/Limes](https://github.com/AmadouMamane/Limes)); no release is
-> published to PyPI yet, where the name `limes` is still available and will be
-> claimed by the first release.
+![How limes works: one decision core sits on the seam between your model (the host) and its tools (the MCP server), and checks both directions. Outgoing — a tool call your model makes — is checked before it runs and blocked as an isError if unsafe. Incoming — a tool's result or tool listing — is checked before your model reads it: injection from tools (poisoned descriptions), PII and secrets are forwarded, redacted or blocked. Every decision is a verdict — Allow, Deny or CannotSay — on a hash-chained ledger.](https://raw.githubusercontent.com/AmadouMamane/Limes/fc346c45cd02faba8e0d7fbd1371ae71a92f5731/docs/images/how-it-works.png)
 
 Design choices are recorded as ADRs — short, binding decision records under
-[`docs/decisions/`](docs/decisions/). The text cites them by number (ADR 0002,
+[`docs/decisions/`](https://github.com/AmadouMamane/Limes/tree/main/docs/decisions). The text cites them by number (ADR 0002,
 ADR 0003, …).
 
 ## Install
@@ -53,8 +48,7 @@ pip install 'limes[mcp]'      # + the MCP stdio proxy (`limes proxy`)
 pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-http`)
 ```
 
-*(Works today from the public repo; on PyPI after release:
-`pip install git+https://github.com/AmadouMamane/Limes`.)*
+*(Or the unreleased tip, straight from the repo: `pip install git+https://github.com/AmadouMamane/Limes`.)*
 
 ## Contents
 
@@ -858,13 +852,13 @@ uv run python -m limes.transports.mcp.bench      # measure the proxy's overhead
 
 ## Contributing & security
 
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to work with limes, and the
+- **[CONTRIBUTING.md](https://github.com/AmadouMamane/Limes/blob/main/CONTRIBUTING.md)** — how to work with limes, and the
   admission rule every detector must pass (its two numbers).
-- **[CLA.md](CLA.md)** — the Contributor License Agreement; no external
+- **[CLA.md](https://github.com/AmadouMamane/Limes/blob/main/CLA.md)** — the Contributor License Agreement; no external
   contribution is merged without a signed one (it keeps the dual-license option
   alive).
-- **[SECURITY.md](SECURITY.md)** — how to report a vulnerability privately.
-- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — the Contributor Covenant.
+- **[SECURITY.md](https://github.com/AmadouMamane/Limes/blob/main/SECURITY.md)** — how to report a vulnerability privately.
+- **[CODE_OF_CONDUCT.md](https://github.com/AmadouMamane/Limes/blob/main/CODE_OF_CONDUCT.md)** — the Contributor Covenant.
 
 ## License
 
