@@ -69,3 +69,28 @@ the reference bytes, once, with its authorisation written down. Every other
   file, so nobody has to rediscover either state.
 - The README's "one honest limit found by this work" paragraph is rewritten as
   a closed one.
+
+## Amendment 1 — the SPAN digest is total too (2026-08-31)
+
+"`decide` never raises on any `str`" — the first consequence above — was not
+yet true when it was written. The same bare `encode("utf-8")` this ADR removed
+from `_content_sha` survived in `spans.redact()`, a few lines of
+evidence-building downstream, and the **inbound** leg reaches it with no
+unreadability screen in front — by design: an injection is judged on whatever
+bytes arrived. So a matched span containing a lone surrogate still crashed the
+guard mid-verdict (`UnicodeEncodeError` from `spans.py:47`), on exactly the
+input class this ADR declared closed. The crash had not been eliminated; it
+had moved. The egress leg never reaches the site — `refuse_unreadable`
+renders the content `CannotSay` first — which is why every surrogate pin
+beside the egress detectors stayed green over the hole: those witnesses asked
+the egress leg and reported on the guard (ADR 0026).
+
+The repair is this ADR's own repair, applied to the second site:
+`spans.redact()` encodes with `errors="surrogatepass"`, so the span digest is
+total over `str` exactly as the content digest is — byte-identical to strict
+UTF-8 on every encodable string, and a found attack keeps its `Deny` with its
+evidence intact. `src/limes/spans.py` leaves byte-identity to v0.1 and is
+pinned to the sha256 of its post-amendment bytes in
+`tests/unit/test_frontier.py`, beside `guard.py`'s pin. The behaviour is held
+by `tests/unit/ratchets/test_span_digest_is_total.py`, run and seen RED (both
+tests, `UnicodeEncodeError` at `spans.py:47`) before the one-line fix landed.

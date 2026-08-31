@@ -88,6 +88,10 @@ ALLOWED = (
     "tests/unit/redaction/",
     "tests/unit/cli/",
     "tests/unit/test_frontier.py",
+    # ADR 0011 Am. 1's pin: the span digest stays total (surrogatepass), or this
+    # goes red. Post-v0.1, so it lives here beside the ADR it enforces rather
+    # than among the v0.1-frozen ratchets.
+    "tests/unit/ratchets/test_span_digest_is_total.py",
     "tests/integration/mcp/",
     "docs/decisions/0005-mcp-proxy-transport.md",
     "docs/decisions/0006-egress-redaction.md",
@@ -154,7 +158,6 @@ DETECTOR_PERIMETER = (
     "docs/decisions/0010-vendor-key-vectors-are-stored-assembled.md",
     "docs/decisions/0012-the-egress-leg-scans-for-injection.md",
     "docs/decisions/0013-a-classifier-layer-enters-by-the-same-gate.md",
-    "docs/design/detecteurs-egress-reels.md",
     "Makefile",
 )
 
@@ -196,9 +199,13 @@ CORE = (
     "tests/unit/ratchets/test_null_result_carries_power.py",
 )
 
-#: ADR 0011's single authorised amendment: the content digest became total
+#: ADR 0011's authorised amendments: the content digest became total
 #: (`surrogatepass`), so `guard.py` left byte-identity to v0.1 and is pinned to
-#: the sha256 of its post-ADR bytes instead. The ratchet's strength is intact —
+#: the sha256 of its post-ADR bytes instead — and Am. 1 extended the same
+#: totality to the SPAN digest, because `spans.redact()` kept the bare encode
+#: the ADR removed from `guard.py`, and the inbound leg reached it with no
+#: unreadability screen: a matched span containing a lone surrogate crashed
+#: the guard mid-verdict. The ratchet's strength is intact —
 #: any further drift of the file is red — what changed is the reference bytes,
 #: once, with the authorisation written down. Every key here must be in CORE
 #: and must actually differ from v0.1 (asserted below): an entry that covers a
@@ -207,6 +214,10 @@ CORE = (
 AMENDED = {
     # ADR 0011 — the content digest became total (`surrogatepass`).
     "src/limes/guard.py": "5a0f155ab741a5f1de2c2b55e277099b793cbf22f09b1a75f6129b4d4d408d86",
+    # ADR 0011 Am. 1 — the span digest became total too: redact() had kept the
+    # bare encode, reached on the inbound leg by any matched span containing a
+    # lone surrogate. Pinned by tests/unit/ratchets/test_span_digest_is_total.py.
+    "src/limes/spans.py": "9f115adbf56dd8f5e5f778972cbaf051a219807c68d94ce829f9741a10a93b1b",
     # ADR 0019 — the inbound leg gained the override family the outbound leg had.
     # Ported verbatim after the external corpus measured this detector at 0/131 on
     # goal hijacking while the other leg, with these rules, caught 82%.

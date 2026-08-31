@@ -44,7 +44,11 @@ def redact(content: str, start: int, end: int, label: str) -> RedactedSpan:
     Returns:
         A span carrying offsets, the label, and a SHA-256 of the matched text.
     """
-    fragment = content[start:end].encode("utf-8")
+    # ``surrogatepass`` keeps this digest total over ``str``, like the content
+    # digest (ADR 0011 Am. 1): a matched span containing a lone surrogate must
+    # yield evidence, not a crash — the inbound leg judges whatever arrived,
+    # with no unreadability screen in front of it.
+    fragment = content[start:end].encode("utf-8", "surrogatepass")
     return RedactedSpan(
         start=start,
         end=end,
