@@ -351,7 +351,9 @@ or to `--record FILE`.
 **Measured, not asserted:** one guarded `tools/call` adds a **median ~0.6 ms**
 over the same call made directly (two runs: +0.61 / +0.67 ms median, +0.95 /
 +0.63 ms p95; macOS arm64, Python 3.12.4, n=200, 256-byte payload, default
-config). Reproduce: `uv run python -m limes.transports.mcp.bench`.
+config). Reproduce: `uv run python -m limes.transports.mcp.bench` (from a
+source checkout — the bench ships in the repository and the sdist, not in the
+installed wheel).
 
 ## Scan from the command line — `limes check`
 
@@ -434,7 +436,8 @@ over stdio — all against real processes in
 median, +5.36 / +3.72 ms p95; macOS arm64, Python 3.12.4, n=200, 256-byte
 payload). That is more than the stdio proxy's ~0.6 ms, and as expected: the
 HTTP proxy makes a *second* HTTP round trip to the upstream. Reproduce:
-`uv run python -m limes.transports.mcp.bench_http`.
+`uv run python -m limes.transports.mcp.bench_http` (from a source checkout —
+the bench ships in the repository and the sdist, not in the installed wheel).
 
 **What it does not do (first version):** it speaks only the current Streamable
 HTTP (not the deprecated HTTP+SSE); one host↔server pair per session; no host

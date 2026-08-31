@@ -107,6 +107,14 @@ build-backend = "hatchling.build"
 # force-include for the corpus: it re-adds those files at the same wheel path and
 # hatchling fails the build on the collision.
 packages = ["src/limes"]
+# The two benchmark harnesses are development instruments — untested, one of
+# them opens a socket and serves MCP — and no part of the guarded surface. They
+# stay runnable from a source checkout and the sdist (the README's `uv run`
+# recipes), and out of the installed wheel of a security tool.
+exclude = [
+    "src/limes/transports/mcp/bench.py",
+    "src/limes/transports/mcp/bench_http.py",
+]
 
 [tool.ruff]
 line-length = 100
