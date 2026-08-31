@@ -132,6 +132,7 @@ DETECTOR_PERIMETER = (
     "scripts/vendor_presidio_corpus.py",
     "scripts/vendor_gitleaks_corpus.py",
     "docs/decisions/0021-the-outbound-leg-meets-an-adversary-too.md",
+    "tests/unit/test_hijack_family_names_its_templates.py",
     "src/limes/baselines/tessera_pii.py",
     "tests/unit/egress/",
     "tests/integration/egress/",

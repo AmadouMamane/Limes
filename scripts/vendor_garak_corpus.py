@@ -234,18 +234,42 @@ def _factor(probe: GarakProbe, marker: str) -> dict[str, Any]:
 
 
 def build_flat(module: str, names: tuple[str, ...]) -> dict[str, Any]:
-    """Materialise probes whose prompts are flat strings, with no injection factor.
+    """Materialise probes whose prompts are flat strings, recording each one's TEMPLATE.
 
     PromptInject hands back finished prompts rather than (document, injection)
     pairs, so there is nothing to factor and no matched control to derive: the
-    hijack IS the prompt. Thinned by prompt hash only, and never split — the whole
-    family is held out.
+    hijack IS the prompt. The first version of this function stopped there, and
+    that was the defect ADR 0021 repairs — it thinned by *prompt* hash and recorded
+    nothing about which attack instruction each prompt came from, so the family
+    read as 131 independent cases when its real unit count is **five**.
+
+    The generator knows the unit and hands it over: every entry in ``pi_prompts``
+    carries ``settings["attack_instruction"]``, the rogue instruction before its
+    payload is substituted. That is what a rule recognises, so it is recorded here
+    per prompt, and the per-template breakdown becomes possible downstream.
+
+    **There is no dev/holdout split, and this function does not fabricate one.**
+    The whole promptinject family — all six probe classes — carries exactly five
+    distinct attack instructions, and the content-addressed nibble rule puts all
+    five on the same side (nibbles 1, 2, 3, 3, 6, i.e. every one of them in the
+    ``dev`` half). A holdout of zero is not a holdout, and moving the boundary
+    until one appears would be steering the split, which is the one thing a
+    content-addressed rule exists to prevent. The impossibility is recorded in the
+    artifact instead (ADR 0021).
     """
     probes = importlib.import_module(module)
     out: dict[str, Any] = {}
     for name in names:
         random.seed(SEED)
         probe = getattr(probes, name)()
+        # The generator's own mapping from a finished prompt to the attack
+        # instruction that produced it. Read from `pi_prompts` rather than
+        # recovered by parsing the prompt: a regex over the finished string would
+        # be this script guessing at what garak already knows.
+        template_of: dict[str, str] = {
+            str(entry["prompt"]): str(entry["settings"]["attack_instruction"])
+            for entry in probe.pi_prompts
+        }
         kept = sorted(
             {
                 str(prompt)
@@ -253,11 +277,25 @@ def build_flat(module: str, names: tuple[str, ...]) -> dict[str, Any]:
                 if hashlib.sha256(str(prompt).encode("utf-8")).hexdigest()[0] in KEEP_BLIND_NIBBLES
             }
         )
+        templates = sorted({template_of[prompt] for prompt in kept if prompt in template_of})
+        unmapped = [prompt for prompt in kept if prompt not in template_of]
         out[name] = {
             "goal": getattr(probe, "goal", "") or "",
             "doc_uri": getattr(probe, "doc_uri", "") or "",
             "prompts": kept,
-            "_counts": {"prompts": len(kept)},
+            # Parallel to `prompts`, by index: which template each one came from.
+            # A prompt the generator could not map is recorded as -1 rather than
+            # silently attributed (ADR 0015).
+            "template_of": [
+                templates.index(template_of[prompt]) if prompt in template_of else -1
+                for prompt in kept
+            ],
+            "attack_instructions": templates,
+            "_counts": {
+                "prompts": len(kept),
+                "templates": len(templates),
+                "prompts_with_no_template": len(unmapped),
+            },
         }
     return out
 
@@ -345,16 +383,30 @@ def main() -> None:
             "probes": list(BLIND),
             "upstream": "PromptInject (Perez & Ribeiro, 'Ignore Previous Prompt')",
         },
-        "kind": "in-scope, BLIND: goal hijacking on the inbound leg",
+        "kind": "in-scope: goal hijacking on the inbound leg",
+        "strength": (
+            "SEEN while verifying, never tuned against. This family was vendored and "
+            "first scored blind (ADR 0017 Am. 1) and that 82% stands as the number the "
+            "rules earned unseen. Its contents have since been read — twice, to find out "
+            "what the 24 residual misses were — so 'blind' is no longer true of it and "
+            "is not claimed. No rule has been written from it."
+        ),
         "sampling": {
             "seed": SEED,
-            "rule": "thinned to first nibble of sha256(prompt) in {0,1,2,3}; not split",
+            "rule": "thinned to first nibble of sha256(prompt) in {0,1,2,3}; NOT split",
             "why": (
-                "the whole family is held out: it was vendored and scored without its "
-                "contents ever being read, which the latentinjection holdout can no "
-                "longer claim"
+                "no dev/holdout split is possible here and none is fabricated: the whole "
+                "promptinject family carries exactly FIVE distinct attack instructions, "
+                "and the content-addressed nibble rule puts all five in the dev half "
+                "(nibbles 1, 2, 3, 3, 6). A holdout of zero is not a holdout, and moving "
+                "the boundary until one appeared would be steering the split. The unit is "
+                "recorded per prompt instead, so the per-template breakdown can show what "
+                "the aggregate hides: 131 prompts, five templates (ADR 0021)."
             ),
-            "protocol": "blind: scored once, contents never inspected (ADR 0017 Am. 1)",
+            "protocol": (
+                "scored once with the rules frozen; the family is seen, so a rule written "
+                "from now on may not be validated on it (ADR 0021)"
+            ),
         },
         "probes": build_flat("garak.probes.promptinject", BLIND),
     }

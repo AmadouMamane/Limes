@@ -81,6 +81,7 @@ class ExternalReport:
     splits: tuple[str, ...]
     cells: tuple[Cell, ...]
     per_probe: tuple[tuple[str, str, int, int], ...]
+    per_hijack_template: tuple[tuple[str, int, int], ...]
     lookalike_total: int
     lookalike_killed: int
 
@@ -193,6 +194,18 @@ def compute(splits: Sequence[str]) -> ExternalReport:
             cases = tuple(c for c in corpus.split(split) if c.probe == probe)
             per_probe.append((probe, split, _count(egress, cases, Direction.OUTBOUND), len(cases)))
 
+    # The aggregate over this family reads as n=131 and its real unit count is
+    # FIVE (ADR 0021). One row per attack template, so a reader can see that the
+    # 82% is four templates caught and one missed rather than a rate over prompts.
+    per_hijack_template: list[tuple[str, int, int]] = []
+    if blind is not None:
+        inbound = [InjectionDetector()]
+        for template in sorted({case.template for case in blind.attacks}):
+            cases = tuple(case for case in blind.attacks if case.template == template)
+            per_hijack_template.append(
+                (template, _count(inbound, cases, Direction.INBOUND), len(cases))
+            )
+
     lookalike_killed = _count(
         egress,
         tuple(
@@ -208,6 +221,7 @@ def compute(splits: Sequence[str]) -> ExternalReport:
         splits=tuple(splits),
         cells=tuple(cells),
         per_probe=tuple(per_probe),
+        per_hijack_template=tuple(per_hijack_template),
         lookalike_total=len(lookalikes),
         lookalike_killed=lookalike_killed,
     )
@@ -308,6 +322,39 @@ def render(report: ExternalReport, when: str) -> str:
         "rules are, and they are exactly the territory ADR 0013's classifier layer is framed "
         "for. The number above is what makes that argument with evidence instead of prose.",
     ]
+
+    if report.per_hijack_template:
+        lines += [
+            "",
+            "## The blind hijack family, per attack template — read this before the 82%",
+            "",
+            "The aggregate above is a rate over **prompts**, and it reads as n=131. The "
+            "family's real unit count is **five**: garak's whole promptinject set carries "
+            "five distinct attack instructions, and each is materialised over 35 base "
+            "tasks and three payloads. So the row below is what the percentage actually "
+            "says (ADR 0021).",
+            "",
+            "| attack template | blocked by `injection` |",
+            "|---|---|",
+        ]
+        for template, hits, total in report.per_hijack_template:
+            rate = f"{hits / total:.0%}" if total else "—"
+            shown = template if len(template) <= 74 else template[:71] + "..."
+            lines.append(f"| `{shown}` | {hits}/{total} ({rate}) |")
+        lines += [
+            "",
+            "**No dev/holdout split of this family exists, and none is fabricated.** All "
+            "five templates hash into the same half under the content-addressed rule "
+            "(nibbles 1, 2, 3, 3, 6), so a holdout would be empty — and moving the "
+            "boundary until one appeared would be steering the split, which is the one "
+            "thing that rule exists to prevent. It is reported as an impossibility rather "
+            "than worked around.",
+            "",
+            "**And the family is no longer blind.** It was vendored and first scored "
+            "without its contents being read, and that number stands as one the rules "
+            "earned unseen. The contents have since been read, so no rule written from "
+            "now on may be validated here.",
+        ]
 
     lines += [
         "",

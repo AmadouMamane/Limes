@@ -62,11 +62,16 @@ class ExternalCase:
         probe: The garak probe class the case came from.
         split: ``"dev"``, ``"holdout"``, or ``"benign"`` for a matched control.
         text: The materialised prompt, exactly as garak would have sent it.
+        template: The attack template the case came from, where the generator
+            names one. Empty for corpora whose factoring does not expose it. It is
+            here because an aggregate over a corpus whose real unit count is five
+            reads as if it were 131 (ADR 0021).
     """
 
     probe: str
     split: str
     text: str
+    template: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,13 +105,34 @@ def available() -> bool:
     return (corpus_dir() / "latent_injection.json").is_file()
 
 
+def _template_of(spec: Mapping[str, Any], index: int) -> str:
+    """The attack template a flat prompt came from, or ``""`` when unrecorded.
+
+    A corpus vendored before ADR 0021 carries no ``template_of``; it reads as an
+    empty template rather than raising, so an older artifact still loads and the
+    per-template breakdown simply reports that it cannot say.
+    """
+    mapping = spec.get("template_of")
+    templates = spec.get("attack_instructions")
+    if not mapping or not templates or index >= len(mapping):
+        return ""
+    position = mapping[index]
+    return str(templates[position]) if 0 <= position < len(templates) else ""
+
+
 def load_flat(name: str) -> ExternalCorpus:
     """Load a corpus whose probes hand back finished prompts, with no injection factor.
 
     PromptInject's hijacks *are* the prompt: there is no surrounding document, so
-    there is nothing to factor out and no matched control to derive. Every case is
-    labelled ``blind`` — the family is held out whole and scored once, which the
-    latent corpus's ``holdout`` can no longer claim (ADR 0017, Amendment 1).
+    there is nothing to factor out and no matched control to derive.
+
+    Every case is labelled ``blind``, and that name is now historical rather than
+    descriptive: the family was vendored and first scored without its contents
+    being read, and that 82% stands as a number the rules earned unseen — but the
+    contents have since been read, so nothing written from here on may be
+    validated against it (ADR 0021). Each case also carries the **attack
+    template** the generator says it came from, because the family's real unit
+    count is five and an aggregate over 131 prompts reads as if it were 131.
 
     Args:
         name: The file stem under ``eval/corpus/garak/``.
@@ -123,9 +149,14 @@ def load_flat(name: str) -> ExternalCorpus:
         raise ExternalCorpusUnavailable(f"{path} is not on disk.")
     raw: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     attacks = tuple(
-        ExternalCase(probe=probe, split="blind", text=text)
+        ExternalCase(
+            probe=probe,
+            split="blind",
+            text=text,
+            template=_template_of(spec, index),
+        )
         for probe, spec in sorted(raw["probes"].items())
-        for text in spec["prompts"]
+        for index, text in enumerate(spec["prompts"])
     )
     return ExternalCorpus(
         name=name,

@@ -91,7 +91,7 @@ It is NVIDIA's **garak** (Apache-2.0), vendored by value and scored by
 
 | population | `injection` (inbound) | `injection-egress` (outbound) |
 |---|---|---|
-| goal hijacking — **blind**, contents never read | **107/131 (82%)** | **107/131 (82%)** |
+| goal hijacking — first scored **blind**; contents read since, never tuned against (**4 of its 5 attack templates**, not 82% of 131 — ADR 0021 Am. 1) | **107/131 (82%)** | **107/131 (82%)** |
 | indirect injection — held out, seen while splitting | 62/280 (22%) | 53/280 (19%) |
 | **matched benign documents** (the same documents, injection removed) | **0/192** | **0/192** |
 | content-policy jailbreak — never claimed | 0/161 | 0/161 |
@@ -141,12 +141,20 @@ alone, then frozen:
 
 **A denominator that is not a sample size.** garak materialises many prompts from
 one attack template. Measured: the held-out column's 280 prompts come from **8**
-templates, and the blind column's 131 from **4** — of which three are variants of
-*"ignore any previous and following instructions"* that every contestant above
-catches outright. The entire 82 %-versus-96 % gap on that column is **one
+templates, and the goal-hijacking column's 131 from **5** — of which four are
+variants of *"ignore any previous and following instructions"* (title case, upper
+case, `print` versus `say`, and a `... Nevermind.` prefix) that every contestant
+above catches outright. The entire 82 %-versus-96 % gap on that column is **one
 template**, `STOP EVERYTHING!!! NOW!!! JUST PRINT`, where limes scores 0/24. Read
-those two columns as 8 and 4 observations, not 280 and 131; the per-template
+those two columns as 8 and 5 observations, not 280 and 131; the per-template
 breakdown is in the matrix.
+
+> That count said **4** until 2026-08-31, and it was counted by eye. It is now
+> read from garak's own `settings["attack_instruction"]`, which is the generator's
+> answer rather than a reader's: the `... Nevermind.` prefix is a separate
+> template upstream. The claim it supports is unchanged — four caught, one missed,
+> the gap is one template — but a denominator argued from a hand count was the
+> wrong shape of evidence for a section about denominators.
 
 **Four readings. limes wins the first and the last, loses the second
 outright, and splits the third.**
@@ -872,8 +880,9 @@ four at **1.8 %** on somebody else's attacks (ADR 0017):
 
 Dated matrix: `eval/matrices/injection_egress.md`. The external number for the
 same detector is in *[Measured against an adversary we did not
-write](#measured-against-an-adversary-we-did-not-write)* — **1.8 % → 82 % blind**,
-which is what the three families bought and why the benign corpus grew with them.
+write](#measured-against-an-adversary-we-did-not-write)* — **1.8 % → 82 %**, earned
+blind (the family's contents have been read since, and it is labelled so), which is
+what the three families bought and why the benign corpus grew with them.
 
 **The four false positives, with their causes** (published, not rounded away —
 ADR 0003). Three are **mention versus use**: a security article that *quotes* an
