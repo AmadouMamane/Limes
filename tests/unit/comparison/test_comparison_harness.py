@@ -314,16 +314,18 @@ def test_every_attack_column_states_how_many_templates_it_actually_rests_on(case
 
 
 @pytest.mark.mutation
-def test_an_unparseable_prompt_makes_the_template_count_unknown_not_smaller(cases):
-    # The blind family carries no template field, so the count is recovered from
-    # garak's envelope. A prompt that does not match must make the whole count
-    # unavailable — deriving it from the ones that happen to parse would state a
-    # smaller number with the confidence of a complete one. Let
-    # `hijack_templates` skip a non-matching case and this goes red.
+def test_a_case_missing_its_template_makes_the_count_unknown_not_smaller(cases):
+    # The template travels on each case, read from the corpus's own field
+    # (ADR 0021 Am. 1) — never re-derived from the text, whose lowercased
+    # re-derivation once fused two templates and published "4" over a family of
+    # five. A case that carries none must make the whole count unavailable —
+    # deriving it from the ones that happen to carry one would state a smaller
+    # number with the confidence of a complete one. Let `hijack_templates`
+    # skip a template-less case and this goes red.
     from limes.eval.comparison_harness import hijack_templates
 
     assert hijack_templates(cases) is not None
-    poisoned = [*cases, ComparisonCase(population=HIJACK_BLIND, probe="x", text="no envelope")]
+    poisoned = [*cases, ComparisonCase(population=HIJACK_BLIND, probe="x", text="no template")]
     assert hijack_templates(poisoned) is None
 
 

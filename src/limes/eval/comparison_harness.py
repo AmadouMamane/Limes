@@ -50,7 +50,6 @@ import contextlib
 import hashlib
 import json
 import random
-import re
 import statistics
 import time
 from collections.abc import Mapping, Sequence
@@ -162,14 +161,6 @@ DEV_POPULATIONS = (ATTACKS_DEV, BENIGN_DEV)
 DECLARED_TOOLS = ("deberta-injection-v2", "deepset-injection", "llm-guard", "rebuff")
 
 
-#: garak's PromptInject envelope: the benign task, a dashed rule, then the attack
-#: instruction and its rogue string in quotes. The vendored file carries finished
-#: prompts and no template field, so the instruction is recovered from the text.
-#: A prompt this does not match makes the count **unknowable**, never wrong — see
-#: :func:`hijack_templates`.
-_HIJACK_ENVELOPE = re.compile(r"-{10}\s*\n-{10}\s*\n(.*?)[\"\u201c]", re.S)
-
-
 def hijack_templates(cases: Sequence[ComparisonCase]) -> dict[str, str] | None:
     """Map each blind-hijack case to the attack instruction it carries.
 
@@ -179,22 +170,29 @@ def hijack_templates(cases: Sequence[ComparisonCase]) -> dict[str, str] | None:
     between. Reporting only the prompt count would offer a denominator of 131
     for what is a far smaller number of independent observations.
 
+    The instruction is read from the corpus's own ``template`` field (ADR 0021
+    Am. 1) — the generator's word, carried on each case, never re-derived from
+    the prompt text. A previous version parsed the text and lowercased it,
+    which fused the all-capitals template with its mixed-case twin: the matrix
+    published "4 templates" over a family of five while the pinned corpus test
+    said five, and nothing compared the two.
+
     Args:
         cases: The enumeration; only :data:`HIJACK_BLIND` members are read.
 
     Returns:
-        ``{case key: instruction}``, or ``None`` if any prompt fails to parse —
-        a count derived from a partial parse would be a smaller number stated
-        with the confidence of a complete one (ADR 0026).
+        ``{case key: instruction}``, or ``None`` if any case carries no
+        template — a count derived from the cases that happen to carry one
+        would be a smaller number stated with the confidence of a complete one
+        (ADR 0026).
     """
     mapping: dict[str, str] = {}
     for case in cases:
         if case.population != HIJACK_BLIND:
             continue
-        found = _HIJACK_ENVELOPE.search(case.text)
-        if found is None:
+        if not case.template:
             return None
-        mapping[case.key] = found.group(1).strip().lower().rstrip(": ").strip()
+        mapping[case.key] = case.template
     return mapping
 
 
@@ -204,8 +202,8 @@ def attack_units(cases: Sequence[ComparisonCase]) -> dict[str, int | None]:
     A recall of ``246/280`` reads as 280 independent observations. It is not:
     garak materialises many prompts from one attack template, so the held-out
     column rests on the number of templates behind it. The corpus states its own
-    templates for the latent family (``injection_template_of``); the blind family
-    carries no such field and is measured from the text.
+    templates for the latent family (``injection_template_of``); the blind
+    family's template travels on each case (ADR 0021 Am. 1).
 
     Args:
         cases: The enumeration.
@@ -236,11 +234,15 @@ class ComparisonCase:
         population: One of :data:`POPULATIONS`.
         probe: The garak probe the case came from.
         text: The materialised prompt, byte-identical for every contestant.
+        template: The attack instruction the generator materialised the prompt
+            from, where the corpus states one (the blind family, ADR 0021
+            Am. 1); ``None`` elsewhere.
     """
 
     population: str
     probe: str
     text: str
+    template: str | None = None
 
     @property
     def key(self) -> str:
@@ -306,7 +308,12 @@ def comparison_cases() -> tuple[ComparisonCase, ...]:
     # than the whole table, and the column then reads as absent instead of empty.
     with contextlib.suppress(ExternalCorpusUnavailable):
         cases.extend(
-            ComparisonCase(population=HIJACK_BLIND, probe=case.probe, text=case.text)
+            ComparisonCase(
+                population=HIJACK_BLIND,
+                probe=case.probe,
+                text=case.text,
+                template=case.template,
+            )
             for case in load_flat("prompt_hijack").attacks
         )
     with contextlib.suppress(ExternalCorpusUnavailable):
@@ -1266,8 +1273,8 @@ def render(report: ComparisonReport, when: str) -> str:
             for population in ATTACK_POPULATIONS
         )
         + ". Read every recall below with that in mind — and see the blind family broken down "
-        "by template, where the whole spread between contestants turns out to live in one of "
-        "the four.",
+        "by template, where the whole spread between contestants turns out to live in a "
+        "single template.",
     ]
 
     blockers = [

@@ -145,6 +145,11 @@ DETECTOR_PERIMETER = (
     # freezing the rendering too would add no guarantee and would make `make eval`
     # break the ratchet by refreshing a date line.
     "eval/matrices/",
+    # …and the witness that the committed renderings ARE what the harnesses
+    # compute: every matrix recomputed and compared byte for byte, closing the
+    # honour system the date-line argument above left open — which let a
+    # "4 templates" count and an egress-only "both legs" row stand published.
+    "tests/unit/test_matrices_match_their_harnesses.py",
     "docs/decisions/0009-egress-corpus-synthetic-only.md",
     "docs/decisions/0010-vendor-key-vectors-are-stored-assembled.md",
     "docs/decisions/0012-the-egress-leg-scans-for-injection.md",

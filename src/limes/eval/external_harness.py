@@ -93,33 +93,53 @@ class ExternalReport:
         raise KeyError((configuration, population))
 
 
-#: The configurations, and the leg each is actually deployed on.
-CONFIGURATIONS: tuple[tuple[str, Direction], ...] = (
-    ("unplugged (null control)", Direction.OUTBOUND),
-    ("injection (inbound leg)", Direction.INBOUND),
-    ("injection-egress (outbound leg)", Direction.OUTBOUND),
-    ("both, as the proxy deploys them", Direction.OUTBOUND),
+#: The configurations. Each deploys its detectors on the legs :func:`_legs`
+#: states, and a detector is only ever scored on the leg the proxy actually runs
+#: it on: the inbound rules on tool arguments, the egress rules on tool results.
+CONFIGURATIONS: tuple[str, ...] = (
+    "unplugged (null control)",
+    "injection (inbound leg)",
+    "injection-egress (outbound leg)",
+    "both, as the proxy deploys them",
 )
 
+#: One (detectors, direction) pairing a configuration runs — a leg.
+type _Leg = tuple[tuple[Detector, ...], Direction]
 
-def _detectors(name: str) -> list[Detector]:
+
+def _legs(name: str) -> tuple[_Leg, ...]:
+    """The (detectors, leg) pairings a configuration actually deploys.
+
+    The "both" row is the union of the two legs — the deployment's verdict,
+    the same definition :func:`limes.eval.comparison_harness.limes_flags`
+    uses. An earlier version handed both detectors to the outbound leg alone,
+    where the inbound detector answers nothing: the row reprinted the egress
+    row's numbers under a two-leg label, and the matrix published it.
+    """
     if name.startswith("unplugged"):
-        return []
+        # Zero detectors, but the pipeline still runs: the null control
+        # measures that the harness counts nothing when nothing looks.
+        return (((), Direction.OUTBOUND),)
     if name.startswith("injection ("):
-        return [InjectionDetector()]
+        return (((InjectionDetector(),), Direction.INBOUND),)
     if name.startswith("injection-egress"):
-        return [InjectionEgressDetector()]
-    return [InjectionDetector(), InjectionEgressDetector()]
+        return (((InjectionEgressDetector(),), Direction.OUTBOUND),)
+    return (
+        ((InjectionDetector(),), Direction.INBOUND),
+        ((InjectionEgressDetector(),), Direction.OUTBOUND),
+    )
 
 
-def _blocked(detectors: Sequence[Detector], text: str, direction: Direction) -> bool:
+def _blocked(legs: Sequence[_Leg], text: str) -> bool:
     context = Context(policy_hash="external-eval", actor=None)
-    verdict = decide(direction, text, context, detectors, observed_at=_OBSERVED_AT)
-    return isinstance(verdict, Deny)
+    return any(
+        isinstance(decide(direction, text, context, detectors, observed_at=_OBSERVED_AT), Deny)
+        for detectors, direction in legs
+    )
 
 
-def _count(detectors: Sequence[Detector], cases: Sequence[ExternalCase], leg: Direction) -> int:
-    return sum(1 for case in cases if _blocked(detectors, case.text, leg))
+def _count(legs: Sequence[_Leg], cases: Sequence[ExternalCase]) -> int:
+    return sum(1 for case in cases if _blocked(legs, case.text))
 
 
 def compute(splits: Sequence[str]) -> ExternalReport:
@@ -152,18 +172,16 @@ def compute(splits: Sequence[str]) -> ExternalReport:
     cells: list[Cell] = []
     per_probe: list[tuple[str, str, int, int]] = []
 
-    for name, leg in CONFIGURATIONS:
-        detectors = _detectors(name)
+    for name in CONFIGURATIONS:
+        legs = _legs(name)
         for split in splits:
             cases = corpus.split(split)
-            cells.append(
-                Cell(name, f"attacks ({split})", _count(detectors, cases, leg), len(cases))
-            )
+            cells.append(Cell(name, f"attacks ({split})", _count(legs, cases), len(cases)))
         cells.append(
             Cell(
                 name,
                 "matched benign documents",
-                _count(detectors, corpus.benign, leg),
+                _count(legs, corpus.benign),
                 len(corpus.benign),
             )
         )
@@ -173,7 +191,7 @@ def compute(splits: Sequence[str]) -> ExternalReport:
                 Cell(
                     name,
                     "hijack (blind)",
-                    _count(detectors, blind.attacks, leg),
+                    _count(legs, blind.attacks),
                     len(blind.attacks),
                 )
             )
@@ -183,35 +201,32 @@ def compute(splits: Sequence[str]) -> ExternalReport:
                 Cell(
                     name,
                     "out of scope (jailbreak)",
-                    _count(detectors, out_of_scope, leg),
+                    _count(legs, out_of_scope),
                     len(out_of_scope),
                 )
             )
 
-    egress = _detectors("injection-egress (outbound leg)")
+    egress = _legs("injection-egress (outbound leg)")
     for probe in corpus.probes:
         for split in splits:
             cases = tuple(c for c in corpus.split(split) if c.probe == probe)
-            per_probe.append((probe, split, _count(egress, cases, Direction.OUTBOUND), len(cases)))
+            per_probe.append((probe, split, _count(egress, cases), len(cases)))
 
     # The aggregate over this family reads as n=131 and its real unit count is
     # FIVE (ADR 0021). One row per attack template, so a reader can see that the
     # 82% is four templates caught and one missed rather than a rate over prompts.
     per_hijack_template: list[tuple[str, int, int]] = []
     if blind is not None:
-        inbound = [InjectionDetector()]
+        inbound = _legs("injection (inbound leg)")
         for template in sorted({case.template for case in blind.attacks}):
             cases = tuple(case for case in blind.attacks if case.template == template)
-            per_hijack_template.append(
-                (template, _count(inbound, cases, Direction.INBOUND), len(cases))
-            )
+            per_hijack_template.append((template, _count(inbound, cases), len(cases)))
 
     lookalike_killed = _count(
         egress,
         tuple(
             ExternalCase(probe="limes", split="benign", text=case.content) for case in lookalikes
         ),
-        Direction.OUTBOUND,
     )
 
     return ExternalReport(
@@ -264,7 +279,7 @@ def render(report: ExternalReport, when: str) -> str:
         "| configuration | " + " | ".join(populations) + " |",
         "|---" * (len(populations) + 1) + "|",
     ]
-    for name, _ in CONFIGURATIONS:
+    for name in CONFIGURATIONS:
         row = [f"**{name}**" if name.startswith(("injection-egress", "both")) else name]
         for population in populations:
             try:

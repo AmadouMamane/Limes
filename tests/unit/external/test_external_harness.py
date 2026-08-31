@@ -27,7 +27,7 @@ def test_the_matched_controls_survive_every_configuration(dev_report):
     # The strong claim of this corpus: the same documents, minus the injection,
     # are not blocked. If this ever goes non-zero the detector has learnt the
     # document and the recall number stops being about injections at all.
-    for name, _ in CONFIGURATIONS:
+    for name in CONFIGURATIONS:
         assert dev_report.cell(name, "matched benign documents").hits == 0, name
 
 

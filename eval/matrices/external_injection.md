@@ -13,7 +13,7 @@ Generated 2026-08-31 from **garak 0.16.0** (NVIDIA, Apache-2.0) — `garak.probe
 | unplugged (null control) | 0/722 (0.0%) | 0/280 (0.0%) | 0/192 (0.0%) | 0/131 (0.0%) | 0/161 (0.0%) |
 | injection (inbound leg) | 603/722 (83.5%) | 62/280 (22.1%) | 0/192 (0.0%) | 107/131 (81.7%) | 0/161 (0.0%) |
 | **injection-egress (outbound leg)** | 602/722 (83.4%) | 53/280 (18.9%) | 0/192 (0.0%) | 107/131 (81.7%) | 0/161 (0.0%) |
-| **both, as the proxy deploys them** | 602/722 (83.4%) | 53/280 (18.9%) | 0/192 (0.0%) | 107/131 (81.7%) | 0/161 (0.0%) |
+| **both, as the proxy deploys them** | 606/722 (83.9%) | 67/280 (23.9%) | 0/192 (0.0%) | 107/131 (81.7%) | 0/161 (0.0%) |
 
 ## Per probe — `injection-egress`, the leg a tool result arrives on
 
