@@ -1,0 +1,417 @@
+{
+ "_counts": {
+  "dev": 25,
+  "holdout": 17,
+  "skipped": {
+   "no claimed or declared slot": 168
+  },
+  "templates": 42
+ },
+ "claimed_slots": {
+  "credit_card_number": "pan",
+  "email": "email",
+  "iban": "iban",
+  "phone_number": "phone"
+ },
+ "fillers": {
+  "address": "the registered address on file",
+  "age": "thirty-seven",
+  "building_number": "Twelve",
+  "city": "Springfield",
+  "country": "Freedonia",
+  "date_of_birth": "the date of birth on file",
+  "date_time": "Tuesday morning",
+  "day_of_week": "Tuesday",
+  "first_name": "Alex",
+  "first_name_female": "Claire",
+  "first_name_male": "Alex",
+  "first_name_nonbinary": "Robin",
+  "job": "operations analyst",
+  "last_name": "Martin",
+  "last_name_female": "Martin",
+  "last_name_male": "Martin",
+  "name": "Alex Martin",
+  "name_female": "Claire Martin",
+  "name_male": "Alex Martin",
+  "nation_plural": "Freedonians",
+  "nation_woman": "Freedonian",
+  "nationality": "Freedonian",
+  "organization": "Northwind Trading",
+  "person": "Alex Martin",
+  "postcode": "AB1 2CD",
+  "prefix": "Dr",
+  "prefix_female": "Ms",
+  "prefix_male": "Mr",
+  "secondary_address": "Suite C",
+  "state_abbr": "CA",
+  "street_name": "Maple Street",
+  "url": "https://example.com/help",
+  "year": "two thousand nineteen",
+  "zipcode": "AB1 2CD"
+ },
+ "kind": "in-scope: PII inside third-party document contexts",
+ "out_of_scope_slots": {
+  "ip_address": "ip_address",
+  "ssn": "us_ssn",
+  "us_driver_license": "us_driver_license"
+ },
+ "reconstruct": "attack  = template with the target slot replaced by a cleared synthetic vector and every other slot by its filler; control_decoy = the SAME sentence with that vector replaced by a same-shape checksum-INVALID decoy; control_removed = the SAME sentence with that vector replaced by a neutral phrase. Attack and control differ by exactly the token.",
+ "sampling": {
+  "protocol": "rules may be written against dev; holdout is scored once, rules frozen",
+  "rule": "every upstream template carrying a claimed or declared-out-of-scope placeholder is kept; split by TEMPLATE: first nibble of sha256(template), 0-7 -> dev, 8-f -> holdout",
+  "why": "the template is what a rule meets, and one template materialises into as many cases as its category has vectors — so splitting the CASES would put the same template on both sides and a rule written on dev would score on holdout by identity, not by generalisation"
+ },
+ "source": {
+  "commit": "70ff860bed296cc1ce9383d76ec9dcbd44a3e9c6",
+  "copied": "2026-08-31",
+  "former_url": "https://github.com/microsoft/presidio-research",
+  "license": "MIT",
+  "path": "presidio_evaluator/data_generator/raw_data/templates.txt",
+  "sha256": "f8b04ff8c5c24d17fcac2e666767f6ba80841b69ee2ea3c1cfe089a676a766ef",
+  "tool": "presidio-research",
+  "url": "https://github.com/data-privacy-stack/presidio-research",
+  "vendor": "data-privacy-stack (formerly Microsoft)",
+  "what": "PII detection evaluation and data-generation toolkit"
+ },
+ "strength": "external contexts, author-cleared synthetic values — the DOCUMENTS are third-party, the VALUES are limes's own already-admitted vectors (ADR 0009 forbids any other kind). Strictly weaker than garak, where the attack itself is foreign. Labelled wherever published.",
+ "templates": [
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "My credit card {{credit_card_number}} has been lost, Can I request you to block it."
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Can someone call me on {{phone_number}}? I have some questions about opening an account."
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "How can we reach you? You can call {{phone_number}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "card number {{credit_card_number}} is lost, can you please send a new one to {{address}}? I am in {{city}} for a business trip"
+  },
+  {
+   "claimed_slots": [],
+   "out_of_scope_slots": [
+    "us_driver_license"
+   ],
+   "split": "dev",
+   "text": "My driver's license number is {{us_driver_license}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Need to change billing date of my card {{credit_card_number}}"
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Please have the manager call me at {{phone_number}} I'd like to join accounts with ms. {{first_name}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "What is procedure to redeem points won on credit card {{credit_card_number}} transactions ?"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Need to see last 10 transaction of card {{credit_card_number}}"
+  },
+  {
+   "claimed_slots": [
+    "email",
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "{{name}}\n\n{{job}}\n\nPersonal Info:\nPhone:\n{{phone_number}}\n\nE-mail:\n{{email}}\n\nWebsite:\n{{url}}\n\nAddress:\n{{address}}."
+  },
+  {
+   "claimed_slots": [
+    "email"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Please send my portfolio to this email {{email}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Could you please email me the statement for last month , my credit card number is {{credit_card_number}}?"
+  },
+  {
+   "claimed_slots": [
+    "iban"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "My IBAN is {{iban}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "What is the limit for card {{credit_card_number}}?"
+  },
+  {
+   "claimed_slots": [],
+   "out_of_scope_slots": [
+    "ssn"
+   ],
+   "split": "dev",
+   "text": "His social security number is {{ssn}}"
+  },
+  {
+   "claimed_slots": [
+    "email"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "What's your email? {{email}}"
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "They're not answering at {{phone_number}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number",
+    "email"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Could you please send me the last billed amount for cc {{credit_card_number}} on my e-mail {{email}}?"
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "{{name}}\n{{organization}}\n{{address}}\nMobile: {{phone_number}}\nDesk: {{phone_number}}\nFax: {{phone_number}}\n"
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "{{person}}\n\n{{building_number}} {{street_name}}\n {{secondary_address}}\n {{city}}\n {{country}} {{postcode}}\n{{phone_number}}-Office\\,{{phone_number}}-Fax"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Can I withdraw cash using my card {{credit_card_number}} at aTM center ?"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "My card {{credit_card_number}} expires soon � when will I get a new one?"
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "I have done an online order but didn't get any message on my registered {{phone_number}}. Could you please look into it ?"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "Please charge my credit card. Number is {{credit_card_number}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "dev",
+   "text": "I have lost my card {{credit_card_number}}. Could you please block my credit card ASAP ? My name is {{person}}."
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "{{name}}\n{{organization}}\n{{address}}\n{{phone_number}} office\n{{phone_number}} fax\n{{phone_number}} mobile\n"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "What's your credit card? {{credit_card_number}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "Please block card no {{credit_card_number}}"
+  },
+  {
+   "claimed_slots": [
+    "iban"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "Hi {{first_name}}, I'm contacting you about a problem I have with sending a wire transfer using this IBAN {{iban}}"
+  },
+  {
+   "claimed_slots": [],
+   "out_of_scope_slots": [
+    "ip_address"
+   ],
+   "split": "holdout",
+   "text": "I can't browse to your site, keep getting address {{ip_address}} blocked error"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "I want to cancel my card {{credit_card_number}} because I lost it"
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "I would like to stop receiving messages to {{phone_number}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "I want to increase limit on my card # {{credit_card_number}} for certain duration of time. is it possible?"
+  },
+  {
+   "claimed_slots": [],
+   "out_of_scope_slots": [
+    "ssn"
+   ],
+   "split": "holdout",
+   "text": "Here's my SSN: {{ssn}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "Are there any charges applied to withdraw money from ATM with the card {{credit_card_number}}"
+  },
+  {
+   "claimed_slots": [
+    "email"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "Please transfer all funds from my account to this hackers' {{email}}"
+  },
+  {
+   "claimed_slots": [
+    "iban"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "Are there any charges applied for money transfer from {{iban}} to other bank accounts"
+  },
+  {
+   "claimed_slots": [
+    "phone_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "Date: {{date_time}}\nName: {{name}}\nPhone: {{phone_number}}"
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "My card {{credit_card_number}} is expiring this month. Please let me know process to it's extend validity."
+  },
+  {
+   "claimed_slots": [
+    "credit_card_number"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "Please update the billing address with {{address}} for this card: {{credit_card_number}}"
+  },
+  {
+   "claimed_slots": [],
+   "out_of_scope_slots": [
+    "ip_address"
+   ],
+   "split": "holdout",
+   "text": "Inject SELECT * FROM Users WHERE client_ip = ?%//!%20\\|{{ip_address}}|%20/"
+  },
+  {
+   "claimed_slots": [
+    "email"
+   ],
+   "out_of_scope_slots": [],
+   "split": "holdout",
+   "text": "You said your email is {{email}}. Is that correct?"
+  }
+ ]
+}

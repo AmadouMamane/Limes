@@ -652,6 +652,40 @@ fr/de/en; 26 benign lookalikes). Reproduce with `make eval`; the dated matrix is
 Per category, `located`: PAN 7/7, IBAN 9/9, e-mail 5/5, phone 6/6, NIR 5/5
 (baseline: 7/7, 3/9, 5/5, 2/6, 4/5).
 
+#### And against documents limes did not write
+
+The table above is scored on sentences limes's author wrote. ADR 0017 measured
+what that is worth on the other leg: `injection` scored 76% on the author's corpus
+and **24%** on garak's. So `pii-egress` was put in front of **42 sentence
+templates from presidio-research** (MIT) — customer-support and banking prose
+nobody here chose — carrying the *same* cleared synthetic vectors. Dated matrix:
+`eval/matrices/external_pii.md`; ADR 0021.
+
+| configuration | located (dev) | located (holdout) | checksum-invalid decoy | value removed |
+|---|---|---|---|---|
+| unplugged (null control) | 0/161 | 0/95 | 0/256 | 0/39 |
+| block-everything | 0/161 | 0/95 | 256/256 | 39/39 |
+| tessera-pii baseline | 129/161 (80.1%) | 76/95 (80.0%) | 171/256 (66.8%) | 0/39 |
+| **limes pii-egress** | **161/161 (100%)** | **95/95 (100%)** | **9/256 (3.5%)** | 0/39 |
+
+**Strength label: *external contexts, author-cleared values*.** The documents are
+third-party; the values are limes's own admitted vectors, because ADR 0009 forbids
+a real PII value in this repository at any price. That is weaker than garak, where
+the attack itself is foreign, and it is why the label travels with the number.
+
+**It did not drop, and the reason is structural rather than lucky.** PII detection
+is anchored on a checksum, so the prose around the value genuinely does not matter
+— where injection is semantic and collapsed for exactly the opposite reason. The
+**checksum-invalid decoy** column is the evidence: the same sentence with a
+same-shape twin whose Luhn / MOD 97-10 / E.164 / domain-label check fails. limes
+kills 3.5% of them; the ported baseline kills 66.8%. The nine limes kills are all
+IBAN decoys, where `pii:pan` fires on the digit run — the false-positive class the
+internal matrix already names.
+
+**Two blind spots, named.** `nir` has no presidio placeholder, so the category
+limes claims for French banking has **no external number at all**. And the corpus
+is **English only**, where limes's PII rules are fr/de/en.
+
 **`located`, not `flagged` — and that distinction is the grader.** A positive case
 declares the exact substring that must be spanned; a finding counts only when its
 `[start, end)` reproduces it at that offset. So `block-everything` is *flagged* on
@@ -709,6 +743,41 @@ says exactly that instead of inventing a comparison.
 
 Per category, `located`: AWS 2/2, OpenAI 2/2, GitHub 2/2, Stripe 2/2, Google 1/1,
 Slack 2/2, PEM 2/2, JWT 2/2. Dated matrix: `eval/matrices/secrets_egress.md`.
+
+#### And against the industry's credential catalogue — the uncomfortable number
+
+F1 1.00 answers *"do my eight rules find my eight formats"*. A reader takes it for
+*"limes finds credentials"*. So `secrets-egress` was scored against **gitleaks'
+rule catalogue** (MIT): 222 formats, 218 of which materialise into an instance
+generated from the rule's own regex and verified against it, plus **339 of
+gitleaks' own false-positive vectors** as external hard negatives. Dated matrix:
+`eval/matrices/external_secrets.md`; ADR 0021.
+
+| configuration | formats located (dev) | formats located (holdout) | gitleaks' hard negatives killed |
+|---|---|---|---|
+| unplugged (null control) | 0/110 | 0/108 | 0/339 |
+| block-everything | 0/110 | 0/108 | 339/339 |
+| **limes secrets-egress** | **10/110 (9.1%)** | **3/108 (2.8%)** | **47/339 (13.9%)** |
+
+**13 of 218 credential formats, 6.0%.** That is not a regression and not a bug
+report: the perimeter below has always said eight vendor prefixes plus PEM and
+JWT. What this number adds is the perimeter's **size**, measured against somebody
+else's census instead of asserted in prose — the same service ADR 0017's 24% did
+for the injection floor.
+
+**And it named a gap: limes has no low-entropy or placeholder gate.** Of the 47
+external hard negatives killed, roughly 40 are one shape — a credential-shaped
+string whose body carries no entropy: `gho_xxxxxxxx…`, `"token1":
+"xoxp-1234567890"`, and the *published documentation keys* `AKIAIOSFODNN7EXAMPLE`
+and Google's sample `AIzaSy…`. Every gitleaks rule carries an entropy threshold
+and an allowlist for documented examples; every limes rule matches on shape alone.
+No rule was added for it here — a threshold belongs with its own benign
+lookalikes, its mutation test and a re-scored internal matrix — so it is named,
+sized, and open.
+
+Four formats could not be materialised and are **excluded from the denominator**,
+named with their reasons in the matrix: a rule nobody could instantiate is not a
+rule the detector missed (ADR 0015).
 
 Each rule earns its precision differently, and naming the source is the point:
 

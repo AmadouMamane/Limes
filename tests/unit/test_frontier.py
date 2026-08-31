@@ -123,6 +123,15 @@ DETECTOR_PERIMETER = (
     "src/limes/corpus/egress/",
     "src/limes/eval/egress_corpus.py",
     "src/limes/eval/egress_harness.py",
+    # ADR 0021 — the outbound leg meets an adversary it did not write. The two
+    # vendored external corpora, the loader that materialises them, the harness
+    # that scores them, the scripts that reproduce the copies, and their tests.
+    "src/limes/eval/external_egress_corpus.py",
+    "src/limes/eval/external_egress_harness.py",
+    "eval/corpus/",
+    "scripts/vendor_presidio_corpus.py",
+    "scripts/vendor_gitleaks_corpus.py",
+    "docs/decisions/0021-the-outbound-leg-meets-an-adversary-too.md",
     "src/limes/baselines/tessera_pii.py",
     "tests/unit/egress/",
     "tests/integration/egress/",
