@@ -63,11 +63,14 @@ dressed as coverage:
 
 - **It does not filter the user's prompt to the model.** That text never crosses
   the tool seam (§1).
-- **No generic high-entropy secret scanning, and no *unprefixed* credential
+- **No generic high-entropy secret scanning, and no *bare* unprefixed credential
   detection.** A UUID, a git digest, a base64 blob are all high-entropy and none is
-  a secret; an entropy rule with no context is a false-positive generator. An AWS
-  *secret* key, a bare bearer token, a DB password (no vendor prefix) are not
-  detected.
+  a secret; an entropy rule with no context is a false-positive generator — and no
+  entropy threshold can even exist here (ADR 0021 Am. 2). The AWS *secret* access
+  key IS caught when its name is in reach (assignment context, ADR 0022); with no
+  keyword, the bare-body rule was measured at 17/20 hard lookalikes and 15/339 of
+  gitleaks' own negatives killed, so a bare bearer token, a DB password, a lone
+  forty-character blob stay out of scope, with the measurement as the reason.
 - **No PII category beyond the five.** Names, postal addresses, dates of birth are
   not claimed — nothing separates them from ordinary prose the way a checksum
   separates a card number from an order reference, so nothing here would *measure*
