@@ -2,12 +2,13 @@
 
     python redacting_http_proxy.py --upstream URL --port N [options]
 
-limes ships no egress detector, so the shipped HTTP proxy never masks anything.
 This fixture is the same :func:`limes.transports.mcp.http.run_http` — same relay,
-same policy parsing, same HTTP wiring — with test doubles passed as ``outbound``,
-so egress redaction can be proven over a **real HTTP process pair** rather than
-only over in-memory streams. The doubles live in ``tests/`` and are not shippable
-(ADR 0003).
+same policy parsing, same HTTP wiring — with **deterministic test doubles** passed
+as ``outbound`` in place of the admitted detectors the shipped proxy installs, so
+egress redaction can be proven over a **real HTTP process pair** with exactly
+known findings, rather than only over in-memory streams. The doubles live in
+``tests/`` and are not shippable (ADR 0003); the shipped default path is proven
+by the end-to-end test that spawns ``http_proxy.py`` against a real PII leak.
 """
 
 from __future__ import annotations

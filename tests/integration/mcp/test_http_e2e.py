@@ -14,11 +14,16 @@ wire — because the decision is the *same* relay and only the transport changed
   masked in place, a normal result, with the control that shows the server really
   sends them unmasked; a secret blocks; masking is asked for, never the default;
 * **replayable evidence** — a session replayed under a fixed clock re-derives
-  byte-identical chain digests, over real HTTP.
+  byte-identical chain digests, over real HTTP;
+* **the shipped outbound leg** — the proxy an operator actually starts masks a
+  real PII leak with its own admitted detectors, nothing passed in. The leg
+  defaulted to ``()`` until ADR 0018's sentinel reached HTTP, and no test here
+  could have said so, because every masking proof passed its own detectors.
 
-The proxies spawned here are ``http_proxy.py`` (shipped, no egress detector) and
-``redacting_http_proxy.py`` (the same, with an outbound double, because limes
-ships none).
+The proxies spawned here are ``http_proxy.py`` (the shipped default — every
+admitted egress detector on the outbound leg) and ``redacting_http_proxy.py``
+(the same, with deterministic outbound doubles in place of the admitted
+detectors, so the masking proofs assert exactly known findings).
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ from typing import Any
 
 import anyio
 import mcp.types as types
+import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -270,7 +276,15 @@ def test_the_http_record_file_carries_the_decisions_and_they_chain(tmp_path):
         )
 
     entries = _records(record)
-    assert [entry["mcp"]["action"] for entry in entries] == ["forward", "block"]
+    # Four decisions now that the shipped outbound leg is wired (ADR 0018 over
+    # HTTP): the screened tools/list, the benign call on the way in, its
+    # response on the way out, and the injection blocked on the way in.
+    assert [entry["mcp"]["action"] for entry in entries] == [
+        "forward",
+        "forward",
+        "forward",
+        "block",
+    ]
     assert entries[0]["prev_hash"] == "0" * 64, "genesis is 64 zeros"
     assert entries[1]["prev_hash"] == entries[0]["digest"], "each record links to the last"
     logged = json.dumps(entries)
@@ -339,6 +353,36 @@ def test_over_http_the_last4_style_masks_the_card_in_place(tmp_path):
     assert _text(result) == "Votre carte se terminant par ••••1111 a été débitée."
     assert CARD not in json.dumps(result), "the full PAN never leaves, only the last four"
     assert result["_meta"]["limes"]["redaction"]["spans"][0]["style"] == "last4"
+
+
+# --- the shipped default leg: real detectors, real entry point ---------------
+
+
+@pytest.mark.mutation  # seen red with the sentinel resolving to () instead
+def test_the_shipped_http_proxy_masks_a_real_pii_leak_with_its_own_detectors(tmp_path):
+    # The proxy spawned here is http_proxy.py — main_http, the entry `limes
+    # proxy-http` runs — with NOTHING passed as outbound. Until this pin, every
+    # HTTP masking proof went through redacting_http_proxy.py's doubles, so the
+    # shipped default (once `()`) was never on trial: the real proxy filtered
+    # injection inbound and let this very answer leave unmasked.
+    policy = _policy(tmp_path, "on_egress_finding:\n  by_kind:\n    pii: redact\n")
+    record = tmp_path / "decisions.jsonl"
+    with _pair(tmp_path, policy=policy, record=record) as pair:
+        result = _session(pair["proxy_url"], [("echo", {"text": ANSWER})])["results"][0]
+
+    assert result["isError"] is False, "a masked response is a success, not an error"
+    crossed = json.dumps(result)
+    assert CARD not in crossed, "the shipped detectors must mask the card, nothing passed in"
+    assert EMAIL not in crossed
+    assert "1 240,50 EUR" in _text(result), "the useful part of the answer survives"
+    assert result["_meta"]["limes"]["redacted"] is True
+    assert result["_meta"]["limes"]["redaction"]["kinds"] == ["pii"]
+
+    outbound = next(e for e in _records(record) if e["mcp"]["action"] == "redact")
+    assert outbound["direction"] == "outbound"
+    assert "pii-egress" in outbound["verdict_fingerprint"], (
+        "the evidence names the ADMITTED detector — not a test double"
+    )
 
 
 # --- replayable evidence over HTTP ------------------------------------------

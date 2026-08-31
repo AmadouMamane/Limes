@@ -1,11 +1,11 @@
 """A real ``limes proxy`` process with an outbound double installed.
 
-limes ships no egress detector, so the shipped ``limes-proxy`` has nothing on its
-outbound leg and never masks anything. This fixture is the same
-:func:`limes.transports.mcp.bridge.serve` — same relay, same policy parsing, same
-stdio wiring — with a test double passed as ``outbound``. It exists so egress
-redaction can be proven against a **real process pair over real stdio**, rather
-than only over in-memory streams.
+This fixture is the same :func:`limes.transports.mcp.bridge.serve` — same relay,
+same policy parsing, same stdio wiring — with a **deterministic test double**
+passed as ``outbound`` in place of the admitted detectors the shipped proxy
+installs (ADR 0018). It exists so egress redaction can be proven against a
+**real process pair over real stdio** with exactly known findings, rather than
+only over in-memory streams.
 
 It is spawned exactly like the proxy is: ``python redacting_proxy.py [options] --
 <server command...>``.

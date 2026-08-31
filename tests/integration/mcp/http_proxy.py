@@ -3,8 +3,10 @@
     python http_proxy.py --upstream URL --port N [options]
 
 This is exactly what ``limes proxy-http`` runs — :func:`limes.transports.mcp.http.main_http`
-— with no outbound detector, because limes ships none. It exists so the tests can
-spawn the shipped proxy the same way an operator would, over real HTTP.
+— nothing passed, nothing overridden, so the outbound leg carries whatever the
+shipped default installs (every admitted egress detector, ADR 0018). It exists so
+the tests can spawn the shipped proxy the same way an operator would, over real
+HTTP — which is precisely what caught the leg empty.
 """
 
 from __future__ import annotations

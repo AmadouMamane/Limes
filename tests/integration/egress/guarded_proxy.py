@@ -1,17 +1,17 @@
 """A real ``limes proxy`` process with the **shipped** ``pii-egress`` detector wired.
 
 The difference from ``tests/integration/mcp/redacting_proxy.py`` is the whole
-point of this work: that one installs a *double*, because until now limes shipped
+point of this work: that one installs a *double*, written when limes shipped
 no egress detector and the outbound seam was machinery with nobody to feed it.
 This one installs :class:`~limes.detectors.pii_egress.PiiEgressDetector` — the
 admitted plugin, the one with a corpus and a matrix — and nothing else changes:
 same :func:`limes.transports.mcp.bridge.serve`, same relay, same policy parsing.
 
-It stays a test fixture rather than becoming the default of ``limes-proxy``
-because *which* detectors an operator wants on the outbound leg is a deployment
-decision, and a proxy that silently masked everybody's tool results would be
-making it for them. What the shipped proxy gains is that the choice is now
-available at all.
+It stays a test fixture because it pins an exact detector pair. The shipped
+``limes-proxy`` now installs *every* admitted egress detector by default
+(ADR 0018), with the egress policy — blocking unless the operator declares
+otherwise — deciding what a finding costs; this fixture holds the leg's
+contents constant so the proofs name exactly who found what.
 
 Spawned exactly like the proxy: ``python guarded_proxy.py [options] -- <server…>``.
 """

@@ -191,9 +191,12 @@ class Relay:
 
         Args:
             inbound: Detectors run over ``tools/call`` arguments.
-            outbound: Detectors run over guarded responses. **Empty in the shipped
-                proxy** — limes ships no egress detector. When empty, the outbound
-                leg is a pure pass-through and emits no record.
+            outbound: Detectors run over guarded responses. The shipped proxies
+                install every admitted egress detector here via
+                :func:`outbound_detectors` (ADR 0018); an empty sequence is a
+                deliberately unguarded leg — a pure pass-through that emits no
+                record, which the transparency tests use to prove exact
+                pass-through.
             policy_hash: SHA-256 of the active policy, recorded into evidence.
             on_cannot_say: Fail-closed policy for a blind detector.
             actor: The identity asserted by the invoking session, or ``None``.
@@ -614,9 +617,9 @@ async def serve(
         egress=config.egress,
     )
     if config.egress.redacts_anything() and not relay.outbound_is_wired:
-        # A setting that governs nothing must say so. limes ships no egress
-        # detector, so the outbound leg observes nothing and there is nothing to
-        # mask — the operator asked for a behaviour this process cannot exhibit.
+        # A setting that governs nothing must say so. Reachable only when the
+        # caller passed a deliberately empty outbound leg: it observes nothing
+        # and there is nothing to mask — a behaviour this process cannot exhibit.
         _note(
             "on_egress_finding asks for masking, but no egress detector is installed: the "
             "outbound leg inspects nothing, so nothing will be masked. The setting is live for "

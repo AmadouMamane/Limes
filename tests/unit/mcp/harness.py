@@ -50,10 +50,12 @@ class BlindDetector:
 
 
 class EgressDouble:
-    """A test double for the *outbound* leg. limes ships no egress detector.
+    """A deterministic test double for the *outbound* leg.
 
     It exists only to prove the outbound seam is really wired — that a detector
-    installed there is run and enforced — not to stand in for a product feature.
+    installed there is run and enforced — with an exactly known finding, unlike
+    the admitted egress detectors the shipped proxies install (ADR 0018). It does
+    not stand in for a product feature.
     """
 
     id = "egress-double"

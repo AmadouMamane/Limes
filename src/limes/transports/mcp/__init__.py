@@ -8,12 +8,14 @@ pipeline, and saying, in the refusal, exactly what fired.
 
 On the way back, a response that trips an *outbound* detector is blocked by
 default and, under a redacting egress policy, masked and forwarded instead
-(:mod:`limes.transports.redaction`, ADR 0006). limes ships no egress detector, so
-that path is machinery waiting for one, not a product claim.
+(:mod:`limes.transports.redaction`, ADR 0006). The shipped proxies install every
+admitted egress detector on that leg (ADR 0018: the leg selects its detectors,
+in every transport).
 
 This is a **transport** (ADR 0004). It imports :func:`limes.guard.decide` (through
 :class:`limes.transports.in_process.Guard`), the verdict algebra and the ledger,
-and it modifies none of them. It ships **no detector**.
+and it modifies none of them. It **defines no detector of its own** — the ones it
+installs live in :mod:`limes.detectors`.
 
 The MCP SDK is an optional extra — ``pip install 'limes[mcp]'``. Every module in
 this package imports without it **except** :mod:`limes.transports.mcp.bridge`, so

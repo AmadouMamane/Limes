@@ -56,7 +56,13 @@ from starlette.types import Receive, Scope, Send
 from limes.detector import Detector
 from limes.detectors.injection import InjectionDetector
 from limes.policy import load_injection_policy
-from limes.transports.mcp.bridge import IncomingStream, OutgoingStream, Relay, utc_now_iso
+from limes.transports.mcp.bridge import (
+    IncomingStream,
+    OutgoingStream,
+    Relay,
+    outbound_detectors,
+    utc_now_iso,
+)
 from limes.transports.mcp.config import (
     DEFAULT_ON_CANNOT_SAY,
     OnCannotSay,
@@ -190,9 +196,18 @@ def _relay_factory(
     *,
     sink: RecordSink,
     clock: Callable[[], str],
-    outbound: Sequence[Detector],
+    outbound: Sequence[Detector] | None,
 ) -> Callable[[], Relay]:
-    """Build the per-session relay factory (a fresh ledger per host session)."""
+    """Build the per-session relay factory (a fresh ledger per host session).
+
+    ``outbound=None`` installs every admitted egress detector, exactly as the
+    stdio proxy's :func:`~limes.transports.mcp.bridge.serve` does (ADR 0018:
+    the leg selects its detectors, in every transport). The sentinel is
+    resolved here — the single point every HTTP entry funnels through — so
+    ``build_asgi_app``, ``serve_http`` and ``run_http`` cannot drift apart.
+    """
+    if outbound is None:
+        outbound = outbound_detectors()
     policy = load_injection_policy(config.policy_path)
     detector = InjectionDetector(policy)
 
@@ -224,7 +239,7 @@ def build_asgi_app(
     *,
     sink: RecordSink,
     clock: Callable[[], str] = utc_now_iso,
-    outbound: Sequence[Detector] = (),
+    outbound: Sequence[Detector] | None = None,
 ) -> Starlette:
     """Build the Starlette app that serves the guarded proxy over Streamable HTTP.
 
@@ -232,9 +247,19 @@ def build_asgi_app(
         config: The invocation.
         sink: Where decision records are written.
         clock: Supplies ``observed_at``; injectable for a deterministic replay.
-        outbound: Detectors for the outbound leg. Empty in the shipped proxy —
-            limes ships no egress detector — a parameter so an embedder or an
-            end-to-end proof can install one.
+        outbound: Detectors for the outbound leg. ``None`` — the default, and
+            what ``limes proxy-http`` passes — installs every admitted egress
+            detector (ADR 0018: the leg selects its detectors, in every
+            transport). Pass an explicit sequence to override, including ``()``
+            for a deliberately unguarded outbound leg.
+
+            This used to default to ``()``, with a docstring saying limes
+            shipped no egress detector. The stdio proxy had exactly that defect
+            and was fixed by ADR 0018 — the HTTP transport did not receive the
+            fix, so ``limes proxy-http`` filtered injection inbound and let
+            PII and secrets leave unscanned while the README promised parity
+            with stdio. No test caught it, because every HTTP end-to-end proof
+            passed its own detectors in.
 
     Returns:
         A Starlette application. Its lifespan runs the SDK session manager; the
@@ -264,7 +289,7 @@ async def serve_http(
     *,
     sink: RecordSink | None = None,
     clock: Callable[[], str] = utc_now_iso,
-    outbound: Sequence[Detector] = (),
+    outbound: Sequence[Detector] | None = None,
 ) -> None:
     """Serve the guarded proxy until the process is stopped.
 
@@ -275,7 +300,9 @@ async def serve_http(
             unlike stdio, HTTP does not use stdout as its channel — but stderr
             stays the default for consistency.
         clock: Override the clock (replay). Defaults to UTC now.
-        outbound: Detectors for the outbound leg (empty in the shipped proxy).
+        outbound: Detectors for the outbound leg. ``None`` installs every
+            admitted egress detector (ADR 0018); ``()`` is a deliberately
+            unguarded leg.
     """
     owned_sink = sink if sink is not None else open_sink(config.record_path)
     app = build_asgi_app(config, sink=owned_sink, clock=clock, outbound=outbound)
@@ -300,9 +327,13 @@ def run_http(
     *,
     sink: RecordSink | None = None,
     clock: Callable[[], str] = utc_now_iso,
-    outbound: Sequence[Detector] = (),
+    outbound: Sequence[Detector] | None = None,
 ) -> None:
-    """Run :func:`serve_http` to completion on a fresh event loop."""
+    """Run :func:`serve_http` to completion on a fresh event loop.
+
+    ``outbound=None`` installs every admitted egress detector (ADR 0018);
+    ``()`` is a deliberately unguarded leg.
+    """
 
     async def _main() -> None:
         await serve_http(config, sink=sink, clock=clock, outbound=outbound)
@@ -362,9 +393,11 @@ def build_http_parser(prog: str) -> argparse.ArgumentParser:
         "--on-egress-finding",
         choices=[member.value for member in OnEgressFinding],
         default=None,
-        help=f"what to do when a detector fires on a response (default: "
-        f"{DEFAULT_ON_EGRESS_FINDING.value}). Overrides the policy file's default. limes "
-        "ships no egress detector, so nothing exercises this today.",
+        help=f"what to do when a detector fires on a *response* (default: "
+        f"{DEFAULT_ON_EGRESS_FINDING.value}). `redact` masks the matched regions with "
+        "[REDACTED:<kind>] and forwards the rest. Overrides the policy file's default; "
+        "per-kind rules stay as `on_egress_finding.by_kind` declares them. The "
+        "outbound leg runs every admitted egress detector (ADR 0018).",
     )
     parser.add_argument(
         "--actor",

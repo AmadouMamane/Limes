@@ -15,7 +15,9 @@ The claims, each with its control:
   and offsets, carries none of the masked text, and chains.
 
 The proxy here is ``redacting_proxy.py``: :func:`limes.transports.mcp.bridge.serve`
-with an outbound double installed, because limes ships no egress detector.
+with a deterministic outbound double installed in place of the admitted egress
+detectors the shipped proxy carries (ADR 0018), so every masked value is exactly
+known.
 """
 
 from __future__ import annotations
