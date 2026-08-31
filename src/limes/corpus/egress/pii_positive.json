@@ -258,6 +258,30 @@
       "content": "French social security number 2 77 09 31 402 116 39 on file.",
       "locate": "2 77 09 31 402 116 39",
       "why": "Synthetic NIR quoted inside English prose — the value, not the surrounding language, is what the rule keys on."
+    },
+    {
+      "id": "phone_07_upper_case_label_fr",
+      "category": "phone",
+      "language": "fr",
+      "content": "TEL 06 12 34 56 78 — merci de rappeler avant 18h.",
+      "locate": "06 12 34 56 78",
+      "why": "A phone number after an ALL-CAPS label. Added with ADR 0021 Am. 2: tightening pii:phone's left boundary to reject any preceding upper-case group measured ZERO cost on every corpus here and silently lost this case, because no corpus contained one. The corpus can now see it."
+    },
+    {
+      "id": "phone_08_upper_case_label_en",
+      "category": "phone",
+      "language": "en",
+      "content": "CONTACT +33 6 12 34 56 78 for the escalation rota.",
+      "locate": "+33 6 12 34 56 78",
+      "why": "The international form of the same blind spot, in English."
+    },
+    {
+      "id": "phone_09_upper_case_label_de",
+      "category": "phone",
+      "language": "de",
+      "content": "MOBIL +49 30 901820 steht im Ticket.",
+      "locate": "+49 30 901820",
+      "why": "The German form of the same blind spot."
     }
   ]
 }

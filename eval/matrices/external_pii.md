@@ -8,10 +8,10 @@ Generated 2026-08-31 from **presidio-research** (MIT, commit `70ff860bed29`, <ht
 
 | configuration | values located (dev) | values located (holdout) | matched control: checksum-invalid decoy | matched control: value removed | out-of-scope slots (declared) |
 |---|---|---|---|---|---|
-| unplugged (null control) | 0/161 (0.0%) | 0/95 (0.0%) | 0/256 (0.0%) | 0/39 (0.0%) | 0/5 (0.0%) |
-| block-everything | 0/161 (0.0%) | 0/95 (0.0%) | 256/256 (100.0%) | 39/39 (100.0%) | 5/5 (100.0%) |
-| tessera-pii baseline (apply_output_guard) | 129/161 (80.1%) | 76/95 (80.0%) | 171/256 (66.8%) | 0/39 (0.0%) | 0/5 (0.0%) |
-| **limes pii-egress** | 161/161 (100.0%) | 95/95 (100.0%) | 9/256 (3.5%) | 0/39 (0.0%) | 0/5 (0.0%) |
+| unplugged (null control) | 0/185 (0.0%) | 0/104 (0.0%) | 0/289 (0.0%) | 0/39 (0.0%) | 0/5 (0.0%) |
+| block-everything | 0/185 (0.0%) | 0/104 (0.0%) | 289/289 (100.0%) | 39/39 (100.0%) | 5/5 (100.0%) |
+| tessera-pii baseline (apply_output_guard) | 137/185 (74.1%) | 79/104 (76.0%) | 171/289 (59.2%) | 0/39 (0.0%) | 0/5 (0.0%) |
+| **limes pii-egress** | 185/185 (100.0%) | 104/104 (100.0%) | 6/289 (2.1%) | 0/39 (0.0%) | 0/5 (0.0%) |
 
 - **values located** — the exact synthetic vector, at its own offsets, inside a third-party sentence. The *documents* are presidio-research's; the *values* are limes's own already-admitted ones, because ADR 0009 forbids any other kind.
 - **checksum-invalid decoy** — the same sentence, the value replaced by a same-shape twin whose Luhn / MOD 97-10 / E.164 check fails. limes says its precision comes from the checksum; this column is where that claim is paid for.
@@ -23,24 +23,24 @@ Generated 2026-08-31 from **presidio-research** (MIT, commit `70ff860bed29`, <ht
 | category | located | decoys killed |
 |---|---|---|
 | **email** | 30/30 (100.0%) | 0 |
-| **iban** | 27/27 (100.0%) | 9 |
+| **iban** | 27/27 (100.0%) | 6 |
 | **pan** | 133/133 (100.0%) | 0 |
-| **phone** | 66/66 (100.0%) | 0 |
+| **phone** | 99/99 (100.0%) | 0 |
 
 ## Where the misses are
 
 - No template loses a value. Over 42 third-party sentence contexts, the detector's recall does not depend on the prose around the value — which is the claim this corpus exists to test, and the one it supports.
 
-**Decoys killed:** 9. Named, not rounded away: `t012_iban_01_decoy`, `t012_iban_04_decoy`, `t012_iban_05_decoy`, `t028_iban_01_decoy`, `t028_iban_04_decoy`, `t028_iban_05_decoy`, `t036_iban_01_decoy`, `t036_iban_04_decoy`, `t036_iban_05_decoy`
+**Decoys killed:** 6. Named, not rounded away: `t012_iban_04_decoy`, `t012_iban_05_decoy`, `t028_iban_04_decoy`, `t028_iban_05_decoy`, `t036_iban_04_decoy`, `t036_iban_05_decoy`
 
 ## The two numbers
 
-- **Values located (dev):** 161/161 (100.0%).
-- **Values located (holdout):** 95/95 (100.0%).
-- **matched control: checksum-invalid decoy:** 9/256 (3.5%) killed.
+- **Values located (dev):** 185/185 (100.0%).
+- **Values located (holdout):** 104/104 (100.0%).
+- **matched control: checksum-invalid decoy:** 6/289 (2.1%) killed.
 - **matched control: value removed:** 0/39 (0.0%) killed.
 - **out-of-scope slots (declared):** 0/5 (0.0%) killed.
-- **Power of the false-positive claim:** n=300, alpha=0.05, minimum detectable effect ~= 0.017 (of 300 benign inputs flipped (one-sided exact sign test)).
+- **Power of the false-positive claim:** n=333, alpha=0.05, minimum detectable effect ~= 0.015 (of 333 benign inputs flipped (one-sided exact sign test)).
 
 ## The protocol
 

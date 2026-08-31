@@ -57,6 +57,7 @@ import argparse
 import hashlib
 import io
 import json
+import random
 import re
 import re._parser as sre
 import tarfile
@@ -93,8 +94,20 @@ RULE_FILE = re.compile(r"cmd/generate/config/rules/[^/]+\.go$")
 INLINE_FLAG = re.compile(r"\(\?([imsx]+)\)")
 
 #: A generated character is drawn from this alphabet wherever a class allows a
-#: choice, so the artifact is byte-reproducible with no seed and no RNG.
+#: choice.
 SAFE = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+#: The draw is RANDOM, seeded per rule id, and that is a correction rather than a
+#: refinement. The first version picked the middle character of every class, which
+#: is deterministic and reproducible and produced `gho_VVVVVVVV...` — the single
+#: LEAST representative instance the pattern admits. It cost nothing for a
+#: shape-only recall measurement, and it silently destroyed every question about
+#: the token's BODY: measured, the materialised positives had Shannon entropy
+#: 0.00 while gitleaks' placeholder negatives had 0.00 too, so "is this body a
+#: placeholder" was unanswerable on a corpus whose positives were placeholders.
+#: Seeding from the rule id keeps the artifact byte-reproducible while making each
+#: instance look like what the format actually issues.
+DRAW_SEED = "limes-adr-0021"
 
 MAX_REPEAT_SENTINEL = 4294967295
 
@@ -121,7 +134,7 @@ def _from_category(category: object) -> str:
     return "k"
 
 
-def _pick(items: list[tuple[object, Any]]) -> str:
+def _pick(items: list[tuple[object, Any]], rng: random.Random) -> str:
     negate = any(op is sre.NEGATE for op, _ in items)
     allowed: list[str] = []
     for op, value in items:
@@ -140,10 +153,10 @@ def _pick(items: list[tuple[object, Any]]) -> str:
     preferred = sorted({c for c in allowed if c in SAFE}) or sorted(set(allowed))
     if not preferred:
         raise Unmaterialisable("character class admits nothing printable")
-    return preferred[len(preferred) // 2]
+    return rng.choice(preferred)
 
 
-def _generate(parsed: Any) -> str:  # noqa: ANN401 - sre's parse tree is untyped
+def _generate(parsed: Any, rng: random.Random) -> str:  # noqa: ANN401 - sre's tree is untyped
     out: list[str] = []
     for op, value in parsed:
         if op is sre.LITERAL:
@@ -151,20 +164,20 @@ def _generate(parsed: Any) -> str:  # noqa: ANN401 - sre's parse tree is untyped
         elif op is sre.NOT_LITERAL:
             out.append("x" if value != ord("x") else "y")
         elif op is sre.IN:
-            out.append(_pick(list(value)))
+            out.append(_pick(list(value), rng))
         elif op is sre.ANY:
             out.append("x")
         elif op in (sre.MAX_REPEAT, sre.MIN_REPEAT):
             low, high, sub = value
             high = low if high >= MAX_REPEAT_SENTINEL else high
             count = low if low > 0 else min(1, high)
-            out.append("".join(_generate(sub) for _ in range(count)))
+            out.append("".join(_generate(sub, rng) for _ in range(count)))
         elif op is sre.SUBPATTERN:
-            out.append(_generate(value[3]))
+            out.append(_generate(value[3], rng))
         elif op is sre.BRANCH:
-            out.append(_generate(value[1][0]))
+            out.append(_generate(value[1][0], rng))
         elif op is sre.ATOMIC_GROUP:
-            out.append(_generate(value))
+            out.append(_generate(value, rng))
         elif op in (sre.AT, sre.GROUPREF, sre.ASSERT, sre.ASSERT_NOT):
             continue
         elif op is sre.CATEGORY:
@@ -174,14 +187,21 @@ def _generate(parsed: Any) -> str:  # noqa: ANN401 - sre's parse tree is untyped
     return "".join(out)
 
 
-def materialise(pattern: str) -> str:
-    """One string matching ``pattern``, deterministically. Raises if it cannot."""
+def materialise(pattern: str, rule_id: str) -> str:
+    """One string matching ``pattern``, deterministically. Raises if it cannot.
+
+    Args:
+        pattern: The upstream Go RE2 pattern.
+        rule_id: Seeds the draw, so each instance is independent of its
+            neighbours' presence and the artifact reproduces byte for byte.
+    """
     python_pattern = to_python(pattern)
+    rng = random.Random(f"{DRAW_SEED}:{rule_id}")
     try:
         parsed = sre.parse(python_pattern)
     except re.error as error:
         raise Unmaterialisable(f"pattern does not parse in Python: {error}") from error
-    instance = _generate(parsed)
+    instance = _generate(parsed, rng)
     try:
         if not re.search(python_pattern, instance):
             raise Unmaterialisable("generated instance does not match its own rule")
@@ -266,7 +286,7 @@ def build(archive: bytes) -> dict[str, Any]:
             blind.append({"rule": rule_id, "reason": "the rule matches on path, not content"})
             continue
         try:
-            token = materialise(str(pattern))
+            token = materialise(str(pattern), rule_id)
         except Unmaterialisable as unmaterialisable:
             blind.append({"rule": rule_id, "reason": str(unmaterialisable)})
             continue

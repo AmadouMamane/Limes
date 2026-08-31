@@ -70,10 +70,26 @@ detectors:
       # trailing space after every alternative. That shape passed the positive
       # corpus (prose usually has a space there) and would have missed a number
       # at the end of a sentence.
+      #
+      # The second lookbehind is precision, bought from the external bench (ADR
+      # 0021 Am. 2). A telephone number does not CONTINUE a run of digit groups:
+      # in `DE00 3704 0044 0532 0130 00` the tail `0532 0130 00` is eleven digits,
+      # inside E.164's range, and passes this rule's own validator — it is a
+      # fragment of an account number, not a number. Rejecting a candidate whose
+      # immediately preceding token is a DIGIT group costs nothing measurable
+      # (6/6 internal and 66/66 external positives held) and takes limes' single
+      # published internal false positive to zero.
+      #
+      # It is deliberately digits-only. Extending it to any upper-case group
+      # killed all six external decoy false positives at zero measured cost too —
+      # and the measurement was blind: no corpus here contains an upper-case label
+      # before a number, so `TEL 06 12 34 56 78` and `CONTACT +33 6 12 34 56 78`
+      # were silently missed. Those cases are now IN the positive corpus, so the
+      # next person's number can see what this one could not (ADR 0026).
       - label: pii:phone
         validator: phone_digits
         retry_trim: false
-        pattern: '(?<![A-Za-z0-9+])(?:(?:\+33[ \xa0.-]?|0)[1-9](?:[ \xa0.-]?\d{2}){4}|(?:\+49[ \xa0.-]?|0)[1-9]\d{1,4}[ \xa0./-]?\d{3,9}|\+[1-9]\d{0,2}[ \xa0.-]?(?:\d[ \xa0.-]?){5,12}\d)(?![A-Za-z0-9])'
+        pattern: '(?<![A-Za-z0-9+])(?<![0-9][ \xa0])(?:(?:\+33[ \xa0.-]?|0)[1-9](?:[ \xa0.-]?\d{2}){4}|(?:\+49[ \xa0.-]?|0)[1-9]\d{1,4}[ \xa0./-]?\d{3,9}|\+[1-9]\d{0,2}[ \xa0.-]?(?:\d[ \xa0.-]?){5,12}\d)(?![A-Za-z0-9])'
 
       # French social-security number (NIR). Fifteen characters, the last two a
       # control key equal to 97 - (body mod 97) — with Corsica's 2A / 2B
@@ -133,11 +149,32 @@ detectors:
         retry_trim: false
         pattern: '(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])'
 
-      # Slack bot / user / app / workspace token.
+      # Slack bot / user / workspace token, at the grammar Slack actually issues.
+      #
+      # This rule used to be `xox[baprse]-[A-Za-z0-9-]{10,}` — the prefix plus ten
+      # of anything — and its corpus vector said so out loud: "the vendor prefix
+      # IS the discriminant for this rule, not the segmented body". The external
+      # bench priced that at **14 false positives**, every Slack lookalike gitleaks
+      # ships: `xoxb-12345-abcd234`, `xoxa-access-token-string`,
+      # `xoxb-xoxb-my-bot-token`, `xoxp-1234567890` (ADR 0021 Am. 2).
+      #
+      # The cause was not the rule alone. limes' own positive vector was
+      # `xoxb-EXAMPLE-ONLY-SYNTHETIC-NOT-A-REAL-TOKEN`, which has no Slack token
+      # shape at all — letters where the team and channel ids are digits — so the
+      # rule had been loosened until it matched the corpus rather than the format.
+      # Both are corrected together, and the replacement vectors are validated
+      # against GITLEAKS' OWN patterns, not against this rule.
       - label: secret:slack-token
         validator: none
         retry_trim: false
-        pattern: '(?<![A-Za-z0-9-])xox[baprse]-[A-Za-z0-9-]{10,}(?![A-Za-z0-9-])'
+        # The alternation is gitleaks' OWN slack grammars (MIT, attributed in
+        # eval/corpus/gitleaks/PROVENANCE.md), transcribed case-explicitly rather
+        # than re-derived. Writing it from a reading of the format instead cost
+        # FOUR real formats — `xoxb-4938479689-9153451358` (a bot token with no
+        # trailing body), the legacy two-segment bot token, `xoxe-7-…` and
+        # `xoxa-7-nJL8ZjTG` — all of which the vendor's own rules accept and a
+        # tidier-looking rule did not. Reuse, measured, is the whole positioning.
+        pattern: '(?<![A-Za-z0-9-])(?:xoxb-[0-9]{10,13}-[0-9]{10,13}[A-Za-z0-9-]*|xoxb-[0-9]{8,14}-[A-Za-z0-9]{18,26}|xox[pe](?:-[0-9]{10,13}){3}-[A-Za-z0-9-]{28,34}|xox[os]-[0-9]+-[0-9]+-[0-9]+-[a-fA-F0-9]+|xox[ar]-(?:[0-9]-)?[0-9A-Za-z]{8,48}|[xX][oO][xX][eE].[xX][oO][xX][bBpP]-[0-9]-[A-Za-z0-9]{163,166}|[xX][oO][xX][eE]-[0-9]-[A-Za-z0-9]{146}|[xX][aA][pP][pP]-[0-9]-[A-Za-z0-9]+-[0-9]+-[a-z0-9]+)(?![A-Za-z0-9-])'
 
       # PEM private key. The span is the WHOLE BLOCK, not the armour line: a
       # finding that located only `-----BEGIN … PRIVATE KEY-----` would be masked
@@ -145,8 +182,16 @@ detectors:
       # END line is missing the alternation swallows the rest of the content —
       # masking too much beats forwarding a truncated key. `CERTIFICATE` and
       # `PUBLIC KEY` armour is deliberately not matched: neither is a secret.
+      # The validator is key MATERIAL, added after the external bench found the
+      # armour alone firing on `-----BEGIN OPENSSH PRIVATE KEY----------END …-----`
+      # (nothing between the lines) and on a block whose body is the word
+      # `anything` (ADR 0021 Am. 2). Armour with no key under it is not a key. The
+      # floor is 16 base64 characters, set by the FORMAT and not by this corpus:
+      # the smallest real private key material — an Ed25519 seed, 32 bytes —
+      # base64-encodes to 44 characters, so 16 sits far below any true key and far
+      # above a word.
       - label: secret:private-key-pem
-        validator: none
+        validator: pem_key_material
         retry_trim: false
         pattern: '-----BEGIN (?:[A-Z][A-Z0-9 ]*)?PRIVATE KEY-----(?:[\s\S]*?-----END (?:[A-Z][A-Z0-9 ]*)?PRIVATE KEY-----|[\s\S]*)'
 

@@ -652,10 +652,10 @@ fr/de/en; 26 benign lookalikes). Reproduce with `make eval`; the dated matrix is
 
 | configuration | located | flagged | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|---|
-| unplugged (null control) | 0/32 | 0/32 | 0/26 | 0.00 | 0.00 | 0.00 |
-| block-everything | 0/32 | 32/32 | 26/26 | 0.00 | 0.00 | 0.00 |
-| tessera-pii baseline (`apply_output_guard`) | 21/32 | 27/32 | 15/26 | 0.66 | 0.58 | 0.62 |
-| **limes pii-egress** | **32/32** | 32/32 | **1/26** | **1.00** | **0.97** | **0.98** |
+| unplugged (null control) | 0/35 | 0/35 | 0/26 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/35 | 35/35 | 26/26 | 0.00 | 0.00 | 0.00 |
+| tessera-pii baseline (`apply_output_guard`) | 22/35 | 28/35 | 15/26 | 0.63 | 0.59 | 0.61 |
+| **limes pii-egress** | **35/35** | 35/35 | **1/26** | **1.00** | **0.97** | **0.99** |
 
 Per category, `located`: PAN 7/7, IBAN 9/9, e-mail 5/5, phone 6/6, NIR 5/5
 (baseline: 7/7, 3/9, 5/5, 2/6, 4/5).
@@ -671,10 +671,19 @@ nobody here chose — carrying the *same* cleared synthetic vectors. Dated matri
 
 | configuration | located (dev) | located (holdout) | checksum-invalid decoy | value removed |
 |---|---|---|---|---|
-| unplugged (null control) | 0/161 | 0/95 | 0/256 | 0/39 |
-| block-everything | 0/161 | 0/95 | 256/256 | 39/39 |
-| tessera-pii baseline | 129/161 (80.1%) | 76/95 (80.0%) | 171/256 (66.8%) | 0/39 |
-| **limes pii-egress** | **161/161 (100%)** | **95/95 (100%)** | **9/256 (3.5%)** | 0/39 |
+| unplugged (null control) | 0/185 | 0/104 | 0/289 | 0/39 |
+| block-everything | 0/185 | 0/104 | 289/289 | 39/39 |
+| tessera-pii baseline | 137/185 (74.1%) | 79/104 (76.0%) | 171/289 (59.2%) | 0/39 |
+| **limes pii-egress** | **185/185 (100%)** | **104/104 (100%)** | **6/289 (2.1%)** | 0/39 |
+
+The decoy column was **9/256 (3.5%)** until ADR 0021 Am. 2. It was never the IBAN
+rule: `pii:iban` fires on **0** decoys, so its MOD 97-10 gate is total. The kills
+were *other* rules on digit runs inside the rejected IBAN. Tightening `pii:phone`
+so a number may not **continue** a run of digit groups took it to 2.1% at zero
+measured recall cost. The six that remain are named and deliberate — see the
+amendment: suppressing a Luhn-valid run inside an IBAN-shaped span cannot tell a
+coincidence from a real card behind a four-character prefix, and that trade buys a
+false positive with a false negative.
 
 **Strength label: *external contexts, author-cleared values*.** The documents are
 third-party; the values are limes's own admitted vectors, because ADR 0009 forbids
@@ -745,9 +754,9 @@ says exactly that instead of inventing a comparison.
 
 | configuration | located | flagged | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|---|
-| unplugged (null control) | 0/15 | 0/15 | 0/20 | 0.00 | 0.00 | 0.00 |
-| block-everything | 0/15 | 15/15 | 20/20 | 0.00 | 0.00 | 0.00 |
-| **limes secrets-egress** | **15/15** | 15/15 | **0/20** | **1.00** | **1.00** | **1.00** |
+| unplugged (null control) | 0/15 | 0/15 | 0/25 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/15 | 15/15 | 25/25 | 0.00 | 0.00 | 0.00 |
+| **limes secrets-egress** | **15/15** | 15/15 | **0/25** | **1.00** | **1.00** | **1.00** |
 
 Per category, `located`: AWS 2/2, OpenAI 2/2, GitHub 2/2, Stripe 2/2, Google 1/1,
 Slack 2/2, PEM 2/2, JWT 2/2. Dated matrix: `eval/matrices/secrets_egress.md`.
@@ -773,15 +782,16 @@ JWT. What this number adds is the perimeter's **size**, measured against somebod
 else's census instead of asserted in prose — the same service ADR 0017's 24% did
 for the injection floor.
 
-**And it named a gap: limes has no low-entropy or placeholder gate.** Of the 47
+**And it named a gap.** Of the 47
 external hard negatives killed, roughly 40 are one shape — a credential-shaped
 string whose body carries no entropy: `gho_xxxxxxxx…`, `"token1":
 "xoxp-1234567890"`, and the *published documentation keys* `AKIAIOSFODNN7EXAMPLE`
-and Google's sample `AIzaSy…`. Every gitleaks rule carries an entropy threshold
-and an allowlist for documented examples; every limes rule matches on shape alone.
-No rule was added for it here — a threshold belongs with its own benign
-lookalikes, its mutation test and a re-scored internal matrix — so it is named,
-sized, and open.
+and Google's sample `AIzaSy…`. ADR 0021 Am. 2 took that apart: about half were
+**rule defects**, now fixed by the vendor's own grammar and a PEM material check;
+the rest are a **declared policy difference** — gitleaks does not alert on
+documented example keys, limes holds that a credential-shaped string leaving a
+system is a leak signal whichever key it is, which is the position ADR 0009
+already encodes by putting `AKIAIOSFODNN7EXAMPLE` in the *positive* corpus.
 
 Four formats could not be materialised and are **excluded from the denominator**,
 named with their reasons in the matrix: a rule nobody could instantiate is not a

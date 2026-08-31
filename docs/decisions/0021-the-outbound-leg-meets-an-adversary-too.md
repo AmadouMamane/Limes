@@ -253,3 +253,156 @@ from an independent family; an emit-a-quoted-literal rule kills 6 of 12 realisti
 benign lookalikes; a typographic-boundary rule fires on 6 of the 192 *matched
 benign controls*, which is the control that exists to catch exactly that. The
 ceiling is where the rules are, and it is reported rather than papered over.
+
+## Amendment 2 — the two precision holes, one closed by the vendor's own grammar and one refused (2026-08-31)
+
+The bench above measured `secrets-egress` killing **47/339** of gitleaks' hard
+negatives and `pii-egress` killing **9/256** of its checksum-invalid decoys. This
+amendment closes what could be closed, and records what could not — including one
+fix that was designed, measured and **refused**.
+
+### What the diagnosis turned out to be, twice
+
+Both stated causes were wrong, and the measurement said so before any code moved.
+
+**PII was not a MOD-97 gap.** `pii:iban` fires on **0 of 256** decoys: its
+checksum gate is total. All nine kills were *other rules* on digit runs inside the
+rejected IBAN — six `pii:phone` on an eleven-digit tail (inside E.164's range, so
+its own validator passes) and three `pii:pan` on a sixteen-digit run that is
+Luhn-valid by coincidence. Neither rule is defective on its own terms; the defect
+is that three rules scan the same bytes with no authority between them.
+
+**Secrets was not, mainly, an entropy gap.** An entropy gate was designed, then
+**refused on the evidence**, below.
+
+### The entropy gate is refused, and this is the measurement that refused it
+
+Per rule, Shannon entropy over the token body, real positives against the
+negatives they must be told from:
+
+| rule | internal positive | external positive | gitleaks' negatives |
+|---|---|---|---|
+| `github-token` | 1.83 | 4.63 – 4.87 | **0.00** |
+| `aws-access-key-id` | 3.02 – 3.62 | — | 0.00 **and 3.62** |
+| `openai-key` | 2.24 – 2.47 | 5.52 – 5.71 | **5.00 – 5.10** |
+| `google-api-key` | 2.21 | — | 0.00 **to 5.07** |
+
+Three findings kill it:
+
+1. **`google-api-key` cannot be gated.** Sixteen of its seventeen false positives
+   are *well-formed, high-entropy Google API keys* — 4.50 to 5.07, above every
+   limes positive. They are indistinguishable from live keys by any content
+   analysis, and no threshold reaches them.
+2. **`openai-key` is inverted.** Its negatives (5.00 – 5.10) sit *above* limes's
+   internal positives (2.24 – 2.47). A threshold that kills the negatives kills
+   the corpus.
+3. **ADR 0009 makes limes's own positives placeholders.** `gho_EXAMPLEONLY0000…`
+   carries a 25-character run of zeros; `AIzaSyEXAMPLEONLY0000…` a 22-character
+   one. A gate whose job is to reject placeholder bodies is being asked to accept
+   this repository's, and the only thing separating them from `gho_xxxx…` is
+   *which* placeholder convention the author happened to use. That is not a
+   security property.
+
+`AKIAIOSFODNN7EXAMPLE` makes the same point without arithmetic: it is
+simultaneously a **positive in limes's own corpus** (which must be located, ADR
+0009 names it) and a **hard negative in gitleaks'** (which must not fire). An
+example allowlist would take the internal matrix from 15/15 to 14/15. The two
+corpora disagree about the string, and no gate resolves a disagreement about
+what the thing *is*.
+
+So no entropy gate ships, and **no threshold was pinned** — a threshold fitted to
+one or two synthetic placeholders is an unmeasured number wearing a decimal point.
+
+### What did close, and why each threshold is what it is
+
+**`pem_key_material`, floor 16 base64 characters.** Armour with no key under it is
+not a key: `-----BEGIN OPENSSH PRIVATE KEY----------END …-----` carries zero, and
+one gitleaks negative puts the word `anything` (8) between the lines. The floor is
+set by the **format, not the corpus** — the smallest real private key material, an
+Ed25519 seed of 32 bytes, base64-encodes to 44 characters — so 16 sits far below
+any true key and far above a word. An *unterminated* block still passes on its
+material, because the rule deliberately swallows to the end of the content there
+and masking too much beats forwarding a truncated key.
+
+**The slack grammar: gitleaks' own, transcribed.** The shipped rule asked for a
+vendor prefix plus ten of anything, and its corpus vector said so out loud — *"the
+vendor prefix IS the discriminant for this rule, not the segmented body"*. That
+cost 14 false positives.
+
+The cause was **not the rule alone**. limes's own positive vector was
+`xoxb-EXAMPLE-ONLY-SYNTHETIC-NOT-A-REAL-TOKEN`, which has no Slack token shape at
+all — letters where the team and channel ids are digits. The rule had been
+loosened until it matched the corpus rather than the format, and only an outside
+corpus could show it. Both are corrected together, and the replacement vectors are
+checked against **gitleaks' own `slack-bot-token` and `slack-user-token`
+patterns** — an external definition, not this repository's new rule.
+
+Writing the grammar from a *reading* of the format was tried first and lost four
+real formats — `xoxb-4938479689-9153451358` (a bot token with no trailing body),
+the legacy two-segment bot token, `xoxe-7-…` and `xoxa-7-nJL8ZjTG`. The shipped
+alternation is the vendor's own, transcribed case-explicitly. Reuse, measured, is
+the positioning.
+
+**The phone left boundary, `(?<![0-9][ \xa0])`.** A telephone number does not
+*continue* a run of digit groups. Zero measured recall cost (6/6 internal and
+66/66 external positives held) and it takes limes's single published internal
+false positive to zero.
+
+It is deliberately digits-only, and the reason is a blind spot that nearly
+shipped: extending it to any preceding **upper-case** group killed all six phone
+decoys at zero measured cost on every corpus here — and the measurement was blind,
+because no corpus held an upper-case label before a number. Hand probes found
+`TEL 06 12 34 56 78` and `CONTACT +33 6 12 34 56 78` silently missed. Those three
+cases are now **in the positive corpus**, so the next person's number can see what
+this one could not (ADR 0026).
+
+### What was measured and deliberately NOT fixed
+
+**A Luhn-valid run inside a broken IBAN still fires** — 3 of 289 external decoys,
+1 of 26 internal lookalikes. The obvious fix is to let an IBAN-shaped span
+suppress findings inside it. It cannot distinguish `AT00 1904 3002 3457 3201` (a
+coincidence) from `AB12 4242 4242 4242 4242` (a real card behind four characters
+of prefix): there is no content property separating them, and Luhn passes both. So
+the suppression would trade a false positive on a corrupted account number for a
+**false negative on a card number**, which is the worse error for an egress guard.
+Refused, with a test that a later "fix" must delete.
+
+**Twenty-four of the 47 secrets false positives are a declared policy difference,
+not a defect** — 17 well-formed Google keys, 6 well-formed Anthropic keys, 1 JWT
+with a valid header. gitleaks does not alert on documented example keys; limes
+holds that a credential-shaped string leaving a system is a leak signal whichever
+key it is. That is the position ADR 0009 already encodes by putting
+`AKIAIOSFODNN7EXAMPLE` in the positive corpus. It is a difference worth publishing,
+not a hole to close.
+
+### Before → after, both numbers together
+
+| | recall | false positives |
+|---|---|---|
+| `secrets-egress`, internal | 15/15 → **15/15** | 0/20 → **0/25** (corpus grew by 5 lookalikes) |
+| `secrets-egress`, external | 13/218 → **16/218** | 47/339 (13.9%) → **33/339 (9.7%)** |
+| `pii-egress`, internal | 32/32 → **35/35** (corpus grew by 3) | 1/26 → **1/26** |
+| `pii-egress`, external | 100% dev + holdout → **100%** | 9/256 (3.5%) → **6/289 (2.1%)** |
+
+External secrets recall went **up**, not merely held: adopting the vendor's own
+grammar found `slack-app-token` and `slack-legacy-token`, which the loose
+prefix rule had never matched.
+
+### One instrument correction, recorded
+
+The vendoring script materialised each instance by picking the **middle character
+of every class** — deterministic, reproducible, and the single least
+representative string the pattern admits. It cost nothing for a shape-only recall
+measurement and silently destroyed every question about the token's *body*: the
+materialised positives had Shannon entropy 0.00, exactly like the placeholder
+negatives they had to be told from. The draw is now random, seeded per rule id, so
+the artifact stays byte-reproducible. Recall and false positives were **identical
+before and after** the change (13/218 and 47/339), which is how it was checked not
+to be a thumb on the scale.
+
+### Frontier
+
+Nothing here is byte-frozen: `egress.yaml`, `egress_policy.py` and
+`src/limes/corpus/egress/` are all inside `DETECTOR_PERIMETER`, which is where a
+detector's rules, checks and corpus are supposed to move. No re-pin is required
+and none is claimed.

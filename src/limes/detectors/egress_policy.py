@@ -84,6 +84,35 @@ def _grouped_luhn(candidate: str) -> bool:
     return luhn_valid(compact(candidate))
 
 
+#: Where a PEM block's key material starts, and where it stops.
+_PEM_BODY: Final = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----(.*?)(?:-----END|$)", re.S)
+_NON_BASE64: Final = re.compile(r"[^A-Za-z0-9+/=]")
+
+#: The floor is set by the FORMAT, not by the corpus: the smallest real private
+#: key material — an Ed25519 seed, 32 bytes — base64-encodes to 44 characters, so
+#: 16 sits far below any true key and far above the word `anything`, which is
+#: what one of gitleaks' hard negatives puts between the armour lines.
+_PEM_MIN_BASE64: Final = 16
+
+
+def _pem_key_material(candidate: str) -> bool:
+    """Whether a PEM block actually carries key material, not just its armour.
+
+    The armour line is not the secret. `-----BEGIN OPENSSH PRIVATE KEY-----`
+    immediately followed by its END line contains no key, and a block whose body
+    is a single English word is a placeholder in somebody's documentation. Both
+    fired before this check existed (ADR 0021 Am. 2).
+
+    An *unterminated* block still passes on its material: the rule deliberately
+    swallows to the end of the content when the END line is missing, because
+    masking too much beats forwarding a truncated key.
+    """
+    match = _PEM_BODY.search(candidate)
+    if match is None:
+        return False
+    return len(_NON_BASE64.sub("", match.group(1))) >= _PEM_MIN_BASE64
+
+
 def _phone_digit_count(candidate: str) -> bool:
     """A plausible subscriber number: 9 to 15 digits, the E.164 range."""
     digits = _NON_DIGIT.sub("", candidate)
@@ -95,6 +124,7 @@ def _phone_digit_count(candidate: str) -> bool:
 #: nothing — a detector reporting "clean" over a check that never happened.
 VALIDATORS: Final[Mapping[str, Callable[[str], bool]]] = {
     "none": _always,
+    "pem_key_material": _pem_key_material,
     "luhn": _grouped_luhn,
     "iban_mod97": iban_mod97_valid,
     "nir_key": nir_key_valid,
