@@ -94,6 +94,52 @@ def test_a_non_boolean_retry_trim_is_refused(tmp_path):
         load_egress_policy(path)
 
 
+def test_a_value_group_the_pattern_does_not_define_is_refused(tmp_path):
+    # The failure this refuses: a rule declaring its value lives in a group its
+    # own shape never captures — every match would silently span nothing.
+    path = _write(
+        tmp_path,
+        "version: 1\ndetectors:\n  pii-egress:\n    max_content_chars: 1000\n    rules:\n"
+        "      - label: pii:pan\n        validator: none\n"
+        "        value_group: secret\n        pattern: '\\d+'\n",
+    )
+    with pytest.raises(ValueError, match="no group of that name"):
+        load_egress_policy(path)
+
+
+def test_value_group_with_retry_trim_is_refused(tmp_path):
+    # Trimming re-derives the span from the whole match, narrowing derives it
+    # from a group; the combination has no measured meaning and is refused
+    # rather than guessed at.
+    path = _write(
+        tmp_path,
+        "version: 1\ndetectors:\n  pii-egress:\n    max_content_chars: 1000\n    rules:\n"
+        "      - label: pii:pan\n        validator: none\n        retry_trim: true\n"
+        "        value_group: secret\n        pattern: '(?P<secret>\\d+)'\n",
+    )
+    with pytest.raises(ValueError, match="both value_group and"):
+        load_egress_policy(path)
+
+
+def test_a_non_string_value_group_is_refused(tmp_path):
+    path = _write(
+        tmp_path,
+        "version: 1\ndetectors:\n  pii-egress:\n    max_content_chars: 1000\n    rules:\n"
+        "      - label: pii:pan\n        validator: none\n"
+        "        value_group: 3\n        pattern: '(\\d+)'\n",
+    )
+    with pytest.raises(ValueError, match="value_group"):
+        load_egress_policy(path)
+
+
+def test_exactly_the_context_anchored_rule_declares_a_value_group():
+    # Every rule before ADR 0022 spans its whole match; the AWS-secret rule is
+    # the one whose shape includes context. A second value_group rule is not
+    # wrong — but it must arrive by the same gate, so this list is explicit.
+    grouped = [rule.label for rule in load_egress_policy().rules if rule.value_group is not None]
+    assert grouped == ["secret:aws-secret-access-key"]
+
+
 def test_the_hash_changes_with_the_file(tmp_path):
     first = _write(
         tmp_path,

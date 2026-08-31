@@ -77,7 +77,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
 | **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1 (one audited exception, ADR 0011), and a *ratchet* — a test that may only tighten — says so |
-| **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; unprefixed credentials. Declared blind spots, not backlog |
+| **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, the context-anchored AWS secret access key, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; *bare* unprefixed credentials — a keyword-anchored AWS secret is caught, a bodyless blob is measured out of reach (ADR 0022). Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
 | **Egress** | three detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
 | **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
@@ -746,7 +746,8 @@ one-line amendment (the digest is total now), the same input answers
 ## The secrets egress detector — `secrets-egress` (outbound, v0.6)
 
 Prefixed API keys (AWS, OpenAI, GitHub, Stripe, Google, Slack), **PEM private-key
-blocks** and **JWTs**. Admitted the same way, with one difference stated rather
+blocks**, **JWTs** — and the **AWS secret access key by its assignment context**
+(ADR 0022). Admitted the same way, with one difference stated rather
 than glossed: **there is no baseline.** Tessera's guard policy declares `tools`,
 `prompt_injection` and `pii` and nothing else — checked, not assumed — so nothing
 comparable ships elsewhere and **the null control *is* the baseline**. The report
@@ -754,12 +755,13 @@ says exactly that instead of inventing a comparison.
 
 | configuration | located | flagged | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|---|
-| unplugged (null control) | 0/15 | 0/15 | 0/25 | 0.00 | 0.00 | 0.00 |
-| block-everything | 0/15 | 15/15 | 25/25 | 0.00 | 0.00 | 0.00 |
-| **limes secrets-egress** | **15/15** | 15/15 | **0/25** | **1.00** | **1.00** | **1.00** |
+| unplugged (null control) | 0/20 | 0/20 | 0/32 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/20 | 20/20 | 32/32 | 0.00 | 0.00 | 0.00 |
+| **limes secrets-egress** | **20/20** | 20/20 | **0/32** | **1.00** | **1.00** | **1.00** |
 
-Per category, `located`: AWS 2/2, OpenAI 2/2, GitHub 2/2, Stripe 2/2, Google 1/1,
-Slack 2/2, PEM 2/2, JWT 2/2. Dated matrix: `eval/matrices/secrets_egress.md`.
+Per category, `located`: AWS key id 2/2, AWS secret 5/5, OpenAI 2/2, GitHub 2/2,
+Stripe 2/2, Google 1/1, Slack 2/2, PEM 2/2, JWT 2/2. Dated matrix:
+`eval/matrices/secrets_egress.md`.
 
 #### And against the industry's credential catalogue — the uncomfortable number
 
@@ -774,13 +776,18 @@ gitleaks' own false-positive vectors** as external hard negatives. Dated matrix:
 |---|---|---|---|
 | unplugged (null control) | 0/110 | 0/108 | 0/339 |
 | block-everything | 0/110 | 0/108 | 339/339 |
-| **limes secrets-egress** | **10/110 (9.1%)** | **3/108 (2.8%)** | **47/339 (13.9%)** |
+| **limes secrets-egress** | **12/110 (10.9%)** | **4/108 (3.7%)** | **33/339 (9.7%)** |
 
-**13 of 218 credential formats, 6.0%.** That is not a regression and not a bug
+**16 of 218 credential formats, 7.3%.** That is not a regression and not a bug
 report: the perimeter below has always said eight vendor prefixes plus PEM and
 JWT. What this number adds is the perimeter's **size**, measured against somebody
 else's census instead of asserted in prose — the same service ADR 0017's 24% did
-for the injection floor.
+for the injection floor. The AWS-secret rule (ADR 0022) cannot move this table
+in either direction, and both directions are worth reading: it adds **zero**
+kills on the vendor's own 339 hard negatives, and it adds zero located formats
+because gitleaks *has no AWS-secret rule* to materialise — the industry's
+biggest catalogue covers that format only through an entropy gate, which is
+exactly the tool limes measured itself out of (ADR 0021 Am. 2).
 
 **And it named a gap.** Of the 47
 external hard negatives killed, roughly 40 are one shape — a credential-shaped
@@ -811,7 +818,19 @@ Each rule earns its precision differently, and naming the source is the point:
   located only `-----BEGIN … PRIVATE KEY-----` would be masked to exactly that and
   would forward the key material underneath it. An unterminated block swallows to
   the end of the content: masking too much beats forwarding a partial key.
-  `CERTIFICATE` and `PUBLIC KEY` armour is not matched — neither is a secret.
+  `CERTIFICATE` and `PUBLIC KEY` armour is not matched — neither is a secret;
+- **an unprefixed secret is caught by its name, or not at all** (ADR 0022). The
+  AWS *secret* access key is forty base64 characters with no prefix — by content
+  alone it is a git SHA-1, a cache key, an ETag. Measured: a bare-body rule
+  kills 17/20 of a hard lookalike corpus and 15/339 of gitleaks' negatives, and
+  git-secrets — AWS's own scanner — ships that rule with every context group
+  optional, at 64/339 here. What lands instead is gitleaks' own assignment
+  grammar around AWS's own vocabulary (`aws_secret_access_key`,
+  `SecretAccessKey`, Terraform's `secret_key`), the finding narrowed to the
+  value, and a charset check refusing an unbroken hex run: 12/12 assignment
+  carriers on dev, **6/6 on a sealed holdout**, zero new kills across all 371
+  external and internal lookalikes. The generic keyword list
+  (`access|api|key|token|…`) was measured and refused at 11/20.
 
 ### What `secrets-egress` deliberately does not do
 
@@ -821,9 +840,17 @@ a secret. An entropy rule with no context is a false-positive generator that
 teaches its operator to switch the detector off. All of those are in the benign
 corpus instead, as the lookalikes the shipped rules must not fire on.
 
-**Consequence, stated: an *unprefixed* credential is not detected** — an AWS
-*secret access key*, a database password, a bare bearer token. That is a declared
-blind spot with a test pinning it, not an oversight.
+**Consequence, stated: a *bare* unprefixed credential is still not detected** —
+a database password, a bare bearer token, a forty-character blob with no keyword
+in reach. The AWS secret access key is now caught **when its name is in reach**
+(ADR 0022); the same measurement that landed that rule prices the bodyless case
+out — 17/20 hard lookalikes and 15/339 of gitleaks' own negatives killed by a
+bare-body rule — and the only discriminant left after context and charset is the
+entropy threshold ADR 0009 forbids. Carriers with no assignment operator are
+declared misses with tests pinning them: `ENV AWS_SECRET_ACCESS_KEY <v>`,
+`aws configure set … <v>`, `os.environ["…"] = "<v>"`, a positional
+`Aws::Credentials.new(…)` argument. A declared boundary with tests pinning both
+sides, not an oversight.
 
 ### End to end, over both transports
 
@@ -1050,9 +1077,11 @@ What it does:
 
 ## What limes does NOT do
 
-**No generic high-entropy secret scanning**, and no *unprefixed* credential
-detection — see "What `secrets-egress` deliberately does not do" above. Both are
-declared blind spots with tests pinning them, not backlog dressed as coverage.
+**No generic high-entropy secret scanning**, and no *bare* unprefixed credential
+detection — the keyword-anchored AWS secret is caught (ADR 0022), the bodyless
+blob is measured out of reach — see "What `secrets-egress` deliberately does not
+do" above. Declared blind spots with tests pinning them, not backlog dressed as
+coverage.
 
 **No PII category beyond the five.** Names, postal addresses and dates of birth
 are *not* claimed. Not because they do not matter, but because nothing separates

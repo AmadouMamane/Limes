@@ -132,6 +132,10 @@ DETECTOR_PERIMETER = (
     "scripts/vendor_presidio_corpus.py",
     "scripts/vendor_gitleaks_corpus.py",
     "docs/decisions/0021-the-outbound-leg-meets-an-adversary-too.md",
+    # ADR 0022 — the context-anchored AWS secret: the split verdict (keyword
+    # case landed, bodyless case measured impossible) and the value_group /
+    # not_pure_hex machinery it added to the egress policy.
+    "docs/decisions/0022-an-unprefixed-secret-is-caught-by-its-name-or-not-at-all.md",
     "tests/unit/test_hijack_family_names_its_templates.py",
     "src/limes/baselines/tessera_pii.py",
     "tests/unit/egress/",

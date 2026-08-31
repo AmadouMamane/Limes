@@ -101,17 +101,21 @@ detectors:
 
   # -- secrets-egress (ADR 0003 admission: eval/matrices/secrets_egress.md) ----
   #
-  # PREFIXED credentials only, plus PEM private-key armour and JWTs. What is
-  # DELIBERATELY absent is the obvious feature: generic high-entropy scanning.
-  # A UUID, a git digest, a base64 blob and a content hash are all high-entropy
-  # and none is a secret, so an entropy rule with no context is a false-positive
-  # generator that teaches its operator to switch the detector off. It is
-  # deferred, not forgotten, and the README says so rather than implying coverage
-  # limes does not have.
+  # PREFIXED credentials, PEM private-key armour, JWTs — and one CONTEXT-ANCHORED
+  # format, the AWS secret access key (ADR 0022). What is DELIBERATELY absent is
+  # the obvious feature: generic high-entropy scanning. A UUID, a git digest, a
+  # base64 blob and a content hash are all high-entropy and none is a secret, so
+  # an entropy rule with no context is a false-positive generator that teaches
+  # its operator to switch the detector off. And ADR 0021 Am. 2 measured that no
+  # entropy threshold can even exist here: ADR 0009 makes limes' own positives
+  # placeholders, so a gate that rejects placeholder bodies rejects the corpus.
   #
-  # Consequence, stated: an unprefixed credential — an AWS *secret access key*, a
-  # database password, a bare bearer token — is NOT detected. The benign corpus
-  # is what proves the rules that are here do not fire on the lookalikes.
+  # Consequence, stated: a BARE unprefixed credential — a database password, a
+  # bare bearer token, a forty-character blob with no keyword in reach — is NOT
+  # detected, at a measured price rather than a preference: the bare-body rule
+  # kills 17/20 hard lookalikes and 15/339 of gitleaks' own negatives (ADR 0022).
+  # The benign corpus is what proves the rules that are here do not fire on the
+  # lookalikes.
   secrets-egress:
     max_content_chars: 200000
     rules:
@@ -123,6 +127,50 @@ detectors:
         validator: none
         retry_trim: false
         pattern: '(?<![A-Za-z0-9])(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[0-9A-Z]{16}(?![A-Za-z0-9])'
+
+      # AWS *secret* access key — the other half of the pair, and the first
+      # CONTEXT-ANCHORED rule (ADR 0022). The value is forty base64 characters
+      # with no assigned prefix, so the body alone is indistinguishable from a
+      # git SHA-1, a content digest or a cache key — measured: a bare-body rule
+      # kills 17/20 of the hard benign corpus, 15/339 of gitleaks' negatives and
+      # 3 of limes' own lookalikes. What separates a credential from an artefact
+      # here is the NAME IT IS ASSIGNED TO, so the shape is gitleaks' own
+      # semi-generic assignment grammar (MIT, transcribed from the vendored
+      # catalogue — cloudflare-api-key and gitter-access-token carry the same
+      # machinery; \x27 is an apostrophe, escaped for this single-quoted YAML):
+      # keyword, up to twenty identifier characters, an assignment operator,
+      # optional quoting, the exactly-forty body, a terminator. The operator is
+      # the discriminant the proximity idea lacks: "keyword within 40 chars of a
+      # body" was measured and REFUSED at 14/20 hard lookalikes killed.
+      #
+      # The keywords are AWS's own vocabulary, never the generic list:
+      # aws…secret…key as one identifier (aws_secret_access_key, aws.secretKey,
+      # cloud.aws.credentials.secretKey), "secret access key" as prose or
+      # CamelCase (SecretAccessKey — the STS response field), and bare
+      # secret_key (Terraform's provider argument, MinIO). The generic keyword
+      # list (access|api|key|token|…) was measured and REFUSED: 11/20 hard
+      # lookalikes killed and 3 of gitleaks' negatives — a password hash, a
+      # cache key, an ARN resource tail (eval/matrices + ADR 0022).
+      #
+      # `value_group` narrows the finding to the credential itself: the mask
+      # must cover the value, not the line that names it. The validator refuses
+      # a body that is one unbroken HEX run — a charset property, not an entropy
+      # threshold: a real secret is base64 over thirty random bytes (all-hex
+      # probability 2^-80), while what actually sits behind these keywords at
+      # forty hex characters is a fingerprint or a pinned SHA-1 by construction.
+      #
+      # Declared misses, measured and left (tests pin them): a space-separated
+      # carrier with no operator (`ENV AWS_SECRET_ACCESS_KEY <v>`, `aws
+      # configure set … <v>`), a bracketed key (`os.environ["…"] = "<v>"` — the
+      # ] is outside the vendor grammar's classes), and a positional argument
+      # (`Aws::Credentials.new('AKIA…', '<v>')` — no keyword adjoins the value).
+      # The BARE body with no keyword at all is out of scope by measurement, not
+      # by preference: ADR 0022 records why no rule can hold it under ADR 0009.
+      - label: secret:aws-secret-access-key
+        validator: not_pure_hex
+        retry_trim: false
+        value_group: secret
+        pattern: '(?i)[\w.-]{0,50}?(?:aws[\w.-]{0,15}?secret[\w.-]{0,15}?key|secret[ _.-]?access[ _.-]?key|secret[_.-]?key)(?:[ \t\w.-]{0,20})[\s\x27"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60\x27"\s=]{0,5}(?P<secret>[A-Za-z0-9/+]{40})(?:[\x60\x27"\s;]|\\[nr]|$)'
 
       # OpenAI-style API key: `sk-` or `sk-proj-` and a long opaque body.
       - label: secret:openai-key

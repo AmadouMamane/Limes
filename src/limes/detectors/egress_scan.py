@@ -10,6 +10,9 @@ the greedy match that failed its check — the substring that actually passed. T
 transport masks by those offsets (ADR 0006) and the eval grades by them
 (:mod:`limes.eval.egress_harness`), so a detector that reported a span it did not
 verify would hand the masker the wrong bytes *and* score a true positive for it.
+A rule whose shape includes *context* around the value (``value_group``, ADR
+0022) narrows to its declared group before any of that: the keyword and operator
+are how the value was recognised, not part of it.
 
 **A failing candidate may only be shortened.** ``retry_trim`` drops the trailing
 group and re-checks; it never widens, never relaxes the validator, and never
@@ -120,10 +123,20 @@ def scan(content: str, rules: Sequence[EgressRule], *, detector_id: str) -> list
     findings: list[Finding] = []
     for rule in rules:
         for match in rule.pattern.finditer(content):
-            validated = _validated(match.group(0), rule)
+            if rule.value_group is None:
+                candidate, candidate_start = match.group(0), match.start()
+            else:
+                # A context-anchored rule (ADR 0022): the shape includes the
+                # keyword and operator around the value, but the VALUE is what
+                # gets validated, spanned and masked — never the carrier line.
+                grouped = match.group(rule.value_group)
+                if grouped is None:
+                    continue
+                candidate, candidate_start = grouped, match.start(rule.value_group)
+            validated = _validated(candidate, rule)
             if validated is None:
                 continue
-            start = match.start()
+            start = candidate_start
             end = start + len(validated)
             findings.append(
                 Finding(

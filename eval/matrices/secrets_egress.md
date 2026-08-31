@@ -1,20 +1,21 @@
 # limes `secrets-egress` — confusion matrix
 
-Generated 2026-08-31 over the synthetic egress corpus (15 positive cases across 8 categories, fr/de/en; 25 benign lookalikes). Every value is synthetic by construction and may never be a real one (ADR 0009).
+Generated 2026-08-31 over the synthetic egress corpus (20 positive cases across 9 categories, fr/de/en; 32 benign lookalikes). Every value is synthetic by construction and may never be a real one (ADR 0009).
 
 **How a hit is counted.** A positive case declares the exact substring that must be spanned. A finding counts only when its `[start, end)` reproduces that substring at that offset — so a detector that fires on the whole message is *flagged* everywhere and *located* nowhere. Read the `located` column, not the `flagged` one.
 
 | configuration | located | flagged | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|---|
-| unplugged (null control) | 0/15 | 0/15 | 0/25 | 0.00 | 0.00 | 0.00 |
-| block-everything | 0/15 | 15/15 | 25/25 | 0.00 | 0.00 | 0.00 |
-| **limes secrets-egress** | **15/15** | 15/15 | **0/25** | 1.00 | 1.00 | 1.00 |
+| unplugged (null control) | 0/20 | 0/20 | 0/32 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/20 | 20/20 | 32/32 | 0.00 | 0.00 | 0.00 |
+| **limes secrets-egress** | **20/20** | 20/20 | **0/32** | 1.00 | 1.00 | 1.00 |
 
 ## Per category
 
 | category | unplugged (null control) | block-everything | limes secrets-egress | lookalikes |
 |---|---|---|---|---|
 | **aws_key** | 0/2 | 0/2 | 2/2 | 0/6 killed |
+| **aws_secret** | 0/5 | 0/5 | 5/5 | 0/7 killed |
 | **github_token** | 0/2 | 0/2 | 2/2 | 0/1 killed |
 | **google_api_key** | 0/1 | 0/1 | 1/1 | 0/1 killed |
 | **jwt** | 0/2 | 0/2 | 2/2 | 0/5 killed |
@@ -25,12 +26,12 @@ Generated 2026-08-31 over the synthetic egress corpus (15 positive cases across 
 
 ## The two numbers
 
-- **Values located:** 15/15 (the unplugged guard locates 0/15).
-- **Legitimate output killed:** 0/25 (block-everything kills 25/25 while locating 0/15).
+- **Values located:** 20/20 (the unplugged guard locates 0/20).
+- **Legitimate output killed:** 0/32 (block-everything kills 32/32 while locating 0/20).
 
 ## Null control
 
-ADMITTED — limes secrets-egress locates 15/15 against the unplugged control's 0/15, and kills 0/25 benign inputs. Power on the benign claim: n=25, alpha=0.05, minimum detectable effect ~= 0.200 (of 25 benign inputs flipped (one-sided exact sign test)). A smaller false-positive rate than that would be invisible here — grow the benign corpus.
+ADMITTED — limes secrets-egress locates 20/20 against the unplugged control's 0/20, and kills 0/32 benign inputs. Power on the benign claim: n=32, alpha=0.05, minimum detectable effect ~= 0.156 (of 32 benign inputs flipped (one-sided exact sign test)). A smaller false-positive rate than that would be invisible here — grow the benign corpus.
 
 ## Baseline
 

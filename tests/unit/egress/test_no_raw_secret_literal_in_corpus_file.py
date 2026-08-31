@@ -30,9 +30,20 @@ from limes.eval.egress_corpus import corpus_path, load_positive
 #: rule NOT in this set is a vendor-key prefix that must be stored assembled.
 _LITERAL_ALLOWED = frozenset({"secret:private-key-pem", "secret:jwt"})
 
-#: The positive categories that are stored assembled (ADR 0010) — the vendor keys.
+#: The positive categories that are stored assembled (ADR 0010) — the vendor keys,
+#: and the context-anchored AWS secret (ADR 0022): its keyword + operator + body
+#: assignment is exactly the line git-secrets and GitHub push protection match,
+#: so the file may never carry it contiguously either.
 _ASSEMBLED_CATEGORIES = frozenset(
-    {"aws_key", "openai_key", "github_token", "stripe_key", "google_api_key", "slack_token"}
+    {
+        "aws_key",
+        "aws_secret",
+        "openai_key",
+        "github_token",
+        "stripe_key",
+        "google_api_key",
+        "slack_token",
+    }
 )
 
 
@@ -63,6 +74,7 @@ def test_the_witness_is_not_vacuous_it_sees_the_rules_it_scans_with():
     labels = {rule.label for rule in _prefixed_key_rules()}
     assert labels == {
         "secret:aws-access-key-id",
+        "secret:aws-secret-access-key",
         "secret:openai-key",
         "secret:github-token",
         "secret:stripe-key",

@@ -1,7 +1,8 @@
 """The ``secrets-egress`` detector (ADR 0003/0004) — credentials on the way out.
 
 Prefixed API keys (AWS, OpenAI, GitHub, Stripe, Google, Slack), **PEM private-key
-blocks**, and **JWTs**. Admitted on its own numbers
+blocks**, **JWTs** — and the **AWS secret access key by its assignment context**
+(ADR 0022). Admitted on its own numbers
 (``eval/matrices/secrets_egress.md``), with one difference from ``pii-egress``
 that is stated rather than glossed: there is **no comparable baseline**. Tessera's
 guard policy declares ``tools``, ``prompt_injection`` and ``pii`` and nothing
@@ -17,7 +18,11 @@ is shared with file names, version strings and package coordinates, so the shape
 is worth nothing and the whole claim is the validator: the first segment must
 decode to a JSON object declaring ``alg``. A PEM block is armour, and the span is
 the **whole block**, because a finding that located only the ``BEGIN`` line would
-be masked to exactly that and would forward the key material underneath it.
+be masked to exactly that and would forward the key material underneath it. The
+AWS *secret* access key has neither prefix nor checksum, so its discriminant is
+the **name it is assigned to**: gitleaks' assignment grammar around AWS's own
+vocabulary, the finding narrowed to the value group, and a charset check
+refusing an unbroken hex run — the measured split ADR 0022 records.
 
 **Deferred, deliberately: generic high-entropy scanning.** A UUID, a git digest,
 a content hash and a base64 blob are all high-entropy and none is a secret. An
@@ -26,9 +31,13 @@ operator to switch the detector off — so it is not here, and the benign corpus
 holds exactly those lookalikes to prove the rules that *are* here do not fire on
 them.
 
-**Consequence, stated:** an *unprefixed* credential is not detected — an AWS
-secret access key, a database password, a bare bearer token. That is a declared
-blind spot, not an oversight, and no category is claimed that nothing measures.
+**Consequence, stated:** a *bare* unprefixed credential is still not detected —
+a database password, a bare bearer token, a forty-character blob on its own.
+The AWS secret access key is caught **when its name is in reach** (ADR 0022);
+with no keyword, the same measurement prices the bare-body rule at 17/20 hard
+lookalikes and 15/339 of gitleaks' negatives killed, and the only discriminant
+left is the entropy threshold ADR 0009 forbids. A declared boundary with tests
+pinning both sides, not an oversight.
 """
 
 from __future__ import annotations

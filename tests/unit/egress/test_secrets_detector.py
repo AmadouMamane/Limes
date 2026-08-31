@@ -135,10 +135,13 @@ def test_the_jwt_shape_alone_is_not_a_jwt(detector, text):
 # --- deferred, and said so ---------------------------------------------------
 
 
-def test_an_unprefixed_credential_is_a_declared_blind_spot(detector):
-    # An AWS *secret access key* has no prefix and no checksum. It is NOT
-    # detected, and that is written down (README, ADR 0009) rather than implied.
-    # Pinned here so a future entropy rule cannot land without this test changing.
+def test_a_bare_secret_spelling_is_a_measured_boundary_not_an_oversight(detector):
+    # The AWS secret access key is caught by its NAME since ADR 0022 —
+    # aws_secret_access_key, SecretAccessKey, secret_key. The single word SECRET
+    # is deliberately not in that vocabulary: bare `secret` was measured into the
+    # refused generic list (it fires on a Secrets Manager ARN's resource tail,
+    # `…:secret:<forty slashed chars>`). This line pins the boundary; moving it
+    # means re-running that measurement, not widening a regex.
     assert _located(detector, "SECRET=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY") == set()
 
 

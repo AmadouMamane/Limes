@@ -4,6 +4,74 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-08-31
+
+**An unprefixed secret is caught by its name, or not at all.** The AWS *secret*
+access key — forty base64 characters, no vendor prefix, the last credential in
+the README's own threat sketches with no rule — was measured against corpora
+built to break a context rule, expecting a split verdict, and a split verdict is
+what shipped (ADR 0022).
+
+### Added
+
+- **`secret:aws-secret-access-key`** — the first context-anchored rule:
+  gitleaks' own semi-generic assignment grammar (transcribed, MIT, from the
+  vendored catalogue) around AWS's own vocabulary (`aws_secret_access_key`,
+  `SecretAccessKey`, "secret access key", Terraform's bare `secret_key`), the
+  body exactly forty of `[A-Za-z0-9/+]`. Dev: 12/12 assignment carriers
+  located, 0/20 hard lookalikes, 0/339 gitleaks negatives, 0/51 internal
+  benigns. Sealed holdout, scored once: 6/6 assignment carriers, 0/12 hard
+  lookalikes.
+- **`value_group`** (rule schema): a rule whose shape includes context declares
+  the named group that is the value; the finding spans the group, the mask
+  covers the credential and never the carrier line. The loader refuses an
+  undefined group and the combination with `retry_trim`.
+- **`not_pure_hex`** (validator registry): refuses a body that is one unbroken
+  hex run — a charset property, not an entropy threshold (all-hex probability
+  of a real secret ≈ 2⁻⁸⁰; the colliding artefacts — SHA-1 pins, fingerprints —
+  are hex by construction).
+- **Five positives and seven hard lookalikes** in the secrets corpus (category
+  `aws_secret`, fr/de/en): internal matrix 15/15 → **20/20** located, benign
+  0/25 → **0/32**. Values are AWS's two published documentation secrets, stored
+  assembled (ADR 0010).
+- **The refusals, pinned by tests with their prices**: the generic keyword list
+  (11/20 hard lookalikes), bare proximity (14/20), the bare-body rule (17/20,
+  15/339 — git-secrets ships it and scores 64/339 here), and four declared miss
+  families (no-operator carriers, bracketed keys, positional arguments,
+  non-English prose vocabulary), each asserted so a lifting change must bring
+  its measurement.
+
+### Changed
+
+- External bench re-scored once, rules frozen: **12/110 dev, 4/108 holdout,
+  33/339 negatives — identical to the digit.** The rule adds zero false
+  positives on the vendor's own ground and zero external recall, because
+  gitleaks has no AWS-secret rule to materialise: the format its catalogue
+  covers only through an entropy gate is the one limes now covers without one.
+- README secrets sections rewritten to the split verdict — and the external
+  table there, stale at the pre-Amendment-2 numbers (10/110 · 3/108 · 47/339),
+  now matches the shipped matrix (12/110 · 4/108 · 33/339).
+
+### Also in this release window (landed after 0.11.0, before this entry)
+
+- **The outbound leg met an adversary too** (ADR 0021): presidio-research (MIT)
+  document contexts for `pii-egress` — 100% dev *and* holdout, decoys 3.5% —
+  and gitleaks' 222-rule catalogue plus its 339 hard negatives for
+  `secrets-egress`, which sized the perimeter at 6%, then 7.3% after the
+  repairs below. trufflehog (AGPL) and ai4privacy (CC-BY-NC / unverifiable)
+  refused on licence.
+- **The hijack family's 82% was 4 of 5 templates, not 82% of 131** (ADR 0021
+  Am. 1): the corpus now carries `template_of`, the matrix prints the
+  per-template table, the family's blind label is spent, and no rule may be
+  validated on it from now on.
+- **Two precision holes, one closed by the vendor's own grammar and one
+  refused** (ADR 0021 Am. 2): the Slack rule replaced by gitleaks' own
+  alternation (14 external FPs → 2, recall UP 13 → 16 formats), a PEM
+  key-material floor, a phone left boundary — and the entropy gate designed,
+  measured per rule, and **refused**: ADR 0009 makes limes's own positives
+  placeholders, so no threshold can serve both corpora
+  (`AKIAIOSFODNN7EXAMPLE` is a limes positive and a gitleaks negative at once).
+
 ## [0.11.0] - 2026-08-30
 
 **limes measured its competitors instead of describing them, and lost the recall

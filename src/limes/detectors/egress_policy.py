@@ -17,7 +17,7 @@ order reference. So the rule *names* its validator, from a closed registry
 ``allow-everything``. ``validator: none`` is a rule saying explicitly that its
 shape is the whole claim.
 
-Two more things a rule declares, because a detector that guesses them is a
+Three more things a rule declares, because a detector that guesses them is a
 detector nobody can audit:
 
 * ``retry_trim`` — whether a candidate that fails its validator may be retried
@@ -28,6 +28,12 @@ detector nobody can audit:
   validator, so it buys recall without loosening the check.
 * ``detector`` — which detector owns the rule. One file, one hash, two detectors;
   the alternative is two files whose drift nobody notices.
+* ``value_group`` — for a rule whose shape includes *context* around the value
+  (``aws_secret_access_key = <value>``, ADR 0022), the named group that is the
+  value. The finding spans the group and the validator checks the group: the
+  mask must cover the credential, never the line that names it. The loader
+  refuses a name the pattern does not define — a declared value that cannot be
+  extracted would be a rule spanning nothing, silently.
 
 Each detector block also declares ``max_content_chars``: the size beyond which it
 does not scan. It is data rather than a constant because refusing to sweep an
@@ -119,6 +125,23 @@ def _phone_digit_count(candidate: str) -> bool:
     return _PHONE_MIN_DIGITS <= len(digits) <= _PHONE_MAX_DIGITS
 
 
+_HEX_RUN: Final = re.compile(r"[0-9a-fA-F]+")
+
+
+def _not_pure_hex(candidate: str) -> bool:
+    """Whether the candidate is NOT one unbroken hexadecimal run.
+
+    A charset property, not an entropy threshold (ADR 0022 — entropy is refused,
+    ADR 0021 Am. 2). A real AWS secret access key is base64 over thirty random
+    bytes, so the probability that all forty characters land in the hex alphabet
+    is (16/64)^40 ~= 2^-80 — while the artefact family that actually collides
+    with it behind secret-named keys is hex BY CONSTRUCTION: git SHA-1 pins,
+    content digests, fingerprints of the very key (``…_hash = <40 hex>``). The
+    check is deterministic and format-derived, like the PEM material floor.
+    """
+    return _HEX_RUN.fullmatch(candidate) is None
+
+
 #: The closed registry a rule's ``validator`` field names. Closed on purpose: a
 #: policy that could name an unknown validator would load, run, and check
 #: nothing — a detector reporting "clean" over a check that never happened.
@@ -130,6 +153,7 @@ VALIDATORS: Final[Mapping[str, Callable[[str], bool]]] = {
     "nir_key": nir_key_valid,
     "phone_digits": _phone_digit_count,
     "jwt_header": jwt_header_valid,
+    "not_pure_hex": _not_pure_hex,
 }
 
 
@@ -146,6 +170,12 @@ class EgressRule:
         validator: The name of the check applied to each candidate.
         retry_trim: Whether a failing candidate is retried without its trailing
             group.
+        value_group: For a rule whose shape includes CONTEXT around the value
+            (``aws_secret_access_key = <the value>``), the named group that is
+            the value itself. The finding spans that group, never the carrier:
+            the mask must cover the credential, not the line that names it, and
+            the grader scores the exact span (ADR 0009). ``None`` — every rule
+            before ADR 0022 — means the whole match is the value.
     """
 
     detector: str
@@ -153,6 +183,7 @@ class EgressRule:
     pattern: re.Pattern[str]
     validator: str
     retry_trim: bool
+    value_group: str | None
 
     @property
     def check(self) -> Callable[[str], bool]:
@@ -199,6 +230,7 @@ def _read_rule(raw: object, *, policy_path: Path, detector: str) -> EgressRule:
     pattern = raw.get("pattern")
     validator = raw.get("validator")
     retry_trim = raw.get("retry_trim", False)
+    value_group = raw.get("value_group")
     if not isinstance(label, str) or not label:
         raise ValueError(
             f"policy {policy_path}: a rule of {detector!r} is missing a string 'label'"
@@ -216,12 +248,34 @@ def _read_rule(raw: object, *, policy_path: Path, detector: str) -> EgressRule:
         raise ValueError(
             f"policy {policy_path}: rule {label!r} has a non-boolean 'retry_trim' {retry_trim!r}"
         )
+    compiled = re.compile(pattern)
+    if value_group is not None:
+        if not isinstance(value_group, str) or not value_group:
+            raise ValueError(
+                f"policy {policy_path}: rule {label!r} has a non-string 'value_group' "
+                f"{value_group!r}"
+            )
+        if value_group not in compiled.groupindex:
+            raise ValueError(
+                f"policy {policy_path}: rule {label!r} names value_group {value_group!r}, and "
+                f"its own pattern defines no group of that name. A rule whose declared value "
+                f"cannot be extracted would silently span nothing — refused at load, not at "
+                f"scan time."
+            )
+        if retry_trim:
+            raise ValueError(
+                f"policy {policy_path}: rule {label!r} declares both value_group and "
+                f"retry_trim. Trimming re-derives the span from the whole match, narrowing "
+                f"derives it from a group; combining them has no measured meaning, so the "
+                f"combination is refused rather than guessed at."
+            )
     return EgressRule(
         detector=detector,
         label=label,
-        pattern=re.compile(pattern),
+        pattern=compiled,
         validator=validator,
         retry_trim=retry_trim,
+        value_group=value_group,
     )
 
 
