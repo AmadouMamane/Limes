@@ -78,12 +78,12 @@ token turns the suite red — do not work around it.
 
 ## The CLA — required before your first merge
 
-limes is Apache-2.0 for the engine, with a separate license planned for the
-curated detection corpus (ADR 0004). To keep that option open, **no external
-contribution is merged without a signed Contributor License Agreement.** See
-[`CLA.md`](CLA.md). It is a one-time step, and it protects the project's ability
-to offer the dual license it was designed around — without it, that option dies
-the day the first external patch lands.
+limes is Apache-2.0 throughout — engine, detection corpus and calibration alike
+(ADR 0016 settled ADR 0004's licence lean). The CLA is still required: **no
+external contribution is merged without a signed Contributor License
+Agreement.** See [`CLA.md`](CLA.md). It is a one-time step, and it gives the
+project clean provenance, an explicit patent grant, and the latitude to
+relicense if a future ADR ever revisits the licensing decision.
 
 By contributing, you agree that your contributions are licensed under Apache-2.0
 and covered by the CLA.

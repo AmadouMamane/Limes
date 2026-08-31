@@ -130,3 +130,13 @@ asked for this ADR to be numbered 0008. The repository's decision records run
 0001–0005 with no gaps, and 0006 is the next free number; a gap in an ADR
 sequence reads as a decision somebody lost. This is 0006. Renumbering later costs
 one `git mv` and two links.
+
+## Amendment note (2026-08-31) — the machinery found its detectors
+
+Recorded per ADR 0001: the consequence above — "limes still ships no egress
+detector, so nothing exercises this out of the box" — was true at v0.4 and has
+been false since v0.5 (`pii-egress`, then `secrets-egress` and
+`injection-egress`, each admitted through ADR 0003's gate). ADR 0018 then made
+the proxies install every admitted egress detector by default, so the redaction
+machinery described here is exercised out of the box, and the startup warning
+fires only for a deliberately emptied outbound leg.

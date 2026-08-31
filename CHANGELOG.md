@@ -52,6 +52,79 @@ what shipped (ADR 0022).
   table there, stale at the pre-Amendment-2 numbers (10/110 · 3/108 · 47/339),
   now matches the shipped matrix (12/110 · 4/108 · 33/339).
 
+### Audited before publication (2026-08-31)
+
+The pass that made this version publishable. Fixed:
+
+- **The HTTP proxy ran with its outbound leg EMPTY** — the defect ADR 0018
+  closed for stdio, shipped a second time: `build_asgi_app`, `serve_http` and
+  `run_http` all defaulted `outbound=()`, so `limes proxy-http` filtered
+  injection inbound and let PII and secrets leave unscanned, while the README
+  promised parity with stdio. No test could say so — every HTTP end-to-end
+  proof passed its own detectors in. The stdio sentinel (`None` installs every
+  admitted egress detector) now resolves in the one factory all three layers
+  funnel through; pinned by a unit witness on the relay the shipped default
+  actually builds, and an e2e that drives the real `main_http` against a PII
+  leak — both seen red under the pre-fix mutation.
+- **The comparison matrix published "4 templates" over a family of five**: the
+  blind-hijack template was re-derived from the prompt text and lowercased,
+  fusing the all-capitals template with its mixed-case twin — while the pinned
+  corpus test said five, and nothing compared the two. The template is now
+  read from the corpus's own field (ADR 0021 Am. 1); the per-template table
+  prints the five verbatim.
+- **`external_injection.md`'s "both, as the proxy deploys them" row measured
+  one leg**: both detectors ran on the outbound direction, where the inbound
+  detector answers nothing, so the row reprinted the egress row under a
+  two-leg label. Each configuration now deploys its detectors on the legs the
+  proxy actually runs them on; the row is the true union — 606/722 dev,
+  67/280 holdout — and finally agrees with the head-to-head's "rules, both
+  legs", which always computed the union correctly.
+- **Three README tables lagged the regenerated matrices**: injection 25/33 →
+  26/33 (the 7 residual misses re-measured by case), PII prose 32/32 vs 21/32
+  → 35/35 vs 22/35 — synced from the same `make eval` run as the matrices.
+- **A matched span containing a lone surrogate crashed the guard mid-verdict**
+  (ADR 0011 Am. 1): `spans.redact()` kept the bare `encode("utf-8")` the ADR
+  removed from `_content_sha`, and the inbound leg reaches it with no
+  unreadability screen in front. One line — `surrogatepass`, byte-identical
+  on every encodable string — and "`decide` never raises on any `str`" is
+  finally true as written.
+- **SECURITY.md scoped shipped behaviour out**: "`limes check` … wires the
+  inbound injection detector only" had been false since v0.10 — the leg
+  selects its detectors in the CLI too (ADR 0018). Six surviving "limes ships
+  no egress detector" docstrings and the `--on-egress-finding` help caught up
+  at the same time.
+
+Added — the durable piece:
+
+- **`tests/unit/test_matrices_match_their_harnesses.py`**: every committed
+  matrix recomputed by its own harness and compared byte for byte (the
+  comparison matrix with its measured-latency tokens masked). The matrices
+  were on the honour system — `make eval` regenerated them live and nothing
+  ever compared the files to the harnesses — and that gap is what let both
+  matrix errors above stand published.
+- **The mutation marker became load-bearing**: `test_frontier.py` and the
+  precision gates carry `pytest.mark.mutation`, and a frontier test now holds
+  them to it — the marker's doctrine ("a ratchet never seen red is not a
+  ratchet") was declared in pyproject and enforced nowhere.
+
+Removed:
+
+- **`docs/design/detecteurs-egress-reels.md`** — a 100 % French
+  implementation work-order for an AI agent, present in the built sdist. The
+  work it ordered landed long ago with its own ADRs; the order had no reader
+  left.
+- **The two benchmark harnesses leave the wheel** (`transports/mcp/bench.py`,
+  `bench_http.py`): untested development instruments — one opens a socket and
+  serves MCP — still runnable from a source checkout and the sdist, no longer
+  installed with a security tool.
+
+And the records brought back to true: CLA.md and CONTRIBUTING.md stop selling
+ADR 0004's dual-licence lean (limes is Apache-2.0 throughout — ADR 0016, which
+had asked for exactly this update; operative CLA clauses untouched); ADR 0005
+and ADR 0006 gain amendment notes (the ratchet's current name; the outbound
+leg is no longer "wired, and empty"); ADR 0021's first tables point at
+Amendment 2 and the live matrices.
+
 ### Also in this release window (landed after 0.11.0, before this entry)
 
 - **The outbound leg met an adversary too** (ADR 0021): presidio-research (MIT)
@@ -725,6 +798,8 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.12.0]: https://github.com/AmadouMamane/Limes/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/AmadouMamane/Limes/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/AmadouMamane/Limes/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/AmadouMamane/Limes/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/AmadouMamane/Limes/compare/v0.8.0...v0.9.0

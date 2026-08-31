@@ -167,3 +167,17 @@ Verified on 2026-07-23, one by one, before this file was committed.
   that is **not** what either page says today, so limes does not repeat it.
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) — the
   official SDK this transport is built on.
+
+## Amendment note (2026-08-31) — two statements time has moved past
+
+Recorded per ADR 0001: the body above stays the dated original; this note says
+what moved and where each decision now lives.
+
+- **§1's ratchet has a new name.** `tests/unit/mcp/test_boundary.py` grew into
+  `tests/unit/test_frontier.py`, which holds the same byte-identity claim — and
+  several more perimeters — today.
+- **§4's "wired, and empty" is settled the other way.** limes has shipped
+  egress detectors since v0.5, and ADR 0018 makes every proxy install all
+  admitted egress detectors on the outbound leg by default — the leg selects
+  its detectors, in every transport. `()` stays expressible as a deliberately
+  unguarded leg, which is what the transparency proofs use.

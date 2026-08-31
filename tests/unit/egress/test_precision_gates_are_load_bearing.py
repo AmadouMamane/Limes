@@ -34,6 +34,10 @@ from limes.detectors.egress_policy import VALIDATORS, load_egress_policy
 from limes.detectors.pii_egress import PiiEgressDetector
 from limes.detectors.secrets_egress import SecretsEgressDetector
 
+#: Every gate here is asserted against a NAMED MUTANT of its own rule — red by
+#: construction, per test — which is the mutation marker's exact meaning.
+pytestmark = pytest.mark.mutation
+
 _CONTEXT = Context(policy_hash="precision-gates", actor=None)
 
 #: The PEM shapes gitleaks ships as false positives: armour with no key under it.

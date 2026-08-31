@@ -1,11 +1,12 @@
 # Contributor License Agreement (CLA)
 
-limes is released under **Apache-2.0** for its engine, with a **separate license
-planned for the curated detection corpus and calibration** (see ADR 0004). To keep
-that dual-license option alive, the project needs the right to license every
-contribution under both — which a contributor's Apache-2.0 grant alone does not
-provide. **No external contribution is merged without a signed CLA.** Without it,
-the dual-license option dies the day the first external patch lands.
+limes is released under **Apache-2.0 throughout — engine, detection corpus and
+calibration alike** (ADR 0016, which settled the dual-licence lean ADR 0004 had
+left open). The CLA remains required for a different reason: it gives the
+project clean provenance for every contribution, an explicit patent grant, and
+the latitude to relicense should a future ADR ever revisit the licensing
+decision — which a contributor's Apache-2.0 grant alone does not provide.
+**No external contribution is merged without a signed CLA.**
 
 This agreement is adapted from the Apache Software Foundation Individual and
 Corporate Contributor License Agreements, v2.1. It gives **the Project Owner,
@@ -42,8 +43,9 @@ recipients of software distributed by the Owner a perpetual, worldwide,
 non-exclusive, no-charge, royalty-free, irrevocable copyright license to
 reproduce, prepare derivative works of, publicly display, publicly perform,
 sublicense, and distribute Your Contributions and such derivative works. **This
-license is sublicensable, so that the Owner may license the Contribution under
-Apache-2.0 and under a separate license for the detection corpus and calibration.**
+license is sublicensable, so that the Owner keeps the latitude to relicense
+Contributions should the project's licensing decision ever be revisited by a
+future ADR — today everything ships under Apache-2.0 (ADR 0016).**
 
 **3. Grant of Patent License.**
 Subject to the terms of this Agreement, You hereby grant to the Owner and to

@@ -71,6 +71,13 @@ from pathlib import Path
 
 import pytest
 
+#: Seen red under deliberate mutations from the day it was written (ADR 0005:
+#: "all four of those ratchets were seen red … before this ADR was written"),
+#: and red again live whenever a file lands outside every perimeter. The marker
+#: makes that history selectable: `pytest -m mutation` runs the ratchets that
+#: have earned the name.
+pytestmark = pytest.mark.mutation
+
 REPO = Path(__file__).resolve().parents[2]
 
 #: The v0.1 tip. Everything outside the perimeters must still be byte-identical to it.
@@ -290,6 +297,12 @@ PROJECT_SCAFFOLDING = (
     ".github/workflows/release.yml",
     ".gitleaks.toml",
     "SECURITY.md",
+    # Same cost, paid twice: frozen as a side effect, these two kept selling ADR
+    # 0004's dual-licence lean two records after ADR 0016 settled everything as
+    # Apache-2.0 — the very update ADR 0016 asked for, blocked by the freeze.
+    # Governance prose, no capability.
+    "CLA.md",
+    "CONTRIBUTING.md",
 )
 
 #: The decision records that authorise a change to the frontier itself, plus the
@@ -809,3 +822,26 @@ def test_the_console_scripts_are_installed_and_answer():
     )
     assert listing.returncode == 0, listing.stderr
     assert "-- <server command...>" in listing.stdout
+
+
+def test_the_mutation_marker_is_load_bearing_not_documentation():
+    # pyproject.toml declares the marker with its doctrine — "a ratchet never
+    # seen red is not a ratchet" — and until this pin nothing held any file to
+    # it: the two heaviest ratchets carried no marker at all, so `-m mutation`
+    # selected a fraction of the suite while reading as the discipline. Both
+    # files named here have earned it (this file: ADR 0005's deliberate
+    # mutations, and live reds since; the precision gates: a named mutant per
+    # rule, red by construction).
+    declared = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    markers = declared["tool"]["pytest"]["ini_options"]["markers"]
+    assert any(str(entry).startswith("mutation:") for entry in markers), (
+        "the mutation marker must stay declared, with its doctrine"
+    )
+    for path in (
+        "tests/unit/test_frontier.py",
+        "tests/unit/egress/test_precision_gates_are_load_bearing.py",
+    ):
+        source = (REPO / path).read_text(encoding="utf-8")
+        assert "pytestmark = pytest.mark.mutation" in source, (
+            f"{path} is a ratchet seen red; it must carry the marker that says so"
+        )
