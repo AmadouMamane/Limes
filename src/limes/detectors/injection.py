@@ -15,6 +15,7 @@ from limes.detector import Context, DetectorBlind, Direction, Finding
 from limes.detectors.readability import refuse_unreadable_text
 from limes.policy import InjectionPolicy, load_injection_policy
 from limes.spans import redact
+from limes.verdict import BlindKind
 
 __all__ = ["InjectionDetector"]
 
@@ -54,7 +55,8 @@ class InjectionDetector:
                 rules cannot read: mostly opaque encoded runs, words split by
                 invisible characters, mostly another script, or a locale the
                 policy does not declare (ADR 0028). In every case the detector
-                did not observe and must not read as clean.
+                did not observe and must not read as clean, and the limit names
+                its family (ADR 0029).
         """
         if direction not in self.directions:
             return []
@@ -63,7 +65,8 @@ class InjectionDetector:
             raise DetectorBlind(
                 f"{self.id} did not scan {len(content)} characters of inbound content: its "
                 f"declared budget is {budget} (max_content_chars). It is refusing to answer, "
-                f"not answering that the content is clean"
+                f"not answering that the content is clean",
+                kind=BlindKind.BUDGET,
             )
         findings: list[Finding] = []
         for rule in self._policy.rules:

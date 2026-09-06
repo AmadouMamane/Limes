@@ -33,7 +33,8 @@ What the relay does, message by message:
   audio clip or a binary resource is text the guard could read plus blocks it
   could not, and the verdict says so: the blocks become declared blind spots,
   ``CannotSay`` unless a finding in the text dominates, blocked by default and
-  forwarded only under ``on_cannot_say: allow`` (ADR 0028).
+  forwarded only under an ``on_cannot_say`` policy that opens their family —
+  ``binary`` — and every other family the verdict carries (ADR 0028/0029).
 * ``sampling/createMessage`` and ``elicitation/create`` (server → host
   **requests**) — the same outbound leg, because their parameters are content
   the host's model or user reads (ADR 0024). A refusal is a JSON-RPC error
@@ -87,7 +88,7 @@ from limes.detectors.injection import InjectionDetector
 from limes.policy import load_injection_policy
 from limes.record import DecisionRecord, Ledger
 from limes.transports.in_process import Guard
-from limes.transports.mcp.config import OnCannotSay, ProxyConfig
+from limes.transports.mcp.config import CannotSayPolicy, ProxyConfig
 from limes.transports.mcp.decision import (
     Action,
     Ruling,
@@ -112,7 +113,7 @@ from limes.transports.redaction import (
     conceals_all,
     rule_egress,
 )
-from limes.verdict import BlindCause, CannotSay, Deny
+from limes.verdict import BlindCause, BlindKind, CannotSay, Deny
 
 __all__ = [
     "BLOCKED_ERROR_CODE",
@@ -241,7 +242,7 @@ class Relay:
         inbound: Sequence[Detector],
         outbound: Sequence[Detector] = (),
         policy_hash: str,
-        on_cannot_say: OnCannotSay,
+        on_cannot_say: CannotSayPolicy,
         actor: str | None,
         sink: RecordSink,
         clock: Callable[[], str] = utc_now_iso,
@@ -261,8 +262,9 @@ class Relay:
                 first time each guarded kind of response crosses it unread
                 (ADR 0028).
             policy_hash: SHA-256 of the active policy, recorded into evidence.
-            on_cannot_say: Fail-closed policy for a *declared* blind spot (ADR
-                0026); a fault or a refusal blocks under either setting.
+            on_cannot_say: Fail-closed policy for a *declared* blind spot, by
+                family (ADR 0026/0029); a fault or a refusal blocks under every
+                policy.
             actor: The identity asserted by the invoking session, or ``None``.
             sink: Where decision records are written.
             clock: Supplies ``observed_at``; injectable so a replay is exact.
@@ -587,7 +589,11 @@ class Relay:
                 )
             return
         self._declared.add(key)
-        verdict = CannotSay(blind_spot=blind_spot, cause=BlindCause.DECLARED)
+        verdict = CannotSay(
+            blind_spot=blind_spot,
+            cause=BlindCause.DECLARED,
+            kinds=frozenset({BlindKind.UNWITNESSED}),
+        )
         record = self._ledger.append(
             direction, verdict, self._actor, disposition=Action.FORWARD.value
         )
@@ -613,6 +619,7 @@ class Relay:
                 "is known"
             ),
             cause=BlindCause.REFUSED,
+            kinds=frozenset(),
         )
         ruling = rule(verdict, on_cannot_say=self._on_cannot_say)
         record = self._ledger.append(
@@ -627,7 +634,7 @@ class Relay:
         """Refuse a guarded request whose response the relay could not promise to screen.
 
         The refusal goes through :func:`rule` like every other verdict: its cause
-        is ``refused``, which no ``on_cannot_say`` setting opens (ADR 0026).
+        is ``refused``, which no ``on_cannot_say`` policy opens (ADR 0026).
         """
         verdict = CannotSay(
             blind_spot=(
@@ -635,6 +642,7 @@ class Relay:
                 f"not answered, so it cannot promise to screen the response to this {method}"
             ),
             cause=BlindCause.REFUSED,
+            kinds=frozenset(),
         )
         ruling = rule(verdict, on_cannot_say=self._on_cannot_say)
         record = self._ledger.append(

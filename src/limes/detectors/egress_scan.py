@@ -50,6 +50,7 @@ from typing import Final
 from limes.detector import DetectorBlind, Finding
 from limes.detectors.egress_policy import EgressRule
 from limes.spans import redact
+from limes.verdict import BlindKind
 
 __all__ = ["refuse_unreadable", "scan"]
 
@@ -67,15 +68,17 @@ def refuse_unreadable(content: str, *, detector_id: str, budget: int) -> None:
         budget: The declared ``max_content_chars`` for this detector.
 
     Raises:
-        DetectorBlind: If the content is longer than ``budget``, or cannot be
-            encoded to UTF-8 — in either case the detector did not observe, and
-            its silence must not read as "clean".
+        DetectorBlind: If the content is longer than ``budget`` (family
+            ``budget``), or cannot be encoded to UTF-8 (family ``encoding``) —
+            in either case the detector did not observe, and its silence must
+            not read as "clean".
     """
     if len(content) > budget:
         raise DetectorBlind(
             f"{detector_id} did not scan {len(content)} characters of outbound content: its "
             f"declared budget is {budget} (max_content_chars). It is refusing to answer, not "
-            f"answering that the content is clean"
+            f"answering that the content is clean",
+            kind=BlindKind.BUDGET,
         )
     try:
         content.encode("utf-8")
@@ -83,7 +86,8 @@ def refuse_unreadable(content: str, *, detector_id: str, budget: int) -> None:
         raise DetectorBlind(
             f"{detector_id} cannot scan content that does not encode to UTF-8 "
             f"({exc.reason} at offset {exc.start}); it would be guessing about the "
-            f"bytes that actually leave"
+            f"bytes that actually leave",
+            kind=BlindKind.ENCODING,
         ) from exc
 
 

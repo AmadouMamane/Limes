@@ -29,7 +29,7 @@ from limes.transports.mcp import bridge
 from limes.transports.mcp.config import OnCannotSay
 from limes.transports.mcp.payload import derive, inspected_content, leaves, redact_payload
 from limes.transports.redaction import Masking, Redaction
-from limes.verdict import BlindCause, CannotSay, Deny
+from limes.verdict import BlindCause, BlindKind, CannotSay, Deny
 from tests.unit.mcp.harness import as_response, drive, echo_responder, make_relay
 
 pytestmark = pytest.mark.mutation
@@ -101,9 +101,11 @@ def test_an_image_block_is_left_out_of_the_text_and_named():
     assert derived.text == "here is the page\ntext\nimage/png\nimage"
     assert "iVBOR" not in derived.text, "base64 is not text the rules read"
     assert len(derived.unreadable) == 1
-    assert "image block" in derived.unreadable[0]
-    assert "image/png" in derived.unreadable[0]
-    assert "not inspected" in derived.unreadable[0]
+    kind, sentence = derived.unreadable[0]
+    assert kind is BlindKind.BINARY
+    assert "image block" in sentence
+    assert "image/png" in sentence
+    assert "not inspected" in sentence
 
 
 def test_a_binary_resource_is_left_out_and_named_with_its_uri():
@@ -115,8 +117,11 @@ def test_a_binary_resource_is_left_out_and_named_with_its_uri():
     derived = derive(result)
     assert "JVBERi0xLjQK" not in derived.text
     assert derived.unreadable == (
-        "a binary resource at file:///report.pdf (application/pdf, 12 characters of base64) was "
-        "not inspected: the guard reads text, and this is not text",
+        (
+            BlindKind.BINARY,
+            "a binary resource at file:///report.pdf (application/pdf, 12 characters of base64) "
+            "was not inspected: the guard reads text, and this is not text",
+        ),
     )
 
 

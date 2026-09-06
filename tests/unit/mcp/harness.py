@@ -20,6 +20,7 @@ from limes.detector import Context, Detector, DetectorBlind, Direction, Finding
 from limes.record import DecisionRecord
 from limes.spans import redact
 from limes.transports.mcp.bridge import Relay
+from limes.transports.mcp.config import CannotSayPolicy, OnCannotSay
 from limes.transports.redaction import EgressPolicy
 
 AnyMessage = (
@@ -139,6 +140,15 @@ def echo_responder(message: AnyMessage) -> AnyMessage | None:
     )
 
 
+def cannot_say_policy(on_cannot_say: object) -> CannotSayPolicy:
+    """Read a test's ``on_cannot_say`` argument as the policy the relay takes (ADR 0029)."""
+    if isinstance(on_cannot_say, CannotSayPolicy):
+        return on_cannot_say
+    if isinstance(on_cannot_say, OnCannotSay):
+        return CannotSayPolicy(default=on_cannot_say, by_kind={})
+    return CannotSayPolicy.denying()
+
+
 def make_relay(
     *,
     inbound: Sequence[Detector],
@@ -149,14 +159,17 @@ def make_relay(
     actor: str | None = "session-under-test",
     egress: EgressPolicy | None = None,
 ) -> Relay:
-    """Build a relay wired to a collecting sink and a frozen clock."""
-    from limes.transports.mcp.config import OnCannotSay
+    """Build a relay wired to a collecting sink and a frozen clock.
 
+    ``on_cannot_say`` may be a :class:`CannotSayPolicy`, a bare
+    :class:`OnCannotSay` (the legacy switch: that disposition for every family)
+    or anything else, which means the fail-closed default.
+    """
     return Relay(
         inbound=inbound,
         outbound=outbound,
         policy_hash=policy_hash,
-        on_cannot_say=on_cannot_say if isinstance(on_cannot_say, OnCannotSay) else OnCannotSay.DENY,
+        on_cannot_say=cannot_say_policy(on_cannot_say),
         actor=actor,
         sink=CollectingSink(records),
         clock=fixed_clock,

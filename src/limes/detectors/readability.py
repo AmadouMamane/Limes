@@ -25,10 +25,19 @@ them passed as "nothing found":
   when the caller *declares* a locale the policy does not list, the detector
   says so instead of answering "clean" about text it cannot read. Shape-bound
   detectors (a card number, a key) are not script-bound and skip this part.
+  The script measure rests on one premise — that the rules read Latin script —
+  and it **stands down when the policy says otherwise** (ADR 0028 Amendment 1):
+  a policy declaring a language outside :data:`LATIN_SCRIPT_LANGUAGES` has rules
+  written for another script, and counting its own text as foreign would make
+  the guard unusable for exactly the deployment that declared itself honestly.
+  The declared-locale check stays: it compares the caller's claim to the
+  policy's, and needs no premise about scripts.
 
 Every measure is a single linear pass. The screen runs **after** the rules, so a
 finding still dominates: a key inside a base64 dump is a key found, and a
 directive in an English sentence under Cyrillic prose is a directive found.
+Each blind spot names its family (ADR 0029) — ``opaque``, ``invisible``,
+``script``, ``locale`` — so an operator opens the one they accept and no other.
 """
 
 from __future__ import annotations
@@ -38,8 +47,10 @@ import unicodedata
 from typing import Final
 
 from limes.detector import DetectorBlind
+from limes.verdict import BlindKind
 
 __all__ = [
+    "LATIN_SCRIPT_LANGUAGES",
     "OPAQUE_MIN_CHARS",
     "OPAQUE_RUN",
     "OPAQUE_SHARE",
@@ -67,6 +78,23 @@ SCRIPT_MIN_LETTERS: Final = 40
 #: The share of letters outside the Latin script that makes the text one the
 #: word-reading rules were not written for.
 SCRIPT_SHARE: Final = 0.5
+#: Languages whose standard orthography is the Latin script — the premise of the
+#: script measure. A policy whose every declared language is here has rules
+#: written for Latin text, and "mostly another script" means what it says; a
+#: policy declaring any language outside this set has rules written for another
+#: script, and the measure stands down (ADR 0028 Amendment 1). The set is not a
+#: census: a Latin-script language it lacks can only make the measure stand
+#: down, never fire, so an omission costs a check and never a false blind spot.
+LATIN_SCRIPT_LANGUAGES: Final = frozenset(
+    {
+        "af", "an", "ast", "az", "br", "bs", "ca", "co", "cs", "cy", "da", "de", "en", "eo",
+        "es", "et", "eu", "fi", "fj", "fo", "fr", "fy", "ga", "gd", "gl", "gn", "ha", "haw",
+        "hr", "ht", "hu", "id", "ig", "is", "it", "jv", "kw", "la", "lb", "lt", "lv", "mg",
+        "mi", "ms", "mt", "nb", "nl", "nn", "no", "oc", "pl", "pt", "qu", "rm", "ro", "rw",
+        "sc", "sk", "sl", "sm", "sn", "so", "sq", "st", "su", "sv", "sw", "tk", "tl", "tn",
+        "to", "tr", "ts", "uz", "vi", "wa", "wo", "xh", "yo", "zu",
+    }
+)  # fmt: skip
 
 _SOFT_HYPHEN: Final = "\u00ad"
 
@@ -151,6 +179,19 @@ def language_of(locale: str) -> str:
     return locale.replace("_", "-").split("-", 1)[0].strip().lower()
 
 
+def _rules_read_latin(locales: frozenset[str] | None) -> bool:
+    """Whether the script measure's premise holds for a policy declaring ``locales``.
+
+    ``None`` declares nothing, and the packaged rules are Latin-script: the
+    premise holds. A declaration whose every language is Latin-script confirms
+    it. Any declared language outside :data:`LATIN_SCRIPT_LANGUAGES` — known to
+    use another script, or simply unknown here — denies it, and the measure
+    stands down rather than call the operator's own text foreign (ADR 0028
+    Amendment 1).
+    """
+    return locales is None or locales <= LATIN_SCRIPT_LANGUAGES
+
+
 def unreadable(
     content: str,
     *,
@@ -158,7 +199,7 @@ def unreadable(
     reads_words: bool,
     locale: str | None = None,
     locales: frozenset[str] | None = None,
-) -> str | None:
+) -> tuple[BlindKind, str] | None:
     """Say why ``detector_id``'s rules could not read ``content``, or ``None`` if they could.
 
     Args:
@@ -172,20 +213,21 @@ def unreadable(
             or ``None`` when the policy declares nothing.
 
     Returns:
-        The blind spot, in words, or ``None`` when nothing here applies.
+        The blind spot's family and the blind spot in words (ADR 0029), or
+        ``None`` when nothing here applies.
     """
     size = len(content)
     if size >= OPAQUE_MIN_CHARS:
         opaque = opaque_chars(content)
         if opaque >= OPAQUE_SHARE * size:
-            return (
+            return BlindKind.OPAQUE, (
                 f"{detector_id} did not read {opaque} of {size} characters: they are opaque "
                 "encoded runs (base64, hex or a serialised blob) its rules cannot read. It is "
                 "refusing to answer, not answering that the content is clean"
             )
     wedged = wedged_invisibles(content)
     if wedged:
-        return (
+        return BlindKind.INVISIBLE, (
             f"{detector_id} found {wedged} invisible format character(s) wedged inside words or "
             "numbers; its rules read across none of them, and a word split that way is how a "
             "directive hides from a pattern"
@@ -194,13 +236,18 @@ def unreadable(
         return None
     if locale is not None and locales is not None and language_of(locale) not in locales:
         covered = ", ".join(sorted(locales))
-        return (
+        return BlindKind.LOCALE, (
             f"{detector_id} reads {covered}; the caller declared this content as {locale!r}, "
             "a language its rules were not written for"
         )
+    if not _rules_read_latin(locales):
+        # The policy declares a language written in another script, so "mostly
+        # another script" would describe the operator's own text. The rules ran;
+        # the declaration is taken at its word (ADR 0028 Amendment 1).
+        return None
     foreign, letters = foreign_letters(content)
     if letters >= SCRIPT_MIN_LETTERS and foreign >= SCRIPT_SHARE * letters:
-        return (
+        return BlindKind.SCRIPT, (
             f"{detector_id} reads Latin-script text, and {foreign} of the {letters} letters "
             "here are in another script; its rules were not written for it"
         )
@@ -227,10 +274,12 @@ def refuse_unreadable_text(
         locales: The languages the policy declares, if any.
 
     Raises:
-        DetectorBlind: With the blind spot :func:`unreadable` names.
+        DetectorBlind: With the blind spot :func:`unreadable` names, carrying
+            its family (ADR 0029).
     """
-    reason = unreadable(
+    found = unreadable(
         content, detector_id=detector_id, reads_words=reads_words, locale=locale, locales=locales
     )
-    if reason is not None:
-        raise DetectorBlind(reason)
+    if found is not None:
+        kind, reason = found
+        raise DetectorBlind(reason, kind=kind)

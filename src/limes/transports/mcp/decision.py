@@ -4,13 +4,16 @@ Three rules. They are the whole policy surface of this transport (ADR 0005):
 
 * ``Allow``     → forward;
 * ``Deny``      → block;
-* ``CannotSay`` → block **by default**, and forward only if an operator has
-  explicitly declared ``on_cannot_say: allow`` **and** the blind spot is a
-  *declared* limit (ADR 0026) — a budget, an unreadable encoding, a language
-  the rules do not cover, a leg nobody reads. A witness that cannot see may
-  never report "ok" (ADR 0002); and a witness that *fell over*, or a relay that
-  *refused* to take the content on, is opened by no setting at all. An operator
-  who accepts the guard's declared limits has not accepted a crashed guard.
+* ``CannotSay`` → block **by default**, and forward only if the blind spot is
+  a *declared* limit (ADR 0026) — a budget, an unreadable encoding, a language
+  the rules do not cover, a leg nobody reads — **and** the operator's
+  ``on_cannot_say`` policy opens **every family** it carries (ADR 0029): an
+  image is ``binary``, a base64 dump is ``opaque``, Cyrillic prose is
+  ``script``, and the operator who accepts screenshots has said nothing about
+  the other two. A witness that cannot see may never report "ok" (ADR 0002);
+  and a witness that *fell over*, or a relay that *refused* to take the content
+  on, is opened by no policy at all. An operator who accepts the guard's
+  declared limits has not accepted a crashed guard.
 
 A blocked ``tools/call`` comes back to the host as a **normal tool result marked
 ``isError``** — never a JSON-RPC transport error. The reason is behavioural: an
@@ -34,9 +37,9 @@ from dataclasses import dataclass
 from typing import Any, final
 
 from limes.record import DecisionRecord
-from limes.transports.mcp.config import OnCannotSay
+from limes.transports.mcp.config import CannotSayPolicy
 from limes.transports.redaction import Action, Redaction
-from limes.verdict import Allow, BlindCause, CannotSay, Deny, Verdict
+from limes.verdict import Allow, BlindCause, CannotSay, Deny, Verdict, blind_label
 
 __all__ = ["Action", "Ruling", "redaction_meta", "refusal_meta", "refusal_text", "rule"]
 
@@ -57,26 +60,33 @@ class Ruling:
     reason: str
 
 
-def rule(verdict: Verdict, *, on_cannot_say: OnCannotSay) -> Ruling:
+def rule(verdict: Verdict, *, on_cannot_say: CannotSayPolicy) -> Ruling:
     """Turn a core verdict into a transport action.
 
     Args:
         verdict: The verdict returned by the pipeline.
-        on_cannot_say: What to do about a *declared* blind spot. ``DENY`` is the
-            default everywhere it is not explicitly overridden, and ``ALLOW``
-            opens only ``BlindCause.DECLARED`` (ADR 0026): a fault and a refusal
-            block under either.
+        on_cannot_say: What to do about a *declared* blind spot, by family (ADR
+            0029). Denying everything is the default wherever nothing is
+            explicitly declared; a policy opens only ``BlindCause.DECLARED``
+            verdicts whose every family it allows (ADR 0026): a fault and a
+            refusal block under every policy.
 
     Returns:
-        The ruling: the action, the verdict it came from, and the reason line.
+        The ruling: the action, the verdict it came from, and the reason line —
+        which, for a blocked declared blind spot, names the families that closed
+        it.
     """
     if isinstance(verdict, Allow):
         return Ruling(action=Action.FORWARD, verdict=verdict, reason="allowed")
     if isinstance(verdict, Deny):
         return Ruling(action=Action.BLOCK, verdict=verdict, reason=verdict.reason)
-    reason = f"the guard could not look ({verdict.cause.value}): {verdict.blind_spot}"
-    if on_cannot_say is OnCannotSay.ALLOW and verdict.cause is BlindCause.DECLARED:
+    reason = f"the guard could not look ({blind_label(verdict)}): {verdict.blind_spot}"
+    if on_cannot_say.opens(verdict):
         return Ruling(action=Action.FORWARD, verdict=verdict, reason=reason)
+    closed = on_cannot_say.closed_kinds(verdict)
+    if verdict.cause is BlindCause.DECLARED and closed:
+        names = ", ".join(kind.value for kind in closed)
+        reason = f"{reason} [closed by on_cannot_say for: {names}]"
     return Ruling(action=Action.BLOCK, verdict=verdict, reason=reason)
 
 
@@ -116,9 +126,11 @@ def refusal_text(ruling: Ruling, record: DecisionRecord, *, subject: str) -> str
 def _blind_line(verdict: CannotSay) -> str:
     """The evidence line of a refusal nobody could look at, by cause (ADR 0026)."""
     if verdict.cause is BlindCause.DECLARED:
+        opening = ", ".join(f"{kind.value}: allow" for kind in sorted(verdict.kinds))
         return (
             "evidence: none — a detector declared it could not look, and limes fails closed "
-            "(set on_cannot_say: allow to accept the guard's declared limits, knowingly)."
+            f"(accept exactly these families knowingly with on_cannot_say: {{by_kind: "
+            f"{{{opening}}}}}; ADR 0029)."
         )
     if verdict.cause is BlindCause.FAULT:
         return (
@@ -136,6 +148,13 @@ def _cause_meta(verdict: Verdict) -> str | None:
     return verdict.cause.value if isinstance(verdict, CannotSay) else None
 
 
+def _kinds_meta(verdict: Verdict) -> list[str] | None:
+    """The blind spot's families as data (ADR 0029), or ``None`` when somebody looked."""
+    if not isinstance(verdict, CannotSay):
+        return None
+    return sorted(kind.value for kind in verdict.kinds)
+
+
 def refusal_meta(ruling: Ruling, record: DecisionRecord) -> dict[str, Any]:
     """Render the same refusal as structured data, for the result's ``_meta``.
 
@@ -150,7 +169,8 @@ def refusal_meta(ruling: Ruling, record: DecisionRecord) -> dict[str, Any]:
     Returns:
         A ``{"limes": {...}}`` mapping carrying the reason, the chain linkage,
         the redacted evidence (``None`` for a ``CannotSay``) and, for a
-        ``CannotSay``, the cause of the blind spot (ADR 0026).
+        ``CannotSay``, the cause of the blind spot (ADR 0026) and the families
+        of its declared limits (ADR 0029).
     """
     return {
         "limes": {
@@ -158,6 +178,7 @@ def refusal_meta(ruling: Ruling, record: DecisionRecord) -> dict[str, Any]:
             "redacted": False,
             "reason": ruling.reason,
             "cause": _cause_meta(ruling.verdict),
+            "kinds": _kinds_meta(ruling.verdict),
             "record": _record_meta(record),
             "evidence": _evidence_meta(ruling.verdict),
         }
@@ -229,6 +250,7 @@ def redaction_meta(
             "redacted": True,
             "reason": reason,
             "cause": None,
+            "kinds": None,
             "record": _record_meta(record),
             "redaction": redaction.annotation(),
             "evidence": _evidence_meta(verdict),

@@ -1,6 +1,6 @@
 """The limes verdict algebra — a verdict carries its evidence (ADR 0002).
 
-``Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot, cause)``
+``Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot, cause, kinds)``
 
 Three invariants this module makes load-bearing:
 
@@ -16,7 +16,9 @@ Three invariants this module makes load-bearing:
   sealed into its fingerprint (ADR 0026): a limit the witness declared, a witness
   that fell over, or a transport that refused to take the content on. The three
   are not the same thing to an operator, and a policy that opens one must not
-  silently open the others.
+  silently open the others. And a *declared* limit names its **family** (ADR
+  0029) — an image, an encoded payload, another script, a budget — so that an
+  operator who accepts one of them knowingly has not accepted them all.
 
 The doctrine is inherited from Tessera (ADR 0026/0027) and re-stated here for a
 guard, where a false "allow" is an incident.
@@ -34,11 +36,13 @@ from limes.spans import RedactedSpan
 __all__ = [
     "Allow",
     "BlindCause",
+    "BlindKind",
     "CannotSay",
     "Deny",
     "Evidence",
     "Verdict",
     "Witness",
+    "blind_label",
     "fingerprint",
     "render",
 ]
@@ -62,6 +66,45 @@ class BlindCause(StrEnum):
     DECLARED = "declared"
     FAULT = "fault"
     REFUSED = "refused"
+
+
+class BlindKind(StrEnum):
+    """The family of a declared limit — *what*, exactly, could not be read (ADR 0029).
+
+    A ``CannotSay`` with cause ``DECLARED`` carries one or more of these, sealed
+    into its fingerprint, and the transport's ``on_cannot_say`` policy opens a
+    family at a time: an operator whose tools return screenshots accepts
+    ``binary`` and nothing else. The vocabulary is closed so that a policy
+    naming a family that does not exist is a load error, never a setting that
+    quietly governs nothing.
+
+    Attributes:
+        BUDGET: The content is over the size the detector declared it scans.
+        ENCODING: The content does not encode to UTF-8.
+        OPAQUE: Most of the content is opaque encoded runs — base64, hex, a
+            serialised blob — that no text rule reads.
+        INVISIBLE: A format character is wedged inside a word or a number, where
+            it splits what the rules would otherwise read.
+        SCRIPT: Most of the letters are in a script the word-reading rules were
+            not written for.
+        LOCALE: The caller declared a language the detector's policy does not
+            list.
+        BINARY: A block the payload walk could derive no text from — an image,
+            an audio clip, a binary resource.
+        UNWITNESSED: Nobody read it: a leg with no detector wired, or a kind of
+            message the relay forwards unread by design.
+        UNSPECIFIED: A detector declared a limit and named no family for it.
+    """
+
+    BUDGET = "budget"
+    ENCODING = "encoding"
+    OPAQUE = "opaque"
+    INVISIBLE = "invisible"
+    SCRIPT = "script"
+    LOCALE = "locale"
+    BINARY = "binary"
+    UNWITNESSED = "unwitnessed"
+    UNSPECIFIED = "unspecified"
 
 
 @final
@@ -107,7 +150,7 @@ class _Verdict:
             "    match guard(...):\n"
             "        case Allow(evidence): ...\n"
             "        case Deny(reason, evidence): ...\n"
-            "        case CannotSay(blind_spot, cause): ..."
+            "        case CannotSay(blind_spot, cause, kinds): ..."
         )
 
 
@@ -142,10 +185,18 @@ class CannotSay(_Verdict):
         cause: Why (ADR 0026) — a declared limit, a fault, or a refusal. No
             default: a cause the type guessed on the caller's behalf would be a
             lie that reads complete, and the transport policy turns on it.
+        kinds: The families of the declared limits this blind spot carries (ADR
+            0029). Never empty when the cause is ``DECLARED`` — a limit that
+            names no family is ``UNSPECIFIED``, out loud — and the transport
+            policy opens the verdict only if it opens every family in it. Empty
+            for a refusal, which declared nothing about the content; a fault may
+            carry the families declared beside it, and no policy reads them.
+            No default either, for the same reason as ``cause``.
     """
 
     blind_spot: str
     cause: BlindCause
+    kinds: frozenset[BlindKind]
 
     def __post_init__(self) -> None:
         if not self.blind_spot.strip():
@@ -156,6 +207,18 @@ class CannotSay(_Verdict):
             raise TypeError(
                 f"CannotSay.cause must be a BlindCause, not {type(self.cause).__name__}: the "
                 "transport decides on it, so it may not be a string somebody typed."
+            )
+        if not isinstance(self.kinds, frozenset) or not all(
+            isinstance(kind, BlindKind) for kind in self.kinds
+        ):
+            raise TypeError(
+                "CannotSay.kinds must be a frozenset of BlindKind: the transport opens a "
+                "family by name, so a family may not be a string somebody typed."
+            )
+        if self.cause is BlindCause.DECLARED and not self.kinds:
+            raise ValueError(
+                "a declared limit names its family (ADR 0029); one that has none is "
+                "BlindKind.UNSPECIFIED, said out loud rather than left blank."
             )
 
 
@@ -181,9 +244,10 @@ def _evidence_repr(evidence: Evidence) -> dict[str, object]:
 def fingerprint(verdict: Verdict) -> str:
     """Return a canonical, deterministic JSON fingerprint of a verdict.
 
-    The fingerprint covers the verdict's full content (reason / blind spot and
-    its cause / evidence), so the decision chain's digest changes if any of it
-    changes, and a replay of the same decision re-derives the same fingerprint.
+    The fingerprint covers the verdict's full content (reason / blind spot, its
+    cause and its families / evidence), so the decision chain's digest changes
+    if any of it changes, and a replay of the same decision re-derives the same
+    fingerprint.
 
     Args:
         verdict: The verdict to fingerprint.
@@ -204,8 +268,27 @@ def fingerprint(verdict: Verdict) -> str:
             "kind": "cannot_say",
             "blind_spot": verdict.blind_spot,
             "cause": verdict.cause.value,
+            "kinds": sorted(kind.value for kind in verdict.kinds),
         }
     return json.dumps(core, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def blind_label(verdict: CannotSay) -> str:
+    """The cause of a blind spot and, for a declared one, its families, as one label.
+
+    ``"declared: binary, script"``, ``"fault"``, ``"refused"`` — the phrase every
+    surface that names a ``CannotSay`` to a human uses, so the refusal an agent
+    reads, the CLI's line and the journal's rendering say the same thing.
+
+    Args:
+        verdict: The blind spot to label.
+
+    Returns:
+        The cause's value, followed by the sorted families when there are any.
+    """
+    if not verdict.kinds:
+        return verdict.cause.value
+    return f"{verdict.cause.value}: " + ", ".join(sorted(kind.value for kind in verdict.kinds))
 
 
 def render(verdict: Verdict) -> str:
@@ -214,4 +297,4 @@ def render(verdict: Verdict) -> str:
         return f"[ALLOW] observed by {len(verdict.evidence.witnesses)} detector(s), 0 findings"
     if isinstance(verdict, Deny):
         return f"[DENY] {verdict.reason}"
-    return f"[CANNOT SAY] ({verdict.cause.value}) {verdict.blind_spot}"
+    return f"[CANNOT SAY] ({blind_label(verdict)}) {verdict.blind_spot}"

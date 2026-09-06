@@ -32,7 +32,12 @@ than trusting the rule.
 
 from __future__ import annotations
 
-from limes.transports.mcp.config import OnCannotSay, ProxyConfig, read_on_cannot_say
+from limes.transports.mcp.config import (
+    CannotSayPolicy,
+    OnCannotSay,
+    ProxyConfig,
+    read_on_cannot_say,
+)
 from limes.transports.mcp.decision import (
     Action,
     Ruling,
@@ -53,6 +58,7 @@ from limes.transports.mcp.sink import JsonlSink, NullSink, RecordSink, open_sink
 
 __all__ = [
     "Action",
+    "CannotSayPolicy",
     "JsonlSink",
     "Leaf",
     "NullSink",

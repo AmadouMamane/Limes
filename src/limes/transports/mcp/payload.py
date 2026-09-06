@@ -23,10 +23,10 @@ no rule reads a picture, and a picture is exactly where a directive can hide
 from a text guard while the host's model reads it off the pixels. Until ADR 0028
 the walk swept the base64 as if it were prose, found nothing in it, and let the
 result pass as inspected. Now :func:`derive` leaves those strings out of the
-text and returns, beside it, one plain sentence per block it could not read —
-the transport hands them to the core as declared blind spots, and the verdict
-says so. The block's other fields (its media type, its URI, a name) are text
-and are read as before.
+text and returns, beside it, one plain sentence per block it could not read,
+each under the family ``binary`` (ADR 0029) — the transport hands them to the
+core as declared blind spots, and the verdict says so. The block's other fields
+(its media type, its URI, a name) are text and are read as before.
 
 What this deliberately does **not** inspect, and what the README states under
 "what the proxy does not do (v0.2)": object *keys*, and non-string scalars. A
@@ -51,6 +51,7 @@ from dataclasses import dataclass
 from typing import Any, Final, final
 
 from limes.transports.redaction import Redaction
+from limes.verdict import BlindKind
 
 __all__ = [
     "Derived",
@@ -79,12 +80,14 @@ class Derived:
     Attributes:
         text: The string leaves the rules can read, joined by newlines in the
             canonical order — the content the core inspects.
-        unreadable: One sentence per binary block the walk left out of ``text``,
-            in walk order. Empty when the payload carried only text.
+        unreadable: One ``(family, sentence)`` per binary block the walk left
+            out of ``text``, in walk order — the family is always ``binary``
+            (ADR 0029), and the shape is the one :func:`limes.guard.decide`
+            takes as ``blind_spots``. Empty when the payload carried only text.
     """
 
     text: str
-    unreadable: tuple[str, ...]
+    unreadable: tuple[tuple[BlindKind, str], ...]
 
 
 def _binary_keys(node: Mapping[Any, object]) -> frozenset[str]:
@@ -115,7 +118,7 @@ def _describe(node: Mapping[Any, object], key: str) -> str:
     )
 
 
-def _walk(node: object, out: list[str], unreadable: list[str]) -> None:
+def _walk(node: object, out: list[str], unreadable: list[tuple[BlindKind, str]]) -> None:
     """Append every readable string leaf of ``node`` to ``out`` in canonical order."""
     if isinstance(node, str):
         out.append(node)
@@ -124,7 +127,7 @@ def _walk(node: object, out: list[str], unreadable: list[str]) -> None:
         binary = _binary_keys(node)
         for key in sorted(node, key=str):
             if key in binary:
-                unreadable.append(_describe(node, key))
+                unreadable.append((BlindKind.BINARY, _describe(node, key)))
                 continue
             _walk(node[key], out, unreadable)
         return
@@ -144,10 +147,10 @@ def derive(payload: object) -> Derived:
     Returns:
         The readable string leaves joined by newlines, in the canonical order
         described in this module's docstring, and one sentence per binary block
-        left out of them (ADR 0028).
+        left out of them, under its family (ADR 0028/0029).
     """
     parts: list[str] = []
-    unreadable: list[str] = []
+    unreadable: list[tuple[BlindKind, str]] = []
     _walk(payload, parts, unreadable)
     return Derived(text="\n".join(parts), unreadable=tuple(unreadable))
 
@@ -194,7 +197,7 @@ def leaves(payload: object) -> tuple[Leaf, ...]:
         and the offsets are the coordinates evidence spans are expressed in.
     """
     parts: list[str] = []
-    unreadable: list[str] = []
+    unreadable: list[tuple[BlindKind, str]] = []
     _walk(payload, parts, unreadable)
     found: list[Leaf] = []
     position = 0

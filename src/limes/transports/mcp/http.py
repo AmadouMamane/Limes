@@ -65,6 +65,7 @@ from limes.transports.mcp.bridge import (
 )
 from limes.transports.mcp.config import (
     DEFAULT_ON_CANNOT_SAY,
+    CannotSayPolicy,
     OnCannotSay,
     read_on_cannot_say,
 )
@@ -106,7 +107,8 @@ class HttpProxyConfig:
         policy_path: The injection policy to load, or ``None`` for the packaged
             one. May also carry ``on_cannot_say`` / ``on_egress_finding``.
         record_path: Where decision records are appended, or ``None`` for stderr.
-        on_cannot_say: Fail-closed policy for ``CannotSay``.
+        on_cannot_say: Fail-closed policy for ``CannotSay``, by family of
+            declared limit (ADR 0029).
         actor: The identity asserted by the operator running the proxy; ``None``
             is honest for an unattributed deployment.
         egress: What to do with an outbound finding, by kind. Blocking by default.
@@ -120,7 +122,7 @@ class HttpProxyConfig:
     mount_path: str = _DEFAULT_MOUNT
     policy_path: Path | None = None
     record_path: Path | None = None
-    on_cannot_say: OnCannotSay = DEFAULT_ON_CANNOT_SAY
+    on_cannot_say: CannotSayPolicy = field(default_factory=CannotSayPolicy.denying)
     actor: str | None = None
     egress: EgressPolicy = field(default_factory=EgressPolicy.blocking)
     json_response: bool = False
@@ -387,7 +389,9 @@ def build_http_parser(prog: str) -> argparse.ArgumentParser:
         choices=[member.value for member in OnCannotSay],
         default=None,
         help=f"what to do when a detector could not look (default: "
-        f"{DEFAULT_ON_CANNOT_SAY.value} — fail closed). Overrides the policy file.",
+        f"{DEFAULT_ON_CANNOT_SAY.value} — fail closed). Overrides the policy file's "
+        "default; per-family lines under `on_cannot_say.by_kind` (binary, opaque, "
+        "script, …) stay as declared (ADR 0029). Never opens a fault or a refusal.",
     )
     parser.add_argument(
         "--on-egress-finding",
@@ -432,7 +436,7 @@ def parse_http_config(argv: Sequence[str], *, prog: str) -> HttpProxyConfig:
     parser = build_http_parser(prog)
     options = parser.parse_args(list(argv))
 
-    on_cannot_say = DEFAULT_ON_CANNOT_SAY
+    on_cannot_say = CannotSayPolicy.denying()
     egress = EgressPolicy.blocking()
     if options.policy is not None:
         try:
@@ -446,7 +450,12 @@ def parse_http_config(argv: Sequence[str], *, prog: str) -> HttpProxyConfig:
             if declared_egress is not None:
                 egress = declared_egress
     if options.on_cannot_say is not None:
-        on_cannot_say = OnCannotSay(options.on_cannot_say)
+        # The flag moves the default and leaves the per-family lines alone, as
+        # the egress flag does: a flag that quietly unblocked (or re-blocked)
+        # the families the file names would be a trap (ADR 0029).
+        on_cannot_say = CannotSayPolicy(
+            default=OnCannotSay(options.on_cannot_say), by_kind=on_cannot_say.by_kind
+        )
     if options.on_egress_finding is not None:
         egress = EgressPolicy(
             default=OnEgressFinding(options.on_egress_finding),

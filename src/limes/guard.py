@@ -16,7 +16,7 @@ spot naming the exception, never a traceback out of the guard and never a pass
 (ADR 0011 Amendment 2). A crash is not a verdict, and a guard that dies takes
 the session it was guarding down with it. What ADR 0026 adds is that the crash
 is a blind spot of a different *cause* than a declared budget: the transport's
-``on_cannot_say: allow`` opens the declared kind and never a fault.
+``on_cannot_say`` policy opens declared limits, by family, and never a fault.
 
 Two more things the core says rather than lets pass (ADR 0027):
 
@@ -30,6 +30,11 @@ And the caller may declare blind spots of its own (ADR 0028): the parts of a
 payload it could derive no text from — an image, an audio clip, a binary
 resource — which the transport hands over as ``blind_spots`` and the core
 aggregates exactly like a detector's declared limit.
+
+Every declared limit carries its family (ADR 0029): the one a ``DetectorBlind``
+names, the one the caller hands over beside each blind spot, ``UNWITNESSED``
+for a leg nobody reads. The verdict seals the set of them, and a transport policy
+that opens declared limits opens them a family at a time.
 """
 
 from __future__ import annotations
@@ -46,7 +51,16 @@ from limes.detector import (
     Finding,
 )
 from limes.spans import RedactedSpan
-from limes.verdict import Allow, BlindCause, CannotSay, Deny, Evidence, Verdict, Witness
+from limes.verdict import (
+    Allow,
+    BlindCause,
+    BlindKind,
+    CannotSay,
+    Deny,
+    Evidence,
+    Verdict,
+    Witness,
+)
 
 __all__ = ["decide"]
 
@@ -73,7 +87,7 @@ def decide(
     detectors: Sequence[Detector],
     *,
     observed_at: str,
-    blind_spots: Sequence[str] = (),
+    blind_spots: Sequence[tuple[BlindKind, str]] = (),
 ) -> Verdict:
     """Run ``detectors`` over ``content`` and return one verdict.
 
@@ -86,21 +100,23 @@ def decide(
         observed_at: ISO-8601 timestamp recorded into evidence (caller-supplied,
             never ``now()``, so the chain can re-derive).
         blind_spots: Limits the caller declares about what it handed over — the
-            parts of its payload it could derive no text from (ADR 0028). They
-            are aggregated like a detector's declared blind spot: a finding
-            still dominates them, and otherwise they make the verdict
-            ``CannotSay`` with cause ``DECLARED``.
+            parts of its payload it could derive no text from (ADR 0028), each
+            as ``(family, sentence)`` (ADR 0029). They are aggregated like a
+            detector's declared blind spot: a finding still dominates them, and
+            otherwise they make the verdict ``CannotSay`` with cause
+            ``DECLARED`` carrying their families.
 
     Returns:
         ``Deny`` if any detector found something; otherwise ``CannotSay`` if any
         detector fell over (cause ``FAULT``), or if any detector, the caller or
-        the leg itself declared a blind spot (cause ``DECLARED``); otherwise
-        ``Allow``.
+        the leg itself declared a blind spot (cause ``DECLARED``, with the
+        families of every declared limit); otherwise ``Allow``.
     """
     witnesses: list[Witness] = []
     spans: list[RedactedSpan] = []
     labels: list[str] = []
     declared: list[str] = []
+    kinds: set[BlindKind] = set()
     faults: list[str] = []
     asked = 0
 
@@ -112,6 +128,7 @@ def decide(
             findings: list[Finding] = detector.inspect(direction, content, ctx)
         except DetectorBlind as exc:
             declared.append(f"{detector.id}: {exc}")
+            kinds.add(exc.kind)
             continue
         except Exception as exc:
             # Not a silence to read as "clean", and not a crash to hand the
@@ -126,12 +143,15 @@ def decide(
             spans.extend(finding.spans)
             labels.append(finding.label)
 
-    declared.extend(blind_spots)
+    for kind, text in blind_spots:
+        declared.append(text)
+        kinds.add(kind)
     if asked == 0:
         declared.append(
             f"no detector reads the {direction.value} leg: nobody looked, and an Allow with no "
             "witness would be a pass that reads like a verdict"
         )
+        kinds.add(BlindKind.UNWITNESSED)
 
     content_sha = _content_sha(content)
 
@@ -150,10 +170,18 @@ def decide(
 
     if faults:
         # A fault outranks a declared limit: the operator who accepts declared
-        # limits (`on_cannot_say: allow`) has not accepted a crashed guard.
-        return CannotSay(blind_spot="; ".join([*faults, *declared]), cause=BlindCause.FAULT)
+        # limits (`on_cannot_say`) has not accepted a crashed guard. The families
+        # declared beside the fault ride along for the journal; no policy reads
+        # them off a fault.
+        return CannotSay(
+            blind_spot="; ".join([*faults, *declared]),
+            cause=BlindCause.FAULT,
+            kinds=frozenset(kinds),
+        )
     if declared:
-        return CannotSay(blind_spot="; ".join(declared), cause=BlindCause.DECLARED)
+        return CannotSay(
+            blind_spot="; ".join(declared), cause=BlindCause.DECLARED, kinds=frozenset(kinds)
+        )
 
     evidence = Evidence(
         witnesses=tuple(witnesses),

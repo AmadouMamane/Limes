@@ -44,7 +44,8 @@ Core files move only by decision, never by drift, and each move is pinned beside
 the ADR that authorised it. :data:`AMENDED` holds whole-file digests — ``guard.py``
 since ADR 0011 made the content digest total, the type-level ratchet since ADR
 0015 made it resolve mypy's presence before reading any exit code, and the verdict
-algebra itself since ADR 0026 gave a blind spot its cause.
+algebra itself since ADR 0026 gave a blind spot its cause and ADR 0029 gave a
+declared limit its family.
 :data:`DECLARED_CODE_DELTA` holds the same idea for a prose-only module whose code
 was allowed to move once: ``limes/__init__.py`` gained ``__version__`` under ADR
 0014, and the constant holds the authorised code itself rather than a hash of it,
@@ -116,6 +117,11 @@ ALLOWED = (
     "tests/unit/ratchets/test_a_blind_spot_names_its_cause.py",
     "tests/unit/ratchets/test_a_witness_names_its_leg.py",
     "tests/unit/ratchets/test_the_guard_says_what_it_cannot_read.py",
+    # ADR 0029's pin (and ADR 0028 Amendment 1's): a declared limit names its
+    # family, the policy opens one family at a time and every family of a
+    # verdict or none, and the script measure stands down where its premise
+    # fails.
+    "tests/unit/ratchets/test_a_declared_limit_names_its_family.py",
     "tests/integration/mcp/",
     "docs/decisions/0005-mcp-proxy-transport.md",
     "docs/decisions/0006-egress-redaction.md",
@@ -242,9 +248,11 @@ CORE = (
 #: chain (`record.py`). ADR 0026 gave a blind spot its cause (`verdict.py`,
 #: `guard.py`, and the two contract tests that construct one), ADR 0027 let a
 #: detector name its leg (`detector.py`, `guard.py`, `injection.py`, the
-#: protocol test), and ADR 0028 gave the guard a readability screen and the
+#: protocol test), ADR 0028 gave the guard a readability screen and the
 #: policy a `locales` declaration (`policy.py`, `policy.yaml`, `injection.py`,
-#: `guard.py`'s caller-declared blind spots). The ratchet's strength is intact —
+#: `guard.py`'s caller-declared blind spots), and ADR 0029 gave a declared limit
+#: its family (`verdict.py`, `detector.py`, `guard.py`, `injection.py`, the two
+#: contract tests). The ratchet's strength is intact —
 #: any further drift of the file is red — what changed is the reference bytes,
 #: once per record, with the authorisation written down. Every key here must
 #: be in CORE and must actually differ from v0.1 (asserted below): an entry
@@ -255,14 +263,19 @@ AMENDED = {
     # detector that crashes is rendered as a blind spot, never a traceback.
     # ADR 0026 — the crash is a FAULT and a DetectorBlind a DECLARED limit; ADR
     # 0027 — a detector that names its leg is asked only there, and a leg nobody
-    # reads is CannotSay; ADR 0028 — the caller may declare blind spots of its own.
-    "src/limes/guard.py": "b331c591ba1accebbc8452376d9d3c6dc1c4a33d08672299013d9bb23cbbc93d",
-    # ADR 0026 — `CannotSay` carries its `cause`, sealed into the fingerprint.
-    # The algebra file's first amendment since v0.1.
-    "src/limes/verdict.py": "a2a31280b448646aea73ebae3d5151ade98fd6228b6bd50912f6c42e1844e961",
+    # reads is CannotSay; ADR 0028 — the caller may declare blind spots of its
+    # own; ADR 0029 — every declared limit's family is collected into the
+    # verdict, the caller's as `(family, sentence)` pairs, a leg nobody reads as
+    # UNWITNESSED.
+    "src/limes/guard.py": "a195a837fd6e407ef595be51abafd10c85e177f9f0ae3e7187c858d5ffa5b09a",
+    # ADR 0026 — `CannotSay` carries its `cause`, sealed into the fingerprint
+    # (the algebra file's first amendment since v0.1); ADR 0029 — and its
+    # `kinds`, the closed `BlindKind` vocabulary, `blind_label()` (the second).
+    "src/limes/verdict.py": "f7225daf27614be07171101de4a6633c026156e7a3c6b47ebc436bfcd9c040e1",
     # ADR 0027 — the optional `DeclaresDirections` protocol the core reads; ADR
-    # 0026/0028 — the contract's prose names the two causes and the locale hint.
-    "src/limes/detector.py": "498a5daeb09a89d9d869e960673abc0e4d1b807009b8c1711c537f12ece04ad7",
+    # 0026/0028 — the contract's prose names the two causes and the locale hint;
+    # ADR 0029 — `DetectorBlind` carries its family (`kind`, UNSPECIFIED by default).
+    "src/limes/detector.py": "ec369c4405ff76bc43cd31807a6d3b978f2c860c45520e0bbc8c57a6b12a72c4",
     # ADR 0025 — the record seals the transport's disposition beside the verdict.
     "src/limes/record.py": "8688fc9934a8c5e9b4ff8a24c304f2b01c834fe90d8d435de51ffb76d06e9d41",
     # ADR 0023 — the injection policy declares `max_content_chars`, the loader
@@ -273,17 +286,20 @@ AMENDED = {
     # ADR 0023 — the inbound detector refuses beyond its declared budget; ADR
     # 0025 — its version is the package's, so a witness names its build; ADR
     # 0027 — it declares the inbound leg; ADR 0028 — with no rule matching, it
-    # says whether it could read the content at all.
+    # says whether it could read the content at all; ADR 0029 — its budget
+    # refusal names its family.
     "src/limes/detectors/injection.py": (
-        "ecf72171cbbf17c3d47deb4b9337f1486a04f9d8c447d0fecce440e0f1c9733f"
+        "2010c8e37f62ca805b2a23f47b600646af632485c70a378d7e2ffafb5698cefb"
     ),
     # ADR 0026/0027 — the contract tests construct a CannotSay with its cause,
-    # and the protocol test expects "nobody looked" where it expected Allow.
+    # and the protocol test expects "nobody looked" where it expected Allow;
+    # ADR 0029 — they construct it with its families, and pin that a declared
+    # one names at least one.
     "tests/unit/test_verdict.py": (
-        "ffa16874558df8f845e9654ab54a2293bd9a4a6a875219cbcfb0fb24b7b0d9f6"
+        "f591f6659e4531039825897eab1ad680454657d5b2cc4afdfa052d23a79265a2"
     ),
     "tests/unit/test_record_chain.py": (
-        "e61784734b59a0d9647bff8b87d6eca5ee195932f58a766125b3e834f50b6414"
+        "28880f50d03f8911662361b8793a8c356e9eb6759d6d383c47f8fde45fd31984"
     ),
     "tests/unit/test_detector_protocol.py": (
         "6e2ce6ed103ab682d6a9cd7f927bbd28b0605c31ee3614daa9ef1682215f90be"
@@ -389,6 +405,7 @@ AMENDING_RECORDS = (
     "docs/decisions/0026-a-blind-spot-names-its-cause.md",
     "docs/decisions/0027-a-witness-names-its-leg.md",
     "docs/decisions/0028-the-guard-says-what-it-cannot-read.md",
+    "docs/decisions/0029-a-declared-limit-names-its-family.md",
     "docs/decisions/0014-the-package-names-its-own-version.md",
     "docs/decisions/0015-a-ratchet-reports-its-own-blind-spot.md",
     "docs/decisions/0016-apache-2-throughout.md",

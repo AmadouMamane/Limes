@@ -52,7 +52,7 @@ from limes.detectors.secrets_egress import SecretsEgressDetector
 from limes.policy import load_injection_policy
 from limes.record import DecisionRecord
 from limes.transports.in_process import Guard
-from limes.verdict import Allow, CannotSay, Deny, Verdict, fingerprint, render
+from limes.verdict import Allow, CannotSay, Deny, Verdict, blind_label, fingerprint, render
 
 __all__ = ["CheckExit", "build_check_parser", "main", "run_check"]
 
@@ -214,7 +214,7 @@ def _as_text(verdict: Verdict, record: DecisionRecord) -> str:
     lines = [render(verdict), f"decision: seq {record.seq}, record {record.digest}"]
     if isinstance(verdict, CannotSay):
         lines.append(
-            f"evidence: none — nobody could look ({verdict.cause.value}); limes fails closed."
+            f"evidence: none — nobody could look ({blind_label(verdict)}); limes fails closed."
         )
         return "\n".join(lines)
     evidence = verdict.evidence

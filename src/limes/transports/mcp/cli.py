@@ -25,6 +25,7 @@ from pathlib import Path
 
 from limes.transports.mcp.config import (
     DEFAULT_ON_CANNOT_SAY,
+    CannotSayPolicy,
     OnCannotSay,
     ProxyConfig,
     read_on_cannot_say,
@@ -89,7 +90,10 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help="injection policy YAML (default: the one packaged with limes). May also "
-        "carry the optional `on_cannot_say: deny|allow` key.",
+        "carry the optional `on_cannot_say` key: `deny|allow`, or a mapping with "
+        "`default` and `by_kind` (e.g. `by_kind: {binary: allow}` to let tool results "
+        "carrying images cross while everything else the guard cannot read stays "
+        "blocked).",
     )
     parser.add_argument(
         "--record",
@@ -104,7 +108,9 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         choices=[member.value for member in OnCannotSay],
         default=None,
         help=f"what to do when a detector could not look (default: "
-        f"{DEFAULT_ON_CANNOT_SAY.value} — fail closed). Overrides the policy file.",
+        f"{DEFAULT_ON_CANNOT_SAY.value} — fail closed). Overrides the policy file's "
+        "default; per-family lines under `on_cannot_say.by_kind` (binary, opaque, "
+        "script, …) stay as declared (ADR 0029). Never opens a fault or a refusal.",
     )
     parser.add_argument(
         "--on-egress-finding",
@@ -162,7 +168,7 @@ def parse_config(argv: Sequence[str], *, prog: str) -> ProxyConfig:
             "e.g. `-- mcp-server-filesystem /data`"
         )
 
-    on_cannot_say = DEFAULT_ON_CANNOT_SAY
+    on_cannot_say = CannotSayPolicy.denying()
     egress = EgressPolicy.blocking()
     if options.policy is not None:
         try:
@@ -176,7 +182,12 @@ def parse_config(argv: Sequence[str], *, prog: str) -> ProxyConfig:
             if declared_egress is not None:
                 egress = declared_egress
     if options.on_cannot_say is not None:
-        on_cannot_say = OnCannotSay(options.on_cannot_say)
+        # The flag moves the default and leaves the per-family lines alone, as
+        # the egress flag does: a flag that quietly unblocked (or re-blocked)
+        # the families the file names would be a trap (ADR 0029).
+        on_cannot_say = CannotSayPolicy(
+            default=OnCannotSay(options.on_cannot_say), by_kind=on_cannot_say.by_kind
+        )
     if options.on_egress_finding is not None:
         egress = EgressPolicy(
             default=OnEgressFinding(options.on_egress_finding),

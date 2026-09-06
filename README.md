@@ -242,10 +242,12 @@ match verdict:
         ...                         # proceed — ev names every detector that looked
     case Deny(reason=reason):
         ...                         # refuse; the evidence is on guard.ledger
-    case CannotSay(blind_spot=blind, cause=cause):
+    case CannotSay(blind_spot=blind, cause=cause, kinds=kinds):
         ...                         # nobody could look: fail closed. `cause` says why —
                                     # "declared" (a limit the guard named), "fault"
-                                    # (a detector fell over), "refused" (ADR 0026)
+                                    # (a detector fell over), "refused" (ADR 0026) —
+                                    # and `kinds` says what: {"binary"}, {"opaque"},
+                                    # {"script"}… one family per declared limit (ADR 0029)
 ```
 
 A verdict is a value you *inspect*, not a true/false flag. Writing `if verdict:`
@@ -464,7 +466,7 @@ So a limes verdict is a closed, exhaustively matched union that carries its
 evidence:
 
 ```
-Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot, cause)
+Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot, cause, kinds)
 ```
 
 - **`Allow` is unconstructible without evidence** — no default, no convenience
@@ -477,15 +479,25 @@ Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot, cause
   cannot see may never report "ok". The cause is sealed into the verdict (ADR
   0026): `declared` — a limit the guard named, which an operator may accept
   knowingly; `fault` — a detector fell over; `refused` — the relay would not
-  take the content on. The proxy's `on_cannot_say: allow` opens the first and
+  take the content on. The proxy's `on_cannot_say` policy opens the first and
   never the other two, so accepting the guard's declared limits does not mean
   accepting a crashed guard.
+- **A declared limit names its family** (ADR 0029) — `kinds` says *what* could
+  not be read: `binary` (an image, an audio clip, a blob), `opaque` (mostly
+  base64 or hex), `script`, `locale`, `invisible`, `budget`, `encoding`,
+  `unwitnessed` (a leg or a message nobody reads), `unspecified`. Sealed into
+  the fingerprint like the cause. The proxy's policy opens declared limits one
+  family at a time — `on_cannot_say: {by_kind: {binary: allow}}` lets
+  screenshots cross and nothing else — and forwards a verdict only when every
+  family it carries is open.
 - **The guard says what it cannot read** (ADR 0027/0028) — a leg nobody reads,
   an image or a binary resource in a tool result, a payload that is mostly
   base64, words split by invisible characters, text in a script or a declared
   language the rules were not written for: each is a `CannotSay` with a
-  declared cause, blocked by default, where before it was an `Allow` nobody
-  had earned.
+  declared cause and a named family, blocked by default, where before it was
+  an `Allow` nobody had earned. The script measure stands down for a policy
+  that declares a non-Latin language (ADR 0028 Am. 1): an operator whose rules
+  are Chinese is not told their own text is another script.
 - **`__bool__` raises** — there is no `if verdict:`. A dataclass instance is
   truthy by default, so a bare truthiness test would read a `Deny` (and a
   `CannotSay`!) as success; raising instead forces callers to pattern-match.
@@ -1014,13 +1026,13 @@ and, in `_meta`, what was masked:
 {"limes": {
   "blocked": false, "redacted": true,
   "reason": "2 rule match(es) on outbound content: pii:email, pii:pan (egress policy masks kind: pii; 2 region(s) replaced)",
-  "cause": null,
+  "cause": null, "kinds": null,
   "record": {"seq": 1, "direction": "outbound", "disposition": "redact",
              "digest": "22529573711b…", "prev_hash": "92e2cf3f8241…"},
   "redaction": {"masked": 2, "kinds": ["pii"], "spans": [
     {"start": 6,  "end": 25, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"},
     {"start": 51, "end": 68, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"}]},
-  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.14.0"}], "…": "…"}}}
+  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.15.0"}], "…": "…"}}}
 ```
 
 (real output from the shipped `pii-egress` detector, digests abbreviated and the
@@ -1111,20 +1123,34 @@ What it does:
   dropped (ADR 0024). Proven end to end against a real MCP server that journals
   what it receives — the blocked call is absent from that journal, and the
   control run without the proxy shows the same call arriving.
-- **Fails closed.** `CannotSay` blocks unless an operator explicitly sets
-  `on_cannot_say: allow` (policy file) or `--on-cannot-say allow` — and even
-  then only a *declared* limit is forwarded: a detector that fell over or a
-  frame the relay refused stays blocked under either setting (ADR 0026). A proxy
-  that cannot load its policy exits `2` rather than becoming a silent
+- **Fails closed, one family at a time.** `CannotSay` blocks unless an
+  operator explicitly opens it — and since 0.15.0 the setting is a policy by
+  family of declared limit (ADR 0029), not a switch:
+
+  ```yaml
+  on_cannot_say:
+    default: deny
+    by_kind:
+      binary: allow      # screenshots and blobs in tool results cross
+      opaque: allow      # …and base64 file contents
+  ```
+
+  `on_cannot_say: allow` (or `--on-cannot-say allow`) still means every
+  declared family, as before. Whatever the policy, only a *declared* limit is
+  ever forwarded, and only when **every** family the verdict carries is open:
+  a detector that fell over or a frame the relay refused stays blocked under
+  every setting (ADR 0026). A proxy that cannot load its policy — or names a
+  family that does not exist — exits `2` rather than becoming a silent
   pass-through.
 - **Says what it cannot read** (ADR 0028). A tool result carrying an image, an
   audio clip or a binary resource is text the guard read plus blocks it could
-  not, and the verdict says so: a `CannotSay` with cause `declared`, **blocked
-  by default**. The same for a result that is mostly base64 — a file-reading
-  tool that returns encoded bytes. A deployment whose tools return screenshots
-  or encoded files accepts that knowingly with `on_cannot_say: allow`, and the
-  record still says the image was not inspected. A finding in the text beside
-  the image still refuses the result.
+  not, and the verdict says so: a `CannotSay` with cause `declared` and family
+  `binary`, **blocked by default**. The same for a result that is mostly base64
+  — a file-reading tool that returns encoded bytes — under `opaque`. A
+  deployment whose tools return screenshots or encoded files opens those two
+  families knowingly, the refusal an agent reads gives the exact line to write,
+  and the record still says the image was not inspected. A finding in the text
+  beside the image still refuses the result.
 - **Records everything.** Allowed, refused and cannot-say alike, as hash-chained
   `DecisionRecord`s — the same shape the in-process transport emits — to stderr
   by default (**never stdout**: that is the host's JSON-RPC channel) or to

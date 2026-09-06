@@ -61,9 +61,9 @@ says so too: the first time each kind crosses in a session, a record with cause
 
 An **image, an audio clip or a binary resource** inside any guarded message is
 not text, and limes says so instead of pretending to read it: the result is a
-`CannotSay` with cause `declared`, **blocked by default** (ADR 0028). If your
-tools return screenshots or base64-encoded files, decide knowingly — see
-*Tuning*.
+`CannotSay` with cause `declared` and family `binary`, **blocked by default**
+(ADR 0028/0029). If your tools return screenshots or base64-encoded files,
+open exactly those families — see *Tuning*.
 
 ## See it happen
 
@@ -114,13 +114,33 @@ proves what happened without becoming a copy of the secret that flowed through i
 
 ## Tuning
 
-- **Fail-closed by default.** If nobody could look (`CannotSay`), the response
-  is blocked, not forwarded. `--on-cannot-say allow` accepts the guard's
-  **declared** limits — an image your model can read and limes cannot, a
-  base64 payload, a language the rules do not cover, content over the budget —
-  and the record still names what was not inspected. A detector that fell over
-  or a frame the relay refused stays blocked under either setting (ADR 0026):
-  accepting the guard's limits is not accepting a crashed guard.
+- **Fail-closed by default, and opened one family at a time.** If nobody could
+  look (`CannotSay`), the response is blocked, not forwarded. Every declared
+  limit names its family (ADR 0029), and the policy file opens the ones you
+  accept:
+
+  ```yaml
+  on_cannot_say:
+    default: deny
+    by_kind:
+      binary: allow    # screenshots: an image your model reads and limes cannot
+      opaque: allow    # base64 file contents (the GitHub server, a PDF reader)
+  ```
+
+  The families are `binary`, `opaque`, `script` (text mostly in another
+  script), `locale` (a caller-declared language the rules do not cover),
+  `invisible`, `budget`, `encoding`, `unwitnessed` (a leg or a message nobody
+  reads) and `unspecified`. A blocked result names the families that closed it
+  and the exact `by_kind` line that would open them; a verdict carrying two
+  families needs both open. `--on-cannot-say allow` still means every declared
+  family, and it moves only the default — the file's per-family lines stay. A
+  detector that fell over or a frame the relay refused stays blocked under
+  every setting (ADR 0026): accepting the guard's limits is not accepting a
+  crashed guard.
+- **Rules in another language.** If your injection rules are written for a
+  non-Latin language, declare it (`locales: [zh]` in the policy file) and the
+  "another script" measure stands down for your own text (ADR 0028 Am. 1); a
+  caller declaring a locale you did not list is still a blind spot.
 - **Redaction instead of blocking**, per kind, is a policy choice
   (`--policy`, ADR 0006): a card number can be masked in place and forwarded
   while a private key is always blocked.

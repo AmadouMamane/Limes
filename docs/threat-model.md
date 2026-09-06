@@ -61,15 +61,20 @@ image, an audio clip or a binary resource in a tool result — or in the message
 of a `sampling/createMessage` request — is exactly where a directive hides from
 a text guard while the host's model reads it off the pixels, so the payload walk
 leaves the base64 out of the text and declares the block: `CannotSay`, cause
-`declared`, **blocked by default**, forwarded only under `on_cannot_say: allow`.
-After its rules found nothing, every detector says whether they could have read
-the content at all: mostly opaque encoded runs (base64, hex), a word or a number
-split by an invisible format character, and — for the two word-reading
-detectors — text mostly in another script or a caller-declared locale the policy
-does not list are declared blind spots, not "clean". One exception is stated
-rather than hidden: the soft hyphen is read as text because extracted web pages
-carry it inside ordinary words, so a directive split with one is a documented
-miss. A finding always dominates the screen.
+`declared`, family `binary`, **blocked by default**, forwarded only under an
+`on_cannot_say` policy that opens that family (ADR 0029). After its rules found
+nothing, every detector says whether they could have read the content at all:
+mostly opaque encoded runs (base64, hex; family `opaque`), a word or a number
+split by an invisible format character (`invisible`), and — for the two
+word-reading detectors — text mostly in another script (`script`) or a
+caller-declared locale the policy does not list (`locale`) are declared blind
+spots, not "clean". Each family is opened by name and separately; a verdict
+carrying two needs both. Two exceptions are stated rather than hidden: the soft
+hyphen is read as text because extracted web pages carry it inside ordinary
+words, so a directive split with one is a documented miss; and the script
+measure stands down for a policy that declares a non-Latin language (ADR 0028
+Am. 1), where it cannot tell one non-Latin script from another. A finding
+always dominates the screen.
 
 ### Sensitive data trying to leave — stripped or blocked (incoming)
 
@@ -126,9 +131,11 @@ dressed as coverage:
 - **A verdict must be inspectable, and silence must never read as safety.** A
   detector that cannot look returns `CannotSay` and the leg **fails closed**; a
   detector that *crashes* is rendered the same way (ADR 0011 Am. 2) but with a
-  different **cause** (ADR 0026): `on_cannot_say: allow` opens a limit the guard
-  *declared* and never a fault or a refusal, so a crash an attacker can provoke
-  is not a bypass under any setting. A leg nobody reads is `CannotSay` too, never
+  different **cause** (ADR 0026): the `on_cannot_say` policy opens a limit the
+  guard *declared* — one **family** at a time (ADR 0029), and every family a
+  verdict carries or none — and never a fault or a refusal, so a crash an
+  attacker can provoke is not a bypass under any setting, and an operator who
+  opened screenshots has not opened base64. A leg nobody reads is `CannotSay` too, never
   an `Allow` with no witness (ADR 0027). A proxy that cannot load its policy
   exits rather than becoming a silent pass-through. (See
   [The verdict](../README.md#the-verdict).)

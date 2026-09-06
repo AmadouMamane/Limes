@@ -22,9 +22,9 @@ from limes.detectors.injection import InjectionDetector
 from limes.guard import decide
 from limes.record import Ledger
 from limes.transports.mcp import bridge
-from limes.transports.mcp.config import OnCannotSay
+from limes.transports.mcp.config import CannotSayPolicy, OnCannotSay
 from limes.transports.mcp.decision import Action, refusal_meta, refusal_text, rule
-from limes.verdict import BlindCause, CannotSay, fingerprint
+from limes.verdict import BlindCause, BlindKind, CannotSay, fingerprint
 from tests.unit.mcp.harness import BlindDetector, as_error, as_response, drive, make_relay
 
 pytestmark = pytest.mark.mutation
@@ -32,6 +32,10 @@ pytestmark = pytest.mark.mutation
 _CONTEXT = Context(policy_hash="cause", actor=None)
 _OBSERVED_AT = "2026-09-06T00:00:00Z"
 _CLEAN = "Quel est le solde de mon compte courant ?"
+_DENY = CannotSayPolicy.denying()
+_ALLOW = CannotSayPolicy.allowing()
+_UNSPECIFIED = frozenset({BlindKind.UNSPECIFIED})
+_NONE: frozenset[BlindKind] = frozenset()
 
 
 class _Crashing:
@@ -102,7 +106,7 @@ def test_a_callers_blind_spot_is_a_declared_cause():
         _CONTEXT,
         [InjectionDetector()],
         observed_at=_OBSERVED_AT,
-        blind_spots=("an image block (image/png) was not inspected",),
+        blind_spots=((BlindKind.BINARY, "an image block (image/png) was not inspected"),),
     )
     assert isinstance(verdict, CannotSay)
     assert verdict.cause is BlindCause.DECLARED
@@ -112,14 +116,16 @@ def test_a_callers_blind_spot_is_a_declared_cause():
 def test_the_chain_seals_the_cause():
     text = "x"
     declared = Ledger().append(
-        Direction.INBOUND, CannotSay(blind_spot=text, cause=BlindCause.DECLARED), None
+        Direction.INBOUND,
+        CannotSay(blind_spot=text, cause=BlindCause.DECLARED, kinds=_UNSPECIFIED),
+        None,
     )
     fault = Ledger().append(
-        Direction.INBOUND, CannotSay(blind_spot=text, cause=BlindCause.FAULT), None
+        Direction.INBOUND, CannotSay(blind_spot=text, cause=BlindCause.FAULT, kinds=_NONE), None
     )
     assert declared.digest != fault.digest, "same words, different cause, different record"
     assert '"cause":"declared"' in fingerprint(
-        CannotSay(blind_spot=text, cause=BlindCause.DECLARED)
+        CannotSay(blind_spot=text, cause=BlindCause.DECLARED, kinds=_UNSPECIFIED)
     )
 
 
@@ -135,16 +141,17 @@ def test_the_chain_seals_the_cause():
     ],
 )
 def test_on_cannot_say_allow_opens_only_a_declared_limit(cause, under_allow):
-    verdict = CannotSay(blind_spot="x", cause=cause)
-    assert rule(verdict, on_cannot_say=OnCannotSay.DENY).action is Action.BLOCK
-    assert rule(verdict, on_cannot_say=OnCannotSay.ALLOW).action is under_allow
-    assert f"({cause.value})" in rule(verdict, on_cannot_say=OnCannotSay.ALLOW).reason
+    kinds = _UNSPECIFIED if cause is BlindCause.DECLARED else _NONE
+    verdict = CannotSay(blind_spot="x", cause=cause, kinds=kinds)
+    assert rule(verdict, on_cannot_say=_DENY).action is Action.BLOCK
+    assert rule(verdict, on_cannot_say=_ALLOW).action is under_allow
+    assert f"({cause.value}" in rule(verdict, on_cannot_say=_ALLOW).reason
 
 
 def test_the_refusal_tells_the_host_which_causes_no_setting_opens():
-    verdict = CannotSay(blind_spot="x", cause=BlindCause.FAULT)
+    verdict = CannotSay(blind_spot="x", cause=BlindCause.FAULT, kinds=_NONE)
     record = Ledger().append(Direction.INBOUND, verdict, None)
-    ruling = rule(verdict, on_cannot_say=OnCannotSay.ALLOW)
+    ruling = rule(verdict, on_cannot_say=_ALLOW)
     text = refusal_text(ruling, record, subject="tool call")
     assert "fell over" in text
     assert "no setting forwards a fault" in text

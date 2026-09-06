@@ -10,6 +10,11 @@ A detector may also *name the legs it reads* (:class:`DeclaresDirections`, ADR
 0027). The core asks it only there and counts it as a witness only there: a
 detector that answers ``[]`` on a leg it never reads is not somebody who looked
 and found nothing, and evidence that listed it as one would overstate who looked.
+
+And a declared limit names its *family* (ADR 0029): ``DetectorBlind`` carries a
+:class:`~limes.verdict.BlindKind` — over budget, an encoding, an opaque payload,
+another script — so that the operator who accepts one family of limit knowingly
+has not accepted them all. A detector that names none has said ``UNSPECIFIED``.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 from limes.spans import RedactedSpan
+from limes.verdict import BlindKind
 
 __all__ = [
     "Context",
@@ -83,7 +89,24 @@ class DetectorBlind(Exception):
     the core records it as one (``BlindCause.DECLARED``, ADR 0026). Any other
     exception out of :meth:`Detector.inspect` is a *fault*: also a blind spot,
     never a pass, but one no setting may open.
+
+    The limit names its family (ADR 0029): ``DetectorBlind("...", kind=BlindKind.BUDGET)``.
+    The core seals it into the verdict, and the transport policy opens declared
+    limits a family at a time. A detector that names none has declared
+    ``BlindKind.UNSPECIFIED`` — a family of its own, which an operator opens
+    knowingly or not at all — rather than borrowed a family it did not measure.
+
+    Attributes:
+        kind: The family of this limit.
     """
+
+    def __init__(self, message: str, *, kind: BlindKind | None = None) -> None:
+        super().__init__(message)
+        # ``BlindKind(kind)`` is the identity on a member and the conversion on
+        # its string value; an unknown name raises ``ValueError`` out of the
+        # detector, which the core then renders as a FAULT — a detector naming a
+        # family that does not exist is a bug, not a limit.
+        self.kind: BlindKind = BlindKind.UNSPECIFIED if kind is None else BlindKind(kind)
 
 
 @runtime_checkable

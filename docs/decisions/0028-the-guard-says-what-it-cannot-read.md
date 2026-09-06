@@ -132,3 +132,38 @@ detector wired declares the same way, per kind of response, which is how ADR
   (`tests/unit/ratchets/test_the_guard_says_what_it_cannot_read.py` and its
   two siblings), each seen red under a named mutation of the new code before
   this record was written.
+
+## Amendment 1 — the script measure stands down where its premise fails (2026-09-06)
+
+The "another script" measure rests on one premise: that the detector's rules
+read Latin script. The packaged rules do, and the measure was written for them.
+But it ran whatever the policy declared under `locales`, so an operator who
+wrote their own injection rules in Chinese and declared `locales: [zh]` saw
+every result in Chinese declared unreadable by their own rules — the guard
+calling the operator's text foreign to a policy that had just said otherwise.
+For that deployment 0.14.0 was unusable without `on_cannot_say: allow`, which
+also opened every other declared limit (repaired by ADR 0029, beside this).
+
+The measure now **stands down when the premise fails.** `readability` carries a
+documented set, `LATIN_SCRIPT_LANGUAGES` — the languages whose standard
+orthography is Latin — and the measure applies only when the policy declares
+nothing (the packaged rules are Latin-script) or every declared language is in
+that set. A policy declaring any language outside it has rules written for
+another script, and the measure does not run. An *unknown* tag denies the
+premise too: the measure would otherwise be asserting, about rules it cannot
+place, that they read Latin. The set is not a census, and does not need to be:
+a Latin-script language it lacks can only make the measure stand down, never
+fire, so an omission costs one check and never a false blind spot.
+
+Two things are stated rather than hidden. The measure cannot tell one non-Latin
+script from another: under `locales: [zh]`, Cyrillic prose is not declared
+unreadable either, because the only alternative is a language detector, which
+this project does not write. And the **declared-locale check stays**: it
+compares the caller's `locale` to the policy's `locales` and needs no premise
+about scripts, so `locale="fr"` under a Chinese policy is still a blind spot
+(family `locale`, ADR 0029). The opaque and invisible measures are unaffected;
+they read no language.
+
+`src/limes/detectors/readability.py` is in the detector perimeter and needs no
+re-pin. The ratchet of ADR 0029 holds the stand-down and was seen red with it
+removed.

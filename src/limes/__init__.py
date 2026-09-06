@@ -29,8 +29,11 @@ the transport's disposition into every chain record, ADR 0026 gave a blind spot
 its cause (``CannotSay(blind_spot, cause)``, and ``on_cannot_say: allow`` opens
 a declared limit and never a fault), ADR 0027 let a detector name its leg and
 made a leg nobody reads ``CannotSay`` rather than an ``Allow`` with no witness,
-and ADR 0028 made the guard say what it cannot read: an image in a tool result,
-a base64 payload, a word split by an invisible character, another script.
+ADR 0028 made the guard say what it cannot read: an image in a tool result,
+a base64 payload, a word split by an invisible character, another script, and
+ADR 0029 made every declared limit name its family (``CannotSay(blind_spot,
+cause, kinds)``), so the transport's ``on_cannot_say`` opens one family at a
+time rather than all of them at once.
 
 Still not shipped: any detector outside those four. No classifier layer — ADR
 0013 frames one as an optional extra, admitted by the same gate and only on its

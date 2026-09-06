@@ -38,20 +38,25 @@ like this (an outbound decision that masked a card number):
         "label": "pii:pan",
         "sha": "9219e0affa4b…" }              // SHA-256 of the matched value — never the value
     ],
-    "witnesses": [ { "id": "pii-egress", "version": "0.14.0" } ]   // the build that looked
+    "witnesses": [ { "id": "pii-egress", "version": "0.15.0" } ]   // the build that looked
   },
   "kind": "deny",
   "reason": "1 rule match(es) on outbound content: pii:pan"
 }
 ```
 
-A `CannotSay` fingerprint has no evidence — nobody looked — and three keys
-instead: `"kind": "cannot_say"`, the `blind_spot` in words, and its `cause`
-(ADR 0026): `declared` (a limit the guard named — a budget, an image it cannot
-read, a leg nobody reads), `fault` (a detector fell over) or `refused` (the relay
-would not take the content on). The cause is inside the digest, so it cannot be
-edited after the fact, and `'"cause":"fault"' in r.verdict_fingerprint` is how
-an auditor counts faults without reading prose.
+A `CannotSay` fingerprint has no evidence — nobody looked — and four keys
+instead: `"kind": "cannot_say"`, the `blind_spot` in words, its `cause`
+(ADR 0026): `declared` (a limit the guard named), `fault` (a detector fell over)
+or `refused` (the relay would not take the content on), and its `kinds` (ADR
+0029): the sorted families of the declared limits — `["binary"]` for an image
+the guard cannot read, `["opaque"]` for a base64 dump, `["script"]`,
+`["locale"]`, `["invisible"]`, `["budget"]`, `["encoding"]`, `["unwitnessed"]`
+for a leg or a message nobody reads, `["unspecified"]` for a detector that named
+none; `[]` for a fault or a refusal. Both are inside the digest, so neither can
+be edited after the fact, and `'"cause":"fault"' in r.verdict_fingerprint` or
+`'"kinds":["binary"]' in r.verdict_fingerprint` is how an auditor counts faults,
+or unread screenshots, without reading prose.
 
 **What is deliberately *not* stored:** the raw content (`"Carte 4242 4242 4242
 4242…"`) and the raw matched value (the card number). Only their SHA-256
@@ -72,9 +77,10 @@ becoming a liability that leaks every secret it ever saw.
 > records what it forwarded *unread* (ADR 0028): the first time each kind of
 > uninspected message crosses in a session — `initialize`, `prompts/list`, a
 > notification, a peer's `(response)` or `(error)` — a `CannotSay` with cause
-> `declared` and disposition `forward` says so. Filter them out with
-> `'"cause":"declared"' not in r.verdict_fingerprint` when you count decisions;
-> read them when you want to know what the guard did not read.
+> `declared`, family `unwitnessed` and disposition `forward` says so. Filter
+> them out with `'"kinds":["unwitnessed"]' not in r.verdict_fingerprint` when
+> you count decisions; read them when you want to know what the guard did not
+> read.
 
 ---
 

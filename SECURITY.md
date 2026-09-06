@@ -62,6 +62,8 @@ classifier layer (ADR 0013 frames one; it is not implemented).
   does not raise, a rule whose cost is not linear in the content at the declared
   budget (ADR 0023), a message that reaches a peer without the decision the
   README promises for it (ADR 0024), a `CannotSay` whose cause is `fault` or
-  `refused` forwarded under `on_cannot_say: allow` (ADR 0026), an `Allow` on a
-  leg no detector read (ADR 0027), an image or binary block counted as inspected
-  text (ADR 0028). Please report these privately.
+  `refused` forwarded under any `on_cannot_say` policy (ADR 0026), an `Allow` on
+  a leg no detector read (ADR 0027), an image or binary block counted as
+  inspected text (ADR 0028), a declared blind spot forwarded under a policy that
+  did not open every family it carries, or a shipped limit raised under the
+  wrong family (ADR 0029). Please report these privately.

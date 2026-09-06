@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from limes.transports.mcp.cli import main, parse_config, split_argv
-from limes.transports.mcp.config import OnCannotSay
+from limes.transports.mcp.config import CannotSayPolicy, OnCannotSay
 from limes.transports.redaction import EgressPolicy, OnEgressFinding
 
 _POLICY_WITH_ALLOW = """\
@@ -40,7 +40,7 @@ def test_the_defaults_are_the_packaged_policy_stderr_and_fail_closed():
     assert config.server_command == ("mcp-server-filesystem", "/data")
     assert config.policy_path is None
     assert config.record_path is None, "no --record means stderr, never stdout"
-    assert config.on_cannot_say is OnCannotSay.DENY
+    assert config.on_cannot_say == CannotSayPolicy.denying(), "every family of blind spot blocks"
     assert config.actor is None, "an unasserted identity stays None; it is never filled in"
     assert config.egress == EgressPolicy.blocking(), (
         "an outbound finding blocks unless an operator asked for masking"
@@ -61,7 +61,8 @@ def test_the_policy_file_may_declare_on_cannot_say(tmp_path):
     policy = tmp_path / "policy.yaml"
     policy.write_text(_POLICY_WITH_ALLOW, encoding="utf-8")
     config = parse_config(["--policy", str(policy), "--", "srv"], prog="limes-proxy")
-    assert config.on_cannot_say is OnCannotSay.ALLOW
+    assert config.on_cannot_say == CannotSayPolicy.allowing()
+    assert config.on_cannot_say.default is OnCannotSay.ALLOW
 
 
 def test_the_flag_overrides_the_policy_file(tmp_path):
@@ -70,7 +71,7 @@ def test_the_flag_overrides_the_policy_file(tmp_path):
     config = parse_config(
         ["--policy", str(policy), "--on-cannot-say", "deny", "--", "srv"], prog="limes-proxy"
     )
-    assert config.on_cannot_say is OnCannotSay.DENY
+    assert config.on_cannot_say.default is OnCannotSay.DENY
 
 
 def test_an_unreadable_on_cannot_say_is_a_usage_error_not_a_silent_default(tmp_path):

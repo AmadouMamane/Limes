@@ -25,8 +25,8 @@ that names its legs is asked only on them, so a guard wired with both an inbound
 and an outbound detector lists as witness only the one that read the leg; a leg
 no wired detector reads answers ``CannotSay`` rather than an ``Allow`` with no
 witness. And a caller may declare ``blind_spots`` of its own — the parts of what
-it handed over that it could derive no text from — which the core aggregates
-like a detector's declared limit.
+it handed over that it could derive no text from, each under its family (ADR
+0029) — which the core aggregates like a detector's declared limit.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ from limes.transports.redaction import (
     conceals_all,
     rule_egress,
 )
-from limes.verdict import Allow, CannotSay, Deny, Verdict
+from limes.verdict import Allow, BlindKind, CannotSay, Deny, Verdict, blind_label
 
 __all__ = ["Blocked", "Egress", "Guard"]
 
@@ -60,7 +60,7 @@ class Blocked(Exception):
         if isinstance(verdict, Deny):
             super().__init__(f"blocked: {verdict.reason}")
         else:
-            super().__init__(f"blocked (cannot say, {verdict.cause.value}): {verdict.blind_spot}")
+            super().__init__(f"blocked (cannot say, {blind_label(verdict)}): {verdict.blind_spot}")
 
 
 @final
@@ -152,7 +152,7 @@ class Guard:
         observed_at: str,
         direction: Direction = Direction.INBOUND,
         locale: str | None = None,
-        blind_spots: Sequence[str] = (),
+        blind_spots: Sequence[tuple[BlindKind, str]] = (),
     ) -> Verdict:
         """Inspect ``content`` and return the verdict **without** recording it.
 
@@ -168,9 +168,10 @@ class Guard:
                 declares its languages declares itself blind on one it does not
                 read (ADR 0028).
             blind_spots: Limits the caller declares about what it handed over,
-                one sentence each — the parts it could derive no text from
-                (ADR 0028). A finding still dominates them; otherwise they make
-                the verdict ``CannotSay`` with cause ``declared``.
+                each a ``(family, sentence)`` — the parts it could derive no
+                text from (ADR 0028/0029). A finding still dominates them;
+                otherwise they make the verdict ``CannotSay`` with cause
+                ``declared`` and their families.
 
         Returns:
             The verdict, not yet on the chain.
@@ -216,7 +217,7 @@ class Guard:
         observed_at: str,
         direction: Direction = Direction.INBOUND,
         locale: str | None = None,
-        blind_spots: Sequence[str] = (),
+        blind_spots: Sequence[tuple[BlindKind, str]] = (),
     ) -> Verdict:
         """Inspect ``content`` and record the verdict in the ledger.
 
@@ -252,7 +253,7 @@ class Guard:
         actor: str | None,
         observed_at: str,
         locale: str | None = None,
-        blind_spots: Sequence[str] = (),
+        blind_spots: Sequence[tuple[BlindKind, str]] = (),
     ) -> Egress:
         """Inspect content that is about to leave, and say what may leave (ADR 0006).
 
@@ -307,7 +308,7 @@ class Guard:
                 content=None,
                 verdict=verdict,
                 redaction=None,
-                reason=f"the guard could not look ({verdict.cause.value}): {verdict.blind_spot}",
+                reason=f"the guard could not look ({blind_label(verdict)}): {verdict.blind_spot}",
             )
 
         ruling = rule_egress(verdict, policy=self._egress, content_length=len(content))

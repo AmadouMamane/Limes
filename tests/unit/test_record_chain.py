@@ -13,7 +13,10 @@ def _session(evidence):
     return [
         (Direction.INBOUND, Allow(evidence=evidence)),
         (Direction.INBOUND, Deny(reason="injection", evidence=evidence)),
-        (Direction.OUTBOUND, CannotSay(blind_spot="detector offline", cause=BlindCause.FAULT)),
+        (
+            Direction.OUTBOUND,
+            CannotSay(blind_spot="detector offline", cause=BlindCause.FAULT, kinds=frozenset()),
+        ),
     ]
 
 

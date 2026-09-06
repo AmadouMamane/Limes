@@ -52,13 +52,19 @@ Three rules the contract enforces, and why each matters:
   label)` records the offsets and a hash of the matched text, never the raw bytes.
   The transport masks by those offsets and the eval grades by them, so a span you
   report but did not verify would mislead both.
-- **If you cannot look, raise `DetectorBlind`.** Dependency absent, content
-  unreadable, budget exceeded — the core turns it into `CannotSay` with cause
-  `declared`, and the egress leg blocks. Returning `[]` when you did not actually
-  inspect is the one lie the system forbids: it reads as "clean". Any *other*
-  exception out of `inspect` is also a blind spot, but with cause `fault` — one no
-  `on_cannot_say` setting opens (ADR 0026) — so declare your limits rather than
-  fall over them.
+- **If you cannot look, raise `DetectorBlind`, and name the family.** Dependency
+  absent, content unreadable, budget exceeded — the core turns it into
+  `CannotSay` with cause `declared`, and the egress leg blocks. Returning `[]`
+  when you did not actually inspect is the one lie the system forbids: it reads
+  as "clean". Pass `kind=` from `limes.verdict.BlindKind` (`BUDGET`, `ENCODING`,
+  `OPAQUE`, `INVISIBLE`, `SCRIPT`, `LOCALE`, `BINARY`, `UNWITNESSED`) so an
+  operator can open exactly that family in the proxy's `on_cannot_say` policy
+  (ADR 0029); a `DetectorBlind` with no `kind` is `UNSPECIFIED`, a family of its
+  own that an operator opens knowingly or not at all, and a name outside the
+  vocabulary is a `ValueError` the core renders as a fault. Any *other*
+  exception out of `inspect` is also a blind spot, but with cause `fault` — one
+  no `on_cannot_say` policy opens (ADR 0026) — so declare your limits rather
+  than fall over them.
 - **Name the legs you read.** `directions` is optional and the core reads it:
   you are asked only on those legs and listed as a witness only there. A detector
   that declares nothing is asked on every leg and its `[]` is taken at its word,
@@ -66,8 +72,10 @@ Three rules the contract enforces, and why each matters:
   0027). The shipped detectors also run `limes.detectors.readability.
   refuse_unreadable_text` after their rules found nothing, so that content their
   rules cannot read — mostly base64, words split by invisible characters, another
-  script — is a declared blind spot rather than a pass (ADR 0028); a rule-based
-  detector of your own can call it the same way.
+  script — is a declared blind spot rather than a pass (ADR 0028), each under
+  its family; a rule-based detector of your own can call it the same way. If
+  your rules read a non-Latin language, declare it under `locales` and the
+  script measure stands down for your text (ADR 0028 Am. 1).
 
 Wire it into a guard like any shipped detector:
 
