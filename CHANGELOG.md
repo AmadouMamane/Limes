@@ -4,6 +4,52 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-09-06
+
+**The outbound leg meets its competitors.** ADR 0020 measured limes's injection
+rules against the field; the two data detectors had external corpora and no
+competitor. Now they have both (ADR 0030): Presidio and mcp-firewall on the PII
+sentences, gitleaks itself, detect-secrets and mcp-firewall on the credential
+catalogue, under the located-span grader every egress matrix uses. mcp-firewall's
+injection detector joins the injection table too. Measurement only: no verdict
+changes, no dependency enters the package.
+
+### Added
+
+- `limes.eval.egress_comparison_harness` (`python -m … pii|secrets [--write]`),
+  the matrices `eval/matrices/comparison_pii.md` and `comparison_secrets.md`,
+  the committed findings under `eval/matrices/comparison/{pii,secrets}/`, and
+  `scripts/bench_competitors.py --bench pii|secrets` with adapters for Presidio,
+  detect-secrets, gitleaks (binary, `--config` pinned to the vendored catalogue
+  and checked against its recorded sha256) and mcp-firewall's three detectors.
+  Every adapter carries a fidelity check against the tool's own public path.
+- **Held to the formats limes claims**: the secrets matrix asks, per catalogue
+  rule limes says it reads (19 of them), who located the instance — and names
+  limes's five misses one by one. A test holds those notes to exactly the set
+  of misses. Two of the five are real gaps in limes's rules (the `A3T…` AWS
+  key-id prefix family; GitHub's `github_pat_…` format); they are named here,
+  not fixed here.
+- **Home ground** is marked (⚑) where the corpus is a contestant's own material,
+  and the ceiling row's own shortfall is stated: gitleaks' binary locates 194 of
+  the 218 instances generated from its regexes, because a rule is more than its
+  regex.
+- ADR 0030, and two amendments to ADR 0020's rules it records: the third
+  operating point is *limes's precision* on the same controls (not zero, which
+  limes does not have on the PII decoys), and a tool with no score has one
+  operating point per shipped configuration — a cut that flags nothing is never
+  a row, and such a tool has no ROC row either.
+- `make eval` regenerates the two new matrices; the byte-for-byte matrix test
+  covers them with measured latency masked.
+
+### Changed
+
+- `eval/matrices/comparison.md` carries mcp-firewall's pattern detector at its
+  shipped sensitivity; under the new rule its `high` sensitivity, which kills
+  more controls than it catches attacks on `dev`, is not a row. No existing
+  number moved. `DECLARED_TOOLS` names the new tool; the README's comparison
+  section gains the two legs it lacked and the prior-art entry for mcp-firewall
+  becomes a measurement.
+
 ## [0.15.0] - 2026-09-06
 
 **A declared limit names its family.** 0.14.0 made the guard say what it cannot
@@ -1052,6 +1098,7 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.16.0]: https://github.com/AmadouMamane/Limes/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/AmadouMamane/Limes/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/AmadouMamane/Limes/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/AmadouMamane/Limes/compare/v0.12.0...v0.13.0

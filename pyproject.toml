@@ -1,6 +1,6 @@
 [project]
 name = "limes"
-version = "0.15.0"
+version = "0.16.0"
 description = "The guard that can prove what it refused — a transport-agnostic, evidence-carrying policy guard for LLM agents."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -123,6 +123,7 @@ exclude = [
     "src/limes/eval/external_harness.py",
     "src/limes/eval/external_egress_corpus.py",
     "src/limes/eval/external_egress_harness.py",
+    "src/limes/eval/egress_comparison_harness.py",
 ]
 
 [tool.ruff]
