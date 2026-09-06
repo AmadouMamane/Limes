@@ -225,3 +225,56 @@ def test_the_installed_limes_script_runs_check(tmp_path):
     assert denied.stdout.startswith("[DENY]")
     assert allowed.returncode == 0, allowed.stderr
     assert allowed.stdout.startswith("[ALLOW]")
+
+
+# --- a policy that cannot load is a usage error, never a traceback (0.13.0) ---
+
+
+def test_a_policy_whose_pattern_does_not_compile_is_a_usage_error(tmp_path):
+    # Before 0.13.0 `re.error` escaped as a traceback with exit 1 — the code that
+    # means DENY, so a CI gate read a broken policy as a refusal.
+    path = _write(tmp_path, "benign.txt", BENIGN)
+    policy = _write(
+        tmp_path,
+        "policy.yaml",
+        "version: 1\nrules:\n  - label: 'injection:x'\n    origin: limes\n    pattern: '(['\n",
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_check(["--policy", str(policy), str(path)], clock=_fixed_clock)
+
+    assert excinfo.value.code == 2
+
+
+def test_a_policy_that_is_not_yaml_is_a_usage_error(tmp_path):
+    path = _write(tmp_path, "benign.txt", BENIGN)
+    policy = _write(tmp_path, "policy.yaml", "version: [1\n")
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_check(["--policy", str(policy), str(path)], clock=_fixed_clock)
+
+    assert excinfo.value.code == 2
+
+
+def test_the_json_record_says_the_scanner_takes_no_disposition(tmp_path, capsys):
+    # The exit code IS the verdict; what the caller does with it is theirs (ADR 0025).
+    path = _write(tmp_path, "benign.txt", BENIGN)
+
+    run_check(["--json", str(path)], clock=_fixed_clock)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert "disposition" in payload["record"]
+    assert payload["record"]["disposition"] is None
+
+
+def test_content_over_the_inbound_budget_is_cannot_say_and_exits_three(tmp_path, capsys):
+    # ADR 0023: the inbound leg declares a budget too. Beyond it the detector
+    # refuses to answer, and the exit code says so — 3, not 0 over an unread file.
+    from limes.policy import load_injection_policy
+
+    path = _write(tmp_path, "huge.txt", "a" * (load_injection_policy().max_content_chars + 1))
+
+    code = run_check([str(path)], clock=_fixed_clock)
+
+    assert code == CheckExit.CANNOT_SAY
+    assert capsys.readouterr().out.startswith("[CANNOT SAY]")

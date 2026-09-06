@@ -141,6 +141,7 @@ def _record_meta(record: DecisionRecord) -> dict[str, Any]:
     return {
         "seq": record.seq,
         "direction": record.direction,
+        "disposition": record.disposition,
         "digest": record.digest,
         "prev_hash": record.prev_hash,
     }

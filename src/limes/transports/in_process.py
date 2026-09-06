@@ -11,6 +11,14 @@ which is a verdict *plus what to do with the content*. Under a redacting policy 
 refused response is not dropped — the matched offsets are overwritten with a
 fixed token and the rest is forwarded untouched. The refusal is still a ``Deny``
 and still lands on the chain: a masked forward is never recorded as an ``Allow``.
+
+Two seams sit under ``check``, and a transport that takes a disposition of its
+own uses them directly (ADR 0025): :meth:`Guard.verdict` decides without
+recording, :meth:`Guard.record` seals the decision *with* the disposition the
+transport took — ``forward``, ``redact`` or ``block`` — so the chain proves not
+only that a response was refused but what then left. ``check`` itself records
+``None``: a caller who receives a bare verdict decides what to do with it, and
+the ledger does not guess on their behalf.
 """
 
 from __future__ import annotations
@@ -21,7 +29,7 @@ from typing import final
 
 from limes.detector import Context, Detector, Direction
 from limes.guard import decide
-from limes.record import Ledger
+from limes.record import DecisionRecord, Ledger
 from limes.transports.redaction import (
     Action,
     EgressPolicy,
@@ -128,6 +136,56 @@ class Guard:
         """The egress policy this guard enforces on the outbound leg."""
         return self._egress
 
+    def verdict(
+        self,
+        content: str,
+        *,
+        actor: str | None,
+        observed_at: str,
+        direction: Direction = Direction.INBOUND,
+        locale: str | None = None,
+    ) -> Verdict:
+        """Inspect ``content`` and return the verdict **without** recording it.
+
+        The seam a transport uses when it takes a disposition of its own: decide
+        first, dispose, then :meth:`record` the two together (ADR 0025).
+
+        Args:
+            content: The content to inspect.
+            actor: The caller's asserted identity (``None`` for anonymous).
+            observed_at: ISO-8601 timestamp recorded into evidence.
+            direction: The leg to inspect (default inbound).
+            locale: Optional locale hint.
+
+        Returns:
+            The verdict, not yet on the chain.
+        """
+        ctx = Context(policy_hash=self._policy_hash, actor=actor, locale=locale)
+        return decide(direction, content, ctx, self._detectors, observed_at=observed_at)
+
+    def record(
+        self,
+        direction: Direction,
+        verdict: Verdict,
+        actor: str | None,
+        *,
+        disposition: str | None,
+    ) -> DecisionRecord:
+        """Seal ``verdict`` and the transport's ``disposition`` into the chain (ADR 0025).
+
+        Args:
+            direction: The leg the decision was made on.
+            verdict: The verdict :meth:`verdict` returned.
+            actor: The caller's asserted identity.
+            disposition: What the transport did with the content —
+                ``"forward"``, ``"redact"`` or ``"block"`` — or ``None`` when it
+                took no disposition of its own.
+
+        Returns:
+            The linked record.
+        """
+        return self._ledger.append(direction, verdict, actor, disposition=disposition)
+
     def check(
         self,
         content: str,
@@ -139,6 +197,9 @@ class Guard:
     ) -> Verdict:
         """Inspect ``content`` and record the verdict in the ledger.
 
+        The record's disposition is ``None``: the caller receives a bare verdict
+        and decides what to do with it, and the ledger does not guess.
+
         Args:
             content: The content to inspect.
             actor: The caller's asserted identity (``None`` for anonymous).
@@ -149,9 +210,10 @@ class Guard:
         Returns:
             The verdict, which is also appended to :attr:`ledger`.
         """
-        ctx = Context(policy_hash=self._policy_hash, actor=actor, locale=locale)
-        verdict = decide(direction, content, ctx, self._detectors, observed_at=observed_at)
-        self._ledger.append(direction, verdict, actor)
+        verdict = self.verdict(
+            content, actor=actor, observed_at=observed_at, direction=direction, locale=locale
+        )
+        self.record(direction, verdict, actor, disposition=None)
         return verdict
 
     def check_egress(
@@ -166,7 +228,8 @@ class Guard:
 
         The verdict is taken exactly as :meth:`check` takes it — same core, same
         pipeline, same single record on the chain. The egress policy then decides
-        what the transport *does* with a refusal:
+        what the transport *does* with a refusal, and that disposition is sealed
+        into the record beside the verdict (ADR 0025):
 
         * every kind that fired is configured ``redact`` → the matched offsets
           are overwritten with fixed tokens and the rest is forwarded;
@@ -184,13 +247,19 @@ class Guard:
         Returns:
             The egress decision, whose ``content`` is what may be sent.
         """
-        verdict = self.check(
+        verdict = self.verdict(
             content,
             actor=actor,
             observed_at=observed_at,
             direction=Direction.OUTBOUND,
             locale=locale,
         )
+        egress = self._dispose(content, verdict)
+        self.record(Direction.OUTBOUND, verdict, actor, disposition=egress.action.value)
+        return egress
+
+    def _dispose(self, content: str, verdict: Verdict) -> Egress:
+        """Turn an outbound verdict into what leaves, under the egress policy."""
         if isinstance(verdict, Allow):
             return Egress(
                 action=Action.FORWARD,

@@ -200,6 +200,7 @@ def _as_json(verdict: Verdict, record: DecisionRecord) -> str:
             "seq": record.seq,
             "direction": record.direction,
             "actor": record.actor,
+            "disposition": record.disposition,
             "prev_hash": record.prev_hash,
             "digest": record.digest,
         },
@@ -249,8 +250,10 @@ def run_check(
         parser.error(str(exc))  # argparse exits 2 — a usage error, not a verdict
 
     guard = Guard(detectors, policy_hash=policy_hash)
-    verdict = guard.check(content, actor=None, observed_at=clock(), direction=direction)
-    record = guard.ledger.records()[-1]
+    verdict = guard.verdict(content, actor=None, observed_at=clock(), direction=direction)
+    # The scanner takes no disposition of its own: the exit code IS the verdict,
+    # and what the caller does with it is the caller's (ADR 0025).
+    record = guard.record(direction, verdict, None, disposition=None)
     print(_as_json(verdict, record) if options.json else _as_text(verdict, record))
     return int(_exit_for(verdict))
 

@@ -21,8 +21,21 @@
 # `tessera` rules and so misses case 08 exactly as Tessera does; the injection
 # detector reads all rules. The delta between them is therefore data, not a
 # second policy file.
+#
+# One ported rule is no longer byte-verbatim: `tag-breakout` (ADR 0023). Its
+# unbounded `.*` cost 11 seconds on a single 200 000-character line of closing
+# tags, because every tag re-scanned the whole line. It now looks 600
+# characters ahead. Every corpus case it caught, it still catches, and the
+# baseline's own recall (22/33) is pinned by a test so the port stays measured.
 
 version: 1
+
+# Beyond this many characters the inbound detector does not scan, and says so:
+# DetectorBlind -> CannotSay -> the transport blocks (ADR 0023). The same figure
+# the packaged egress detectors declare, so both legs refuse at one size. It is
+# data rather than a constant for the reason egress.yaml gives: "I did not look
+# at this" must be auditable, and the file's hash covers the declaration.
+max_content_chars: 200000
 
 rules:
   # --- ported from Tessera (origin: tessera) ---
@@ -46,9 +59,11 @@ rules:
     origin: tessera
     pattern: '</?\s*(system|instruction|prompt|rule|override|admin)[^>]{0,50}>'
 
+  # Bounded to a 600-character window (ADR 0023): `.*` re-scanned the rest of
+  # the line from every closing tag, which is quadratic in the number of tags.
   - label: 'injection:tag-breakout'
     origin: tessera
-    pattern: '(?i)(</motif>|</raison>|</reason>|</field>).*<(system|instruction|prompt)'
+    pattern: '(?i)(</motif>|</raison>|</reason>|</field>).{0,600}?<(system|instruction|prompt)'
 
   - label: 'injection:decode-execute'
     origin: tessera

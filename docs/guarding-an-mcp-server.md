@@ -46,13 +46,16 @@ stderr.
 
 | leg | direction | what is inspected | detector(s) |
 |---|---|---|---|
-| host → server | a tool **call** your model makes | the call, before it runs | `injection` |
-| server → host | a tool **result**, and the **tool list** | before your model reads it | `pii-egress`, `secrets-egress`, `injection-egress` |
+| host → server | a tool **call** your model makes (with or without an `id`) | the call, before it runs | `injection` |
+| server → host | a tool **result**, a **resource**, the **tool list**, a **prompt** (`prompts/get`), and the two **requests** a server makes of the host (`sampling/createMessage`, `elicitation/create`) | before your model or your user reads it | `pii-egress`, `secrets-egress`, `injection-egress` |
 
 The second row is the one worth being precise about. `tools/list` is answered
 *before any call exists*, and your model reads it first — so a guard that only
 inspects calls never sees a poisoned description. limes inspects that response
-(ADR 0012, ADR 0018).
+(ADR 0012, ADR 0018), and since 0.13.0 the prompt messages and the server's own
+requests too (ADR 0024). Listings other than the tool list, completions and
+server log lines cross uninspected, by decision — the
+[threat model](threat-model.md) says which and why.
 
 ## See it happen
 

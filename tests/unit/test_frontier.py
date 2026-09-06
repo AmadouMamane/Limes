@@ -99,6 +99,15 @@ ALLOWED = (
     # goes red. Post-v0.1, so it lives here beside the ADR it enforces rather
     # than among the v0.1-frozen ratchets.
     "tests/unit/ratchets/test_span_digest_is_total.py",
+    # ADR 0011 Am. 2, ADR 0023 and ADR 0025's pins — each post-v0.1, each beside
+    # the record it enforces: a crashing detector is a blind spot; every rule is
+    # linear in the content at the declared budget, and the inbound leg declares
+    # one; the chain seals the disposition and the witness names its build.
+    "tests/unit/ratchets/test_a_crash_is_not_a_verdict.py",
+    "tests/unit/ratchets/test_scan_cost_is_bounded.py",
+    "tests/unit/ratchets/test_inbound_scan_is_budgeted.py",
+    "tests/unit/ratchets/test_disposition_is_sealed.py",
+    "tests/unit/ratchets/test_witness_names_its_build.py",
     "tests/integration/mcp/",
     "docs/decisions/0005-mcp-proxy-transport.md",
     "docs/decisions/0006-egress-redaction.md",
@@ -106,6 +115,9 @@ ALLOWED = (
     "docs/decisions/0008-mask-styles.md",
     "docs/decisions/0011-a-crash-is-not-a-verdict.md",
     "docs/decisions/0018-the-leg-selects-its-detectors.md",
+    # ADR 0024 changes only the MCP transport: the relay owns every tool call
+    # and its own `_meta.limes`, and guards prompts/get and the server's requests.
+    "docs/decisions/0024-the-relay-owns-every-tool-call-and-its-own-annotation.md",
     "docs/design/mcp-proxy-v0.2.md",
     "docs/images/",
     "docs/audit-trail.md",
@@ -212,24 +224,41 @@ CORE = (
 #: totality to the SPAN digest, because `spans.redact()` kept the bare encode
 #: the ADR removed from `guard.py`, and the inbound leg reached it with no
 #: unreadability screen: a matched span containing a lone surrogate crashed
-#: the guard mid-verdict. The ratchet's strength is intact —
+#: the guard mid-verdict. Am. 2 made a crashing detector a blind spot rather
+#: than a traceback. ADR 0023 gave the inbound leg a scan budget (`policy.py`,
+#: `injection.py`, `policy.yaml`), and ADR 0025 sealed the disposition into the
+#: chain (`record.py`). The ratchet's strength is intact —
 #: any further drift of the file is red — what changed is the reference bytes,
-#: once, with the authorisation written down. Every key here must be in CORE
-#: and must actually differ from v0.1 (asserted below): an entry that covers a
-#: non-core file would widen a perimeter by another name, and one that covers
-#: an unchanged file would be a phantom nobody can audit (ADR 0026).
+#: once per record, with the authorisation written down. Every key here must
+#: be in CORE and must actually differ from v0.1 (asserted below): an entry
+#: that covers a non-core file would widen a perimeter by another name, and one
+#: that covers an unchanged file would be a phantom nobody can audit (ADR 0026).
 AMENDED = {
-    # ADR 0011 — the content digest became total (`surrogatepass`).
-    "src/limes/guard.py": "5a0f155ab741a5f1de2c2b55e277099b793cbf22f09b1a75f6129b4d4d408d86",
+    # ADR 0011 — the content digest became total (`surrogatepass`); Am. 2 — a
+    # detector that crashes is rendered as a blind spot, never a traceback.
+    "src/limes/guard.py": "6d4cfaf3e8ae99700585fe221cbf7f78cf070858f95f896644b21f03a321b189",
+    # ADR 0025 — the record seals the transport's disposition beside the verdict.
+    "src/limes/record.py": "8688fc9934a8c5e9b4ff8a24c304f2b01c834fe90d8d435de51ffb76d06e9d41",
+    # ADR 0023 — the injection policy declares `max_content_chars`, the loader
+    # reads it, and a pattern that does not compile or a file that is not YAML
+    # is the ValueError the docstring always promised.
+    "src/limes/policy.py": "25c15e47088ba88d625e20c85211554e52516f97d35e4be3eb145222c926436c",
+    # ADR 0023 — the inbound detector refuses beyond its declared budget; ADR
+    # 0025 — its version is the package's, so a witness names its build.
+    "src/limes/detectors/injection.py": (
+        "a4e9059fe0832093c9b5ee8933c26bbf4c4ff038e84dc21edf93abecb79df016"
+    ),
     # ADR 0011 Am. 1 — the span digest became total too: redact() had kept the
     # bare encode, reached on the inbound leg by any matched span containing a
     # lone surrogate. Pinned by tests/unit/ratchets/test_span_digest_is_total.py.
     "src/limes/spans.py": "9f115adbf56dd8f5e5f778972cbaf051a219807c68d94ce829f9741a10a93b1b",
     # ADR 0019 — the inbound leg gained the override family the outbound leg had.
     # Ported verbatim after the external corpus measured this detector at 0/131 on
-    # goal hijacking while the other leg, with these rules, caught 82%.
+    # goal hijacking while the other leg, with these rules, caught 82%. Re-pinned
+    # under ADR 0023: `tag-breakout` bounded to a 600-character window, and the
+    # file declares the inbound scan budget.
     "src/limes/detectors/policy.yaml": (
-        "61517793ecdcb7a8153a39adf3c65d93c5157c95c401454c2b54fea3b62561d9"
+        "9ce7d2d1177b086811232f9892427a086b9f72b931581986c85852a821b8a7bc"
     ),
     # ADR 0015 — the type-level ratchet resolves mypy's presence before it reads
     # any exit code. `python -m mypy` exits non-zero when mypy is MISSING, so the
@@ -314,6 +343,8 @@ PROJECT_SCAFFOLDING = (
 #: in the same change that makes the deviation — which is ADR 0001's rule.
 AMENDING_RECORDS = (
     "docs/decisions/0019-one-override-family-for-both-legs.md",
+    "docs/decisions/0023-a-scan-is-bounded-in-time-not-only-in-size.md",
+    "docs/decisions/0025-the-chain-seals-the-disposition-and-the-witness-names-its-build.md",
     "docs/decisions/0014-the-package-names-its-own-version.md",
     "docs/decisions/0015-a-ratchet-reports-its-own-blind-spot.md",
     "docs/decisions/0016-apache-2-throughout.md",

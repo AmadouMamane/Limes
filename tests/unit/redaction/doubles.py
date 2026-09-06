@@ -1,4 +1,4 @@
-"""Outbound detector doubles. limes ships **no** egress detector, and these are not one.
+"""Outbound detector doubles — deterministic stand-ins, not shipped detectors.
 
 They exist because egress redaction is transport machinery: it masks the offsets
 a finding hands it, and it is indifferent to which detector produced them. To
@@ -6,12 +6,14 @@ prove the machinery, a test needs findings on the outbound leg — so these doub
 manufacture them, with real :class:`~limes.spans.RedactedSpan` offsets over the
 real content, and nothing else.
 
-Why they stay in ``tests/`` rather than becoming ``limes.detectors.pii``: ADR 0003
-— no detector ships without an eval corpus and a null control. A regex that finds
-a card number in a fixture proves nothing about finding one in the wild, and
-shipping it would let the README claim a capability that was never measured. The
-kinds they emit (``pii``, ``secret``) are the ones an egress policy is *about*,
-which is exactly what makes them useful here and inadmissible in ``src/``.
+Why they stay in ``tests/`` rather than joining the admitted set: ADR 0003 — no
+detector ships without an eval corpus and a null control. A regex that finds a
+card number in a fixture proves nothing about finding one in the wild. The
+shipped ``pii-egress`` and ``secrets-egress`` cleared that bar (v0.5, v0.6); these
+doubles exist so a redaction proof can assert an *exactly known* finding without
+depending on a real detector's rules. The kinds they emit (``pii``, ``secret``)
+are the ones an egress policy is *about*, which is exactly what makes them useful
+here and inadmissible in ``src/``.
 """
 
 from __future__ import annotations

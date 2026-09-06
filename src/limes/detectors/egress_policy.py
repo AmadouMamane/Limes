@@ -248,7 +248,12 @@ def _read_rule(raw: object, *, policy_path: Path, detector: str) -> EgressRule:
         raise ValueError(
             f"policy {policy_path}: rule {label!r} has a non-boolean 'retry_trim' {retry_trim!r}"
         )
-    compiled = re.compile(pattern)
+    try:
+        compiled = re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(
+            f"policy {policy_path}: rule {label!r} has a pattern that does not compile: {exc}"
+        ) from exc
     if value_group is not None:
         if not isinstance(value_group, str) or not value_group:
             raise ValueError(
@@ -295,12 +300,15 @@ def load_egress_policy(path: Path | None = None) -> EgressPolicy:
     policy_path = path or _DEFAULT_POLICY
     raw = policy_path.read_bytes()
     policy_hash = hashlib.sha256(raw).hexdigest()
-    data = yaml.safe_load(raw)
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"policy {policy_path} is not valid YAML: {exc}") from exc
 
     if not isinstance(data, dict):
         raise ValueError(f"policy {policy_path} must be a mapping, got {type(data).__name__}")
     version = data.get("version")
-    if not isinstance(version, int):
+    if not isinstance(version, int) or isinstance(version, bool):
         raise ValueError(f"policy {policy_path}: 'version' must be an integer")
     declared = data.get("detectors")
     if not isinstance(declared, dict) or not declared:

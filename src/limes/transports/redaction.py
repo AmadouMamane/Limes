@@ -549,7 +549,10 @@ def read_egress_policy(policy_path: Path) -> EgressPolicy | None:
             unrecognised key is refused rather than ignored: a policy whose typo
             silently means "block everything" is a policy nobody can trust.
     """
-    data = yaml.safe_load(policy_path.read_bytes())
+    try:
+        data = yaml.safe_load(policy_path.read_bytes())
+    except yaml.YAMLError as exc:
+        raise ValueError(f"policy {policy_path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"policy {policy_path} must be a mapping, got {type(data).__name__}")
     if ON_EGRESS_FINDING_KEY not in data:

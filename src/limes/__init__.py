@@ -20,9 +20,12 @@ numbers ADR 0003 demands before admission: ``pii-egress`` (v0.5),
 ``secrets-egress`` (v0.6) and ``injection-egress`` (v0.8), which reads tool
 descriptions and tool results for the instructions an attacker plants there
 (ADR 0012). So the v0.3 redaction behaviour has something to mask out of the box.
-One core file has moved since v0.1, once and by decision: ADR 0011 made the
-evidence digest total, so content this runtime cannot encode yields ``CannotSay``
-rather than a crash.
+The core has moved only by decision since v0.1, each move a named ADR with a
+re-pinned hash: ADR 0011 made the evidence digest total (and, amended, made a
+crashing detector a blind spot rather than a traceback), ADR 0014 gave the
+package this ``__version__``, ADR 0019 ported the override family to the
+inbound policy, ADR 0023 gave the inbound leg a scan budget, and ADR 0025 sealed
+the transport's disposition into every chain record.
 
 Still not shipped: any detector outside those four. No classifier layer — ADR
 0013 frames one as an optional extra, admitted by the same gate and only on its

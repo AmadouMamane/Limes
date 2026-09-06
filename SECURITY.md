@@ -39,7 +39,10 @@ What ships, and is therefore in scope: **four admitted detectors** —
 `injection` on the inbound leg, and `pii-egress`, `secrets-egress` and
 `injection-egress` on the outbound one — reached through **three transports**: the
 in-process guard, the MCP stdio proxy (`limes proxy`) and the MCP Streamable HTTP
-proxy (`limes proxy-http`). `limes check` is the CLI, and the leg selects its
+proxy (`limes proxy-http`). On the proxies the outbound seam screens the results
+of `tools/call`, `resources/read`, `tools/list` and `prompts/get`, and the
+`sampling/createMessage` and `elicitation/create` requests a server makes of the
+host (ADR 0024); the threat model names what crosses uninspected, by decision. `limes check` is the CLI, and the leg selects its
 detectors there too (ADR 0018): the inbound leg runs `injection`, the outbound
 leg runs all three egress detectors — outbound scanning over the CLI is shipped,
 active, and in scope.
@@ -56,4 +59,6 @@ classifier layer (ADR 0013 frames one; it is not implemented).
 - A flaw in the **engine** *is* a vulnerability: a `CannotSay` silently treated as
   `Allow`, an `Allow` constructed without evidence, a redacted span that leaks the
   raw payload, a hash-chain that verifies a tampered record, a `__bool__` that
-  does not raise. Please report these privately.
+  does not raise, a rule whose cost is not linear in the content at the declared
+  budget (ADR 0023), a message that reaches a peer without the decision the
+  README promises for it (ADR 0024). Please report these privately.

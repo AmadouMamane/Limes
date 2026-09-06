@@ -94,3 +94,21 @@ pinned to the sha256 of its post-amendment bytes in
 `tests/unit/test_frontier.py`, beside `guard.py`'s pin. The behaviour is held
 by `tests/unit/ratchets/test_span_digest_is_total.py`, run and seen RED (both
 tests, `UnicodeEncodeError` at `spans.py:47`) before the one-line fix landed.
+
+## Amendment 2 — a detector that crashes is a blind spot (2026-09-06)
+
+`decide` turned `DetectorBlind` into `CannotSay` and let every other exception
+escape. A detector that raised anything else — a bug in a validator, a plugin
+that failed to import its own dependency lazily, a `RuntimeError` — killed the
+proxy session mid-verdict. Closed, since nothing was forwarded; but not a
+verdict: nothing was journalled, no blind spot was named, and the host saw its
+server disappear. The same reasoning this record applied to the digest applies
+to the pipeline: a witness that fell over did not look, and the honest rendering
+of "did not look" is `CannotSay`, naming the exception.
+
+`decide` now catches `Exception` from a detector and records it as a blind spot
+(`<id> crashed instead of answering (<type>: <message>)`). A finding from another
+detector still dominates, as it does for any blind neighbour; `BaseException`
+(a keyboard interrupt, an exit) still escapes. `src/limes/guard.py` is re-pinned
+to its post-amendment bytes; `tests/unit/ratchets/test_a_crash_is_not_a_verdict.py`
+was seen red — `RuntimeError` out of `decide` — before the two-line change.

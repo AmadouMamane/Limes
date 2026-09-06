@@ -25,6 +25,7 @@ the outbound leg only; ``injection`` still owns inbound.
 
 from __future__ import annotations
 
+from limes import __version__
 from limes.detector import Context, Direction, Finding
 from limes.detectors.egress_policy import EgressPolicy, load_egress_policy
 from limes.detectors.egress_scan import refuse_unreadable, scan
@@ -36,7 +37,8 @@ class PiiEgressDetector:
     """Rule-based, checksum-gated outbound personal-data detector."""
 
     id = "pii-egress"
-    version = "0.1.0"
+    #: The build that is answering (ADR 0025) — the same string `limes --version` prints.
+    version = __version__
 
     def __init__(self, policy: EgressPolicy | None = None) -> None:
         """Wire the detector to ``policy`` (defaults to the packaged egress policy)."""

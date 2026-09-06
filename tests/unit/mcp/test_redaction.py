@@ -4,8 +4,9 @@ The relay is driven over in-memory streams with a scripted server on the far
 side, so a test can read exactly what the host received — which is the only way
 to prove the host got the masked payload and not the server's own bytes.
 
-The outbound detectors here are doubles (``tests/unit/redaction/doubles.py``).
-limes ships none; the machinery is what is under test.
+The outbound detectors here are doubles (``tests/unit/redaction/doubles.py``) so
+every masked value is exactly known; the machinery is what is under test. The
+shipped egress detectors are proven on the same seam in ``tests/integration/``.
 """
 
 from __future__ import annotations

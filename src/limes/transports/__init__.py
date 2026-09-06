@@ -1,9 +1,12 @@
 """Transports — adapters that carry the core's decision to a host (ADR 0004).
 
-Two transports, one core. **In-process**
-(:class:`limes.transports.in_process.Guard`), shipped in v0.1, and the **MCP
-stdio proxy** (:mod:`limes.transports.mcp`, v0.2, ADR 0005) — a transport because
-that path actually speaks MCP, not because of a name.
+Three transports, one core. **In-process**
+(:class:`limes.transports.in_process.Guard`), shipped in v0.1; the **MCP stdio
+proxy** (:mod:`limes.transports.mcp`, v0.2, ADR 0005) — a transport because that
+path actually speaks MCP, not because of a name; and the **MCP Streamable HTTP
+proxy** (:mod:`limes.transports.mcp.http`, v0.4, ADR 0007), which runs the stdio
+proxy's relay over the other wire MCP speaks. ``limes check`` (:mod:`limes.cli`)
+is a usage surface over the same core, with no transport at all.
 
 They share one behaviour, in :mod:`limes.transports.redaction` (v0.3, ADR 0006):
 what to do with a finding on the way *out*. Block, which is the default, or mask

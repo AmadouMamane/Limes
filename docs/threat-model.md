@@ -36,8 +36,22 @@ Two published families live here:
 - **Indirect injection**: an "ignore previous instructions" buried in a fetched
   page, an email, a retrieved document — arriving in a tool *result*. limes screens
   results on the same leg.
+- **A poisoned prompt or a poisoned request** (ADR 0024): the messages a
+  `prompts/get` result hands the model, the messages a `sampling/createMessage`
+  request asks the host's model to complete, the text an `elicitation/create`
+  request shows the user. All three cross the same seam; a refused request is
+  answered to the server that asked.
 
 Detector: `injection-egress`.
+
+**What crosses the seam uninspected, by decision** (ADR 0012, ADR 0024):
+`prompts/list`, `resources/list` and `resources/templates/list` (names and
+descriptions), `completion/complete` (completion values), `notifications/message`
+(server logging, which a host writes to a log rather than to the model, and where
+a blocking policy would drop every line that happened to carry an address), and
+every host→server message other than `tools/call`. The relay does reserve
+`_meta.limes` on every result: an annotation a server sends under that key is
+moved to `_meta.limes-upstream`, so it cannot pass for the relay's own.
 
 ### Sensitive data trying to leave — stripped or blocked (incoming)
 
@@ -93,8 +107,15 @@ dressed as coverage:
   with at the point of consequence.
 - **A verdict must be inspectable, and silence must never read as safety.** A
   detector that cannot look returns `CannotSay` and the leg **fails closed**; a
-  proxy that cannot load its policy exits rather than becoming a silent
-  pass-through. (See [The verdict](../README.md#the-verdict).)
+  detector that *crashes* is rendered the same way (ADR 0011 Am. 2); a proxy that
+  cannot load its policy exits rather than becoming a silent pass-through. (See
+  [The verdict](../README.md#the-verdict).)
+- **The guard's own cost is bounded.** Every detector declares the size beyond
+  which it refuses to scan, and a ratchet holds every rule linear in the content
+  at that size (ADR 0023) — after the pre-publication audit measured three rules
+  freezing the proxy for 11 to 43 seconds inside the declared budget. What is
+  *not* bounded is a pathological rule an operator writes into their own
+  `--policy`: that file is trusted input.
 - **The audit trail commits to content, it does not store it.** Tamper-evidence
   over content you hold elsewhere; the ledger never becomes a copy of every secret
   that flowed. (See [The audit trail](audit-trail.md).)

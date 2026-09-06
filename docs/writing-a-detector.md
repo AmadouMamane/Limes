@@ -23,7 +23,7 @@ from limes.spans import redact
 class HexColorDetector:
     """Toy detector: flags hex colour codes on the outbound leg."""
     id = "hex-color"
-    version = "0.1.0"
+    version = "0.1.0"          # the shipped detectors report limes.__version__ (ADR 0025)
 
     def inspect(self, direction: Direction, content: str, ctx: Context) -> list[Finding]:
         if direction is not Direction.OUTBOUND:      # this detector only guards egress

@@ -108,7 +108,10 @@ def read_on_cannot_say(policy_path: Path) -> OnCannotSay | None:
         ValueError: If the file is not a mapping, or the key names something
             other than ``deny`` / ``allow``.
     """
-    data = yaml.safe_load(policy_path.read_bytes())
+    try:
+        data = yaml.safe_load(policy_path.read_bytes())
+    except yaml.YAMLError as exc:
+        raise ValueError(f"policy {policy_path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"policy {policy_path} must be a mapping, got {type(data).__name__}")
     if ON_CANNOT_SAY_KEY not in data:

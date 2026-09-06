@@ -76,7 +76,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
-| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — byte-identical to v0.1 (one audited exception, ADR 0011), and a *ratchet* — a test that may only tighten — says so |
+| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — moved only by decision since v0.1 (each move a named ADR with a re-pinned hash: 0011, 0014, 0019, 0023, 0025), and a *ratchet* — a test that may only tighten — says so |
 | **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, the context-anchored AWS secret access key, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; *bare* unprefixed credentials — a keyword-anchored AWS secret is caught, a bodyless blob is measured out of reach (ADR 0022). Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
 | **Egress** | three detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
@@ -333,16 +333,17 @@ degrades instead of crashing:
 ```
 limes blocked this tool call.
 reason: 2 rule match(es) on inbound content: injection:disable-control, injection:embedded-system-directive
-decision: seq 3, record b2d24712fb84…
-policy: sha256 84fc75f1d51e…
-inspected content: sha256 f1b51bbe89b6…
-matched: injection:embedded-system-directive at [53,71) sha256 c39dd723dc3a…
-matched: injection:disable-control at [61,94) sha256 98933a71331c…
+decision: seq 3, record 95bdcb88b9e9…
+policy: sha256 9ce7d2d1177b…
+inspected content: sha256 c10adc834778…
+matched: injection:embedded-system-directive at [35,50) sha256 e652291d63e7…
+matched: injection:disable-control at [43,59) sha256 9665b2d14aea…
 (evidence carries hashes and offsets, never the payload)
 ```
 
-*(real output for corpus case 08 in a tool argument; the hashes are full 64-hex
-on the wire and abbreviated here for the page.)*
+*(real output for corpus case 08, English, in a tool argument — the fourth
+decision of a session; the hashes are full 64-hex on the wire and abbreviated
+here for the page.)*
 
 …and the real server never received it. Every decision — allowed, refused, or
 *cannot say* — is appended to a hash-chained ledger, written as JSONL to stderr
@@ -383,17 +384,18 @@ An injection is refused, with its evidence, and a non-zero exit:
 ```
 $ limes check attack.txt ; echo "exit=$?"
 [DENY] 2 rule match(es) on inbound content: injection:disable-control, injection:embedded-system-directive
-decision: seq 0, record 901227d65a6d…
-policy: sha256 84fc75f1d51e…
-inspected content: sha256 f1b51bbe89b6…
-matched: injection:embedded-system-directive at [53,71) sha256 c39dd723dc3a…
-matched: injection:disable-control at [61,94) sha256 98933a71331c…
+decision: seq 0, record ecaa6bc6c2c5…
+policy: sha256 9ce7d2d1177b…
+inspected content: sha256 c10adc834778…
+matched: injection:embedded-system-directive at [35,50) sha256 e652291d63e7…
+matched: injection:disable-control at [43,59) sha256 9665b2d14aea…
 (evidence carries hashes and offsets, never the payload)
 exit=1
 ```
 
-*(real output for corpus case 08 written to a file; hashes are full 64-hex on the
-wire and abbreviated here for the page.)*
+*(real output for corpus case 08, English, written to a file; hashes are full
+64-hex on the wire and abbreviated here for the page. Beyond the policy's
+`max_content_chars` the detector refuses to scan and the exit code is 3.)*
 
 In CI, that exit code *is* the gate — no output to parse:
 
@@ -478,7 +480,9 @@ ledger: each record seals the previous one's digest, so nothing can be inserted,
 reordered or altered without breaking the chain. The record **commits** to the
 content it decided on (a `content_sha`, plus offsets) and **never stores the
 content itself** — so the trail proves what happened without becoming a copy of
-every secret that flowed through it. How it is stored, what you can prove from it
+every secret that flowed through it. It also seals the **disposition** — what the
+transport then did: `forward`, `redact` or `block` — so a chain proves not only
+that a response was refused but whether it left (ADR 0025). How it is stored, what you can prove from it
 (sequence integrity, content binding, full deterministic replay), how tampering
 is detected, and how to locate a decision: **[docs/audit-trail.md](https://github.com/AmadouMamane/Limes/blob/main/docs/audit-trail.md)**.
 
@@ -505,9 +509,9 @@ scanning. What it assembles, and what others do not:
 extracted from **[Tessera](https://tessera.amadoumamane.fr/)** — a reference
 implementation of a multilingual (FR/DE/EN) EU retail-banking support agent,
 whose guard layer this package *is*, lifted into its own repo. See it running at
-[tessera.amadoumamane.fr](https://tessera.amadoumamane.fr/); the
-[source repo](https://github.com/AmadouMamane/tessera-app) goes public with
-limes's release. Two things cross over, and both are named so you can
+[tessera.amadoumamane.fr](https://tessera.amadoumamane.fr/); its source
+repository is private until limes's release and opens with it. Two things
+cross over, and both are named so you can
 check them: the **corpus** (limes v0.1 ships a functional default copied from
 Tessera, `src/limes/corpus/PROVENANCE.md`), and the **baselines**. Wherever a
 table reads *Tessera baseline*, it means Tessera's own shipping guard —
@@ -737,7 +741,11 @@ stays true when the rules change.
 (200 000), the detector does not scan: it raises `DetectorBlind`, the core
 answers `CannotSay`, and the egress leg **blocks**. An unbounded regex sweep over
 an unbounded tool result is a denial-of-service surface, and "I stopped looking"
-has to be sayable and closed rather than silent. One honest limit found by this
+has to be sayable and closed rather than silent. The budget bounds the *size*; a
+ratchet bounds the *time* (ADR 0023): every rule is linear in the content, after
+the pre-publication audit measured `pii:email` at 43 s on 200 000 letters with no
+`@` — inside the budget, on the proxy's event loop. The inbound leg declares the
+same budget since 0.13.0. One honest limit found by this
 work, open from v0.5 to v0.6 and closed in v0.7: content carrying unpaired
 surrogates could not be hashed, so `limes.guard.decide` raised
 `UnicodeEncodeError` *before* it could render that blind spot as a verdict — a
@@ -973,14 +981,18 @@ and, in `_meta`, what was masked:
 {"limes": {
   "blocked": false, "redacted": true,
   "reason": "2 rule match(es) on outbound content: pii:email, pii:pan (egress policy masks kind: pii; 2 region(s) replaced)",
-  "record": {"seq": 1, "direction": "outbound", "digest": "5f07bb23…", "prev_hash": "e9cd424f…"},
+  "record": {"seq": 1, "direction": "outbound", "disposition": "redact",
+             "digest": "26d4f984…", "prev_hash": "3eed1b8c…"},
   "redaction": {"masked": 2, "kinds": ["pii"], "spans": [
-    {"start": 6,  "end": 25, "kinds": ["pii"], "token": "[REDACTED:pii]"},
-    {"start": 51, "end": 68, "kinds": ["pii"], "token": "[REDACTED:pii]"}]}}}
+    {"start": 6,  "end": 25, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"},
+    {"start": 51, "end": 68, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"}]},
+  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.13.0"}], "…": "…"}}}
 ```
 
-(real output, digests abbreviated — `tests/integration/mcp/test_redaction_e2e.py`
-drives the same path against real processes)
+(real output from the shipped `pii-egress` detector, digests abbreviated and the
+evidence block elided — `tests/integration/mcp/test_redaction_e2e.py` drives the
+same path against real processes. The `disposition` is inside the record's
+digest: the chain proves the response left masked, ADR 0025.)
 
 Three things worth knowing about how it works:
 
@@ -1019,12 +1031,12 @@ in the evidence, never the masked bytes.
 
 ### What redaction does **not** do
 
-- **It masks nothing until a detector is installed.** The behaviour and the
-  detector are separate on purpose (ADR 0004/0006): `serve(config,
-  outbound=[PiiEgressDetector()])` wires the shipped one, and *which* detectors
-  run on a deployment's outbound leg is that deployment's decision, not a default
-  the proxy makes for it. Given `on_egress_finding: redact` and an empty outbound
-  leg, the proxy warns on stderr rather than looking like it is masking.
+- **It masks nothing without a detector on the leg.** The behaviour and the
+  detectors are separate on purpose (ADR 0004/0006). The shipped proxies install
+  every admitted egress detector by default (ADR 0018); an embedder who passes
+  `serve(config, outbound=())` gets a deliberately unguarded leg, and given
+  `on_egress_finding: redact` over that empty leg the proxy warns on stderr
+  rather than looking like it is masking.
 - **No reversible tokenisation, no format-preserving encryption.** The masks are
   deterministic and one-way: `last4` and `format_preserving` keep a little of the
   shape but no bits you could decode the value back from. A mask you can undo
@@ -1043,18 +1055,28 @@ fails on any change outside `src/limes/transports/mcp/` (ADR 0005).
 
 What it does:
 
-- **Faithful pass-through.** `initialize`, `prompts/*`, capabilities,
-  notifications, unknown methods and unknown fields cross unmodified, in both
-  directions, ids preserved. Your host sees the *wrapped server's* capabilities —
-  the proxy answers nothing on its behalf. Proven by running the same host script
-  directly and proxied and comparing everything observed. (Since v0.8, a
-  `tools/list` *result* is screened when `injection-egress` is wired — a poisoned
-  description is refused; a clean listing crosses untouched.)
+- **Faithful pass-through.** `initialize`, `prompts/list`, `resources/list`,
+  capabilities, notifications, unknown methods and unknown fields cross
+  unmodified, in both directions, ids preserved. Your host sees the *wrapped
+  server's* capabilities — the proxy answers nothing on its behalf. Proven by
+  running the same host script directly and proxied and comparing everything
+  observed. One reservation: the relay owns `_meta.limes` on the host-facing
+  side, and an annotation a server sends under that key is moved to
+  `_meta.limes-upstream` so a forged one cannot pass for the relay's (ADR 0024).
+- **Screens what reaches your model from the server.** The *results* of
+  `tools/call`, `resources/read`, `tools/list` (a poisoned description is
+  refused, a clean listing crosses untouched) and `prompts/get`, and the two
+  *requests* a server makes of the host whose content the model or the user
+  reads — `sampling/createMessage` and `elicitation/create` — all cross the
+  outbound seam (ADR 0012, ADR 0024). A refused request is answered to the
+  server that asked.
 - **Refuses on the inbound leg.** A `tools/call` whose arguments trip the
   `injection` detector is **not forwarded**; the host gets `isError: true` with
-  the reason and the redacted evidence. Proven end to end against a real MCP
-  server that journals what it receives — the blocked call is absent from that
-  journal, and the control run without the proxy shows the same call arriving.
+  the reason and the redacted evidence. A `tools/call` that arrives with no `id`
+  — a shape MCP does not define — is judged the same way and, if refused,
+  dropped (ADR 0024). Proven end to end against a real MCP server that journals
+  what it receives — the blocked call is absent from that journal, and the
+  control run without the proxy shows the same call arriving.
 - **Fails closed.** `CannotSay` blocks unless an operator explicitly sets
   `on_cannot_say: allow` (policy file) or `--on-cannot-say allow`. A proxy that
   cannot load its policy exits `2` rather than becoming a silent pass-through.
@@ -1075,6 +1097,10 @@ What it does:
 - **Arguments only, string values only.** The inbound pipeline inspects the
   string *values* of a tool call's arguments, walked in canonical order. Object
   *keys* and non-string scalars are not inspected. A declared blind spot.
+- **Listings, completions and logs cross uninspected.** `prompts/list`,
+  `resources/list`, `resources/templates/list`, `completion/complete` and
+  `notifications/message` are declared out of the seam, with the reason, in the
+  threat model (ADR 0024).
 - One host↔server pair per process — no multiplexing. No dashboard, no rate
   limit, no kill switch, no human approval, no config UI.
 
@@ -1126,7 +1152,8 @@ Deep dives that go past what this page covers:
 
 - **Core** (`src/limes/`): the verdict algebra (`verdict.py`), the hash-chained
   ledger (`record.py`), the detector protocol (`detector.py`), the pipeline
-  (`guard.py`). Unchanged since v0.1, and a ratchet says so.
+  (`guard.py`). Moved only by decision since v0.1 — each move a named ADR with a
+  re-pinned hash — and a ratchet says so.
 - **Detectors** (`src/limes/detectors/`): plugins behind one protocol, discovered
   by entry point. Four: `injection` (inbound), and `pii-egress`,
   `secrets-egress`, `injection-egress` (outbound). Their
@@ -1141,7 +1168,8 @@ Deep dives that go past what this page covers:
   on the way out. A command-line surface, `limes check` (`cli.py`), runs the same
   pipeline with no transport at all.
 
-Read the founding decisions first: `docs/decisions/0001`–`0013`. The proxy's
+Read the founding decisions first: `docs/decisions/0001`–`0004`, then the
+rest in order (`0005`–`0025`). The proxy's
 design note, with the three places the shipped code deviates from it and why, is
 `docs/design/mcp-proxy-v0.2.md`.
 

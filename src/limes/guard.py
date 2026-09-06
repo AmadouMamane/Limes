@@ -8,6 +8,12 @@ It runs each detector, aggregates findings, and returns exactly one verdict:
 * else any blind detector -> ``CannotSay`` (a witness that could not see may
   never report "ok");
 * else -> ``Allow``, whose evidence names every detector that ran.
+
+A detector that *crashes* — raises anything other than :class:`DetectorBlind` —
+is a detector that did not observe, and it is rendered the same way: a blind
+spot naming the exception, never a traceback out of the guard and never a pass
+(ADR 0011 Amendment 2). A crash is not a verdict, and a guard that dies takes
+the session it was guarding down with it.
 """
 
 from __future__ import annotations
@@ -62,6 +68,14 @@ def decide(
             findings: list[Finding] = detector.inspect(direction, content, ctx)
         except DetectorBlind as exc:
             blind.append(f"{detector.id}: {exc}")
+            continue
+        except Exception as exc:
+            # Not a silence to read as "clean", and not a crash to hand the
+            # transport: a witness that fell over did not look (ADR 0011 Am. 2).
+            blind.append(
+                f"{detector.id} crashed instead of answering ({type(exc).__name__}: {exc}); "
+                "a detector that did not run is a blind spot, not a pass"
+            )
             continue
         witnesses.append(Witness(detector_id=detector.id, detector_version=detector.version))
         for finding in findings:

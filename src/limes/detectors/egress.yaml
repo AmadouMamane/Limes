@@ -56,10 +56,19 @@ detectors:
       # E-mail address. The shape IS the claim here: there is no checksum in an
       # address, and requiring a local part, an "@", a labelled domain and a
       # 2+-letter TLD is already what rejects "jean.dupont@" and "@example.com".
+      #
+      # The leading lookbehind is a COST gate, not a precision one (ADR 0023).
+      # Without it the local part could start at every character of a run,
+      # and each start re-scanned the run looking for an "@" that was not
+      # there: 43 seconds on 200 000 letters — inside the declared budget, on
+      # the proxy's event loop, from one hostile tool result. Starting only
+      # where a run starts makes the scan linear, and locates every address
+      # the old shape located: an address preceded by a local-part character
+      # was already part of that longer local part.
       - label: pii:email
         validator: none
         retry_trim: false
-        pattern: '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'
+        pattern: '(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'
 
       # Telephone: French, German, and E.164 international, as one category with
       # three alternatives. The check is a digit count in the E.164 range (9-15),
@@ -268,10 +277,16 @@ detectors:
       # Uppercase attack markers (the Invariant Labs tool-poisoning shape).
       # Case-SENSITIVE: published attacks shout their tags, and the lowercase
       # <important> of ordinary documentation must survive.
+      #
+      # The body is bounded to 2 000 characters (ADR 0023). Unbounded, every
+      # opening tag with no closing tag re-scanned the rest of the content:
+      # 18 to 23 seconds on 200 000 characters of repeated open tags. A block
+      # longer than that is not spanned by THIS rule; what it carries is still
+      # read by every other rule in the file.
       - label: injection:hidden-tag
         validator: none
         retry_trim: false
-        pattern: '<(?:IMPORTANT|HIDDEN|SECRET)>[\s\S]*?</(?:IMPORTANT|HIDDEN|SECRET)>'
+        pattern: '<(?:IMPORTANT|HIDDEN|SECRET)>[\s\S]{0,2000}?</(?:IMPORTANT|HIDDEN|SECRET)>'
 
       # "Ignore previous instructions", one rule per language surface.
       - label: injection:ignore-instructions-en

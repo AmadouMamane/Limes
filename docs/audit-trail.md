@@ -12,13 +12,14 @@ and lets you prove that content later, but it never stores the content itself.
 
 ## 1. What is recorded, per decision
 
-One decision is one `DecisionRecord`. It has exactly six fields:
+One decision is one `DecisionRecord`. It has exactly seven fields:
 
 | field | example | what it is |
 |---|---|---|
 | `seq` | `1` | 0-based position in the chain — this *is* the record's index |
 | `direction` | `outbound` | which leg the decision was made on (`inbound` / `outbound`) |
 | `actor` | `"alice"` | the caller's asserted identity (`null` if anonymous) |
+| `disposition` | `"redact"` | what the transport then did — `forward`, `redact`, `block` — or `null` where it takes no disposition of its own (`check`, `limes check`) (ADR 0025) |
 | `verdict_fingerprint` | *(JSON string, below)* | the *what and why* of the decision — all as hashes |
 | `prev_hash` | `9020a692…` | the digest of the **previous** record (`0000…` for the first) |
 | `digest` | `586d8b16…` | `SHA-256` of this record's core — what seals it |
@@ -37,7 +38,7 @@ like this (an outbound decision that masked a card number):
         "label": "pii:pan",
         "sha": "9219e0affa4b…" }              // SHA-256 of the matched value — never the value
     ],
-    "witnesses": [ { "id": "pii-egress", "version": "0.1.0" } ]
+    "witnesses": [ { "id": "pii-egress", "version": "0.13.0" } ]   // the build that looked
   },
   "kind": "deny",
   "reason": "1 rule match(es) on outbound content: pii:pan"
@@ -72,10 +73,13 @@ into `digest`, the content commitment is itself sealed by the chain.
 over its own core *and the previous record's digest*:
 
 ```
-digest_N = SHA-256( { seq: N, direction, actor,
+digest_N = SHA-256( { seq: N, direction, actor, disposition,
                       verdict: <fingerprint_N>,
                       prev_hash: digest_{N-1} } )
 ```
+
+Because `disposition` is inside the core, a record cannot claim a response was
+blocked when it left masked — or the reverse — without breaking every later link.
 
 So the records form a linked chain:
 
@@ -233,6 +237,10 @@ so it cannot be back-dated on a past record without breaking the links.
   stream the rest); for ordinary sessions it is a non-issue. Durable output is
   append-only JSONL; **rotation and retention are the operator's job**, not
   built in.
+- **The proxy remembers which guarded requests await a response**, and that
+  table is bounded at 4 096 entries: beyond it the relay refuses the next
+  guarded request with a `CannotSay` on the chain rather than forget one whose
+  response would then cross unscreened (ADR 0024).
 
 ---
 
