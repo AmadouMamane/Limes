@@ -1,6 +1,6 @@
 # limes `pii-egress` — against document contexts it did not write
 
-Generated 2026-08-31 from **presidio-research** (MIT, commit `70ff860bed29`, <https://github.com/data-privacy-stack/presidio-research>) — 42 sentence templates vendored by value into `eval/corpus/presidio/` (ADR 0021). limes does not depend on presidio-research; the corpus is a copy, reproducible with `scripts/vendor_presidio_corpus.py`.
+Generated 2026-09-06 from **presidio-research** (MIT, commit `70ff860bed29`, <https://github.com/data-privacy-stack/presidio-research>) — 42 sentence templates vendored by value into `eval/corpus/presidio/` (ADR 0021). limes does not depend on presidio-research; the corpus is a copy, reproducible with `scripts/vendor_presidio_corpus.py`.
 
 **Strength of this number.** external contexts, author-cleared synthetic values — the DOCUMENTS are third-party, the VALUES are limes's own already-admitted vectors (ADR 0009 forbids any other kind). Strictly weaker than garak, where the attack itself is foreign. Labelled wherever published.
 

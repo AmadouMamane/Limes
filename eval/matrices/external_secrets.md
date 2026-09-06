@@ -1,6 +1,6 @@
 # limes `secrets-egress` — against the industry's credential catalogue
 
-Generated 2026-08-31 from **gitleaks** (MIT, commit `b58d3f102cf3`, <https://github.com/gitleaks/gitleaks>) — 222 catalogue rules, of which **218** materialise into a self-verified instance, vendored by value into `eval/corpus/gitleaks/` (ADR 0021). limes does not depend on gitleaks; the corpus is a copy, reproducible with `scripts/vendor_gitleaks_corpus.py`.
+Generated 2026-09-06 from **gitleaks** (MIT, commit `b58d3f102cf3`, <https://github.com/gitleaks/gitleaks>) — 222 catalogue rules, of which **218** materialise into a self-verified instance, vendored by value into `eval/corpus/gitleaks/` (ADR 0021). limes does not depend on gitleaks; the corpus is a copy, reproducible with `scripts/vendor_gitleaks_corpus.py`.
 
 **Strength of this number.** external catalogue and external hard negatives; the positive VALUES are materialised here from each rule's own regex and self-verified against it (ADR 0009 forbids a real credential, and gitleaks generates its own the same way). So the FORMATS and the NEGATIVES are third-party; the bytes of each positive instance are this repository's. Labelled wherever published.
 

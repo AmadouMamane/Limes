@@ -1,6 +1,6 @@
 [project]
 name = "limes"
-version = "0.12.0"
+version = "0.13.0"
 description = "The guard that can prove what it refused — a transport-agnostic, evidence-carrying policy guard for LLM agents."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -110,10 +110,19 @@ packages = ["src/limes"]
 # The two benchmark harnesses are development instruments — untested, one of
 # them opens a socket and serves MCP — and no part of the guarded surface. They
 # stay runnable from a source checkout and the sdist (the README's `uv run`
-# recipes), and out of the installed wheel of a security tool.
+# recipes), and out of the installed wheel of a security tool. The external
+# and head-to-head harnesses follow them out for the same reason: they read
+# `eval/`, which ships in the sdist and never in the wheel, so from an install
+# they could only ever declare a blind spot. The internal admission harnesses
+# stay — the corpus they read is packaged, and the admission enforcer runs them.
 exclude = [
     "src/limes/transports/mcp/bench.py",
     "src/limes/transports/mcp/bench_http.py",
+    "src/limes/eval/comparison_harness.py",
+    "src/limes/eval/external_corpus.py",
+    "src/limes/eval/external_harness.py",
+    "src/limes/eval/external_egress_corpus.py",
+    "src/limes/eval/external_egress_harness.py",
 ]
 
 [tool.ruff]

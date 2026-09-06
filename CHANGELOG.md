@@ -4,6 +4,101 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-09-06
+
+**The pre-publication audit: a guard that could be frozen by its own budget, a
+tool call that lost its id and crossed, an annotation a server could forge, and
+a chain that proved a refusal but not what left.** Every finding below was
+measured on the wire or on the running detectors before it was fixed, and each
+fix arrived with the ratchet that would have found it.
+
+### Fixed — security
+
+- **Three rules were quadratic inside the declared budget** (ADR 0023).
+  `pii:email` had no left boundary: **43 s** on 200 000 letters with no `@`,
+  on the proxy's event loop, from one tool result — and under the HTTP proxy
+  every session shares that loop. `injection:hidden-tag` re-scanned to the end
+  from every unclosed `<IMPORTANT>` (**18–23 s**); `injection:tag-breakout`
+  re-scanned the line from every `</field>` (**11 s**, inbound). Each is now
+  bounded by shape — a lookbehind, a 2 000-character body, a 600-character
+  window — at 0.4 s worst case on the same inputs and **identical matrices**.
+  `tests/unit/ratchets/test_scan_cost_is_bounded.py` runs fourteen adversarial
+  shapes through all four detectors at the full budget and holds each under
+  five seconds; it was red on all three before the change.
+- **The inbound leg had no budget at all.** `injection` read whatever arrived.
+  `policy.yaml` now declares `max_content_chars: 200000` — the egress figure,
+  so both legs refuse at one size — and the detector answers `CannotSay` beyond
+  it, exit 3 from `limes check`. Optional in a user's policy (older files keep
+  loading with the default); refused if present and not a positive integer.
+- **A `tools/call` with no `id` crossed uninspected and unrecorded** (ADR 0024).
+  MCP defines it as a request; shaped as a notification it reached the wrapped
+  server with no decision. It is now judged like any call, recorded with
+  `request_id: null`, forwarded if allowed and dropped if refused.
+- **A wrapped server could sign as limes** (ADR 0024). On a clean result the
+  relay forwarded the server's `_meta.limes` — forged digest and all. The relay
+  now reserves that key on the host-facing side: an upstream value is moved to
+  `_meta.limes-upstream`, kept but unable to pass for the relay's own.
+- **`prompts/get`, `sampling/createMessage` and `elicitation/create` reached the
+  model unscreened, and nothing said so** (ADR 0024). The first is a result
+  whose messages go straight into the model's context; the other two are
+  requests the *server* makes of the host, carrying what its model or user will
+  read. All three now cross the outbound seam; a refused request is a JSON-RPC
+  error answered to the server that asked. `prompts/list`, `resources/list`,
+  `resources/templates/list`, `completion/complete` and `notifications/message`
+  are declared uninspected, in the threat model, with the reason.
+- **A detector that crashed took the session down** (ADR 0011 Am. 2). `decide`
+  caught `DetectorBlind` and let a `RuntimeError` out of a plugin escape the
+  proxy mid-verdict. Any exception from a detector is now a blind spot naming
+  it — `CannotSay`, blocked, journalled — and a finding elsewhere still wins.
+
+### Fixed — evidence
+
+- **The chain seals the disposition** (ADR 0025). A record proved a response was
+  refused and not whether it then left masked or did not leave: the action
+  lived in the proxy's unhashed `mcp` annotation and nowhere for the in-process
+  guard. `DecisionRecord` gains `disposition` — `forward`, `redact`, `block`, or
+  `null` where the transport takes none (`check`, `limes check`) — inside the
+  digest. `Guard.verdict()` and `Guard.record()` are the two halves `check` was
+  made of, so a transport decides, disposes, then seals; a masking that fails
+  its re-derivation is sealed as the block it became. **Every digest changes**;
+  nothing was published before this release.
+- **Every witness said "0.1.0"** (ADR 0025). Detector versions were
+  hand-maintained and never moved through eleven releases of rule and code
+  changes. Each detector now reports `limes.__version__`, so a verdict names a
+  build an auditor can reinstall.
+- **The pending table refuses rather than forgets** (ADR 0024). Beyond 4 096
+  unanswered guarded requests the relay refuses the next one with a `CannotSay`
+  on the chain, instead of evicting an entry whose response would then cross
+  unscreened.
+
+### Fixed — surface
+
+- **`limes check --policy` on a broken policy printed a traceback and exited 1**
+  — the code that means DENY. A pattern that does not compile and a file that is
+  not YAML are `ValueError`s from every loader now, so the CLI exits 2 and names
+  the rule, and the proxies refuse to start with the reason.
+- The README's *What redaction does not do* still said nothing was masked
+  until a detector was installed and that the entry point passed none — false
+  since ADR 0018. The proxy section, the threat model, the guarding recipe, the
+  audit-trail guide (seven fields) and the security policy say what ships.
+- The link to Tessera's application repository, private until limes's release,
+  no longer sends a PyPI reader to a 404.
+
+### Removed
+
+- **The external and head-to-head harnesses leave the wheel** (`eval/external_*`,
+  `eval/comparison_harness.py`), after the benches: they read `eval/`, which
+  ships in the sdist and never in the wheel, so from an install they could only
+  declare a blind spot. The admission harnesses stay — their corpus is packaged
+  and the enforcer runs them.
+
+### Not changed, and why
+
+- The outbound detectors are still selected by the `-egress` suffix of their id.
+  Naming the leg on the `Detector` protocol would widen the core for a
+  convention a test already pins; it stays a convention, pinned.
+- Python ≥ 3.12 and the CLA are the maintainer's calls and are unchanged.
+
 ## [0.12.0] - 2026-08-31
 
 **An unprefixed secret is caught by its name, or not at all.** The AWS *secret*
@@ -798,6 +893,7 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.13.0]: https://github.com/AmadouMamane/Limes/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/AmadouMamane/Limes/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/AmadouMamane/Limes/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/AmadouMamane/Limes/compare/v0.9.1...v0.10.0

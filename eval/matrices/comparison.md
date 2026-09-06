@@ -1,6 +1,6 @@
 # limes vs the field, on ground none of us owns
 
-Generated 2026-08-31. Every number below was **measured here**, on one corpus, with one set of populations and one grader. Not one of them is a figure a vendor publishes about itself: those are real, and they are not comparable — different corpora, different thresholds, different definitions of a hit. That is the whole reason this file exists (ADR 0020).
+Generated 2026-09-06. Every number below was **measured here**, on one corpus, with one set of populations and one grader. Not one of them is a figure a vendor publishes about itself: those are real, and they are not comparable — different corpora, different thresholds, different definitions of a hit. That is the whole reason this file exists (ADR 0020).
 
 **The ground.** NVIDIA's garak, vendored by value into `eval/corpus/garak/` (ADR 0017). No contestant wrote it. limes least of all: the first time limes ran on it, it scored 3 %.
 

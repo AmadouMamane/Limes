@@ -1,6 +1,6 @@
 # limes vs an adversary corpus it did not write
 
-Generated 2026-08-31 from **garak 0.16.0** (NVIDIA, Apache-2.0) — `garak.probes.latentinjection`, 8 probes, vendored by value into `eval/corpus/garak/` (ADR 0017). limes does not depend on garak; the corpus is a copy, reproducible with `scripts/vendor_garak_corpus.py`.
+Generated 2026-09-06 from **garak 0.16.0** (NVIDIA, Apache-2.0) — `garak.probes.latentinjection`, 8 probes, vendored by value into `eval/corpus/garak/` (ADR 0017). limes does not depend on garak; the corpus is a copy, reproducible with `scripts/vendor_garak_corpus.py`.
 
 **Why this table exists.** Every other matrix in this repository scores limes on cases limes's author wrote, which measures whether the detector does what it was meant to do. This one scores it on somebody else's attacks. It is the less comfortable number, and it is the one that says whether the guard generalises.
 
