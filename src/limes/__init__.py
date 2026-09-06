@@ -24,8 +24,13 @@ The core has moved only by decision since v0.1, each move a named ADR with a
 re-pinned hash: ADR 0011 made the evidence digest total (and, amended, made a
 crashing detector a blind spot rather than a traceback), ADR 0014 gave the
 package this ``__version__``, ADR 0019 ported the override family to the
-inbound policy, ADR 0023 gave the inbound leg a scan budget, and ADR 0025 sealed
-the transport's disposition into every chain record.
+inbound policy, ADR 0023 gave the inbound leg a scan budget, ADR 0025 sealed
+the transport's disposition into every chain record, ADR 0026 gave a blind spot
+its cause (``CannotSay(blind_spot, cause)``, and ``on_cannot_say: allow`` opens
+a declared limit and never a fault), ADR 0027 let a detector name its leg and
+made a leg nobody reads ``CannotSay`` rather than an ``Allow`` with no witness,
+and ADR 0028 made the guard say what it cannot read: an image in a tool result,
+a base64 payload, a word split by an invisible character, another script.
 
 Still not shipped: any detector outside those four. No classifier layer — ADR
 0013 frames one as an optional extra, admitted by the same gate and only on its

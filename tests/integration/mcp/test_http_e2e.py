@@ -278,13 +278,21 @@ def test_the_http_record_file_carries_the_decisions_and_they_chain(tmp_path):
     entries = _records(record)
     # Four decisions now that the shipped outbound leg is wired (ADR 0018 over
     # HTTP): the screened tools/list, the benign call on the way in, its
-    # response on the way out, and the injection blocked on the way in.
-    assert [entry["mcp"]["action"] for entry in entries] == [
+    # response on the way out, and the injection blocked on the way in. What
+    # crossed unread (initialize, the tools/list request, ...) is declared on
+    # the same chain, forwarded (ADR 0028), and is not a decision about content.
+    decisions = [e for e in entries if '"cause":"declared"' not in e["verdict_fingerprint"]]
+    assert [entry["mcp"]["action"] for entry in decisions] == [
         "forward",
         "forward",
         "forward",
         "block",
     ]
+    assert all(
+        e["mcp"]["action"] == "forward"
+        for e in entries
+        if '"cause":"declared"' in e["verdict_fingerprint"]
+    )
     assert entries[0]["prev_hash"] == "0" * 64, "genesis is 64 zeros"
     assert entries[1]["prev_hash"] == entries[0]["digest"], "each record links to the last"
     logged = json.dumps(entries)
@@ -403,5 +411,6 @@ def test_a_replayed_http_session_re_derives_identical_digests(tmp_path):
 
     assert first == second, "a fixed clock and a pure core re-derive identical digests over HTTP"
     # tools/list is screened during session setup now (ADR 0012): its clean
-    # forward joins the inbound forward and the outbound redact.
-    assert len(first) == 3, "tools/list forward, then one inbound forward, one outbound redact"
+    # forward joins the inbound forward and the outbound redact. The declared
+    # blind spots (ADR 0028) replay identically too, and are not decisions.
+    assert len(first) > 3, "the declarations of what crossed unread are on the chain too"

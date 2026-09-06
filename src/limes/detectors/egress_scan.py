@@ -20,9 +20,11 @@ reports a candidate that did not pass. It exists because a greedy shape swallows
 the word after an IBAN, and losing a real account number to a stray ``EUR`` is a
 false negative nobody would find by reading the regex.
 
-**A detector that cannot read the content says so.** Two blind spots, both
+**A detector that cannot read the content says so.** Two blind spots here, both
 raised as :class:`~limes.detector.DetectorBlind` — which the core turns into
-``CannotSay``, which the egress leg turns into *block*. Never a quiet "nothing
+``CannotSay``, which the egress leg turns into *block* — and, after the rules
+found nothing, the readability screen of :mod:`limes.detectors.readability`
+(ADR 0028) for content the rules could not have read. Never a quiet "nothing
 found":
 
 * **over budget** — beyond the ``max_content_chars`` its policy declares, the

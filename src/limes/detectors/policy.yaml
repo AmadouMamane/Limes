@@ -37,6 +37,12 @@ version: 1
 # at this" must be auditable, and the file's hash covers the declaration.
 max_content_chars: 200000
 
+# The languages these rules were written for (ADR 0028). A caller that declares
+# another locale for its content gets a blind spot, not a "clean" the rules
+# could not have earned; content mostly in another script gets the same answer
+# whether or not a locale was declared. The file's hash covers the declaration.
+locales: [fr, de, en]
+
 rules:
   # --- ported from Tessera (origin: tessera) ---
   - label: 'injection:roleplay-no-restriction'

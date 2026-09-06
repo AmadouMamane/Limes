@@ -168,11 +168,18 @@ def test_the_record_file_carries_the_decisions_and_they_chain(tmp_path):
     # Both legs are guarded since ADR 0018, so a session records more than the
     # inbound calls: every guarded response is a decision too. What must hold is
     # not a count — that would pin today's method list — but the shape.
-    inbound = [entry for entry in entries if entry["direction"] == "inbound"]
-    assert [entry["mcp"]["action"] for entry in inbound] == ["forward", "block"]
+    calls = [
+        entry
+        for entry in entries
+        if entry["direction"] == "inbound" and entry["mcp"]["method"] == "tools/call"
+    ]
+    assert [entry["mcp"]["action"] for entry in calls] == ["forward", "block"]
     assert any(entry["direction"] == "outbound" for entry in entries), (
         "the outbound leg is guarded and must appear on the chain (ADR 0018)"
     )
+    declared = [entry for entry in entries if '"cause":"declared"' in entry["verdict_fingerprint"]]
+    assert declared, "what crossed unread (initialize, ...) is declared on the chain (ADR 0028)"
+    assert all(entry["mcp"]["action"] == "forward" for entry in declared)
 
     assert [entry["seq"] for entry in entries] == list(range(len(entries)))
     assert entries[0]["prev_hash"] == "0" * 64, "genesis is 64 zeros"

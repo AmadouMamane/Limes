@@ -32,6 +32,10 @@ A rule this harness could not instantiate is **not** a rule the detector missed,
 | `pkcs12-file` | the rule matches on path, not content |
 | `sentry-org-token` | character class admits nothing printable |
 
+## Declared unreadable
+
+6 vector(s) the detector declared it could not read — mostly opaque encoded runs its rules cannot see into (ADR 0028). Under a proxy that is a `CannotSay`, blocked by default; here it is neither a hit nor a false positive, and it is named rather than folded into either column: `1password-service-account-token`, `cloudflare-origin-ca-key`, `microsoft-teams-webhook`, `fp025_aws`, `fp038_azure`, `fp058_curl`.
+
 ## The two numbers
 
 - **Formats located (dev):** 12/110 (10.9%).

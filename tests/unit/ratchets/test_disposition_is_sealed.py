@@ -17,7 +17,7 @@ from limes.detector import Direction
 from limes.record import Ledger
 from limes.transports.in_process import Guard
 from limes.transports.redaction import Action, EgressPolicy, OnEgressFinding
-from limes.verdict import CannotSay
+from limes.verdict import BlindCause, CannotSay
 from tests.unit.redaction.doubles import PiiDouble, SecretDouble
 
 pytestmark = pytest.mark.mutation
@@ -72,6 +72,7 @@ def test_a_forged_disposition_breaks_the_chain():
 
 
 def test_the_disposition_is_inside_the_digest_not_beside_it():
-    a = Ledger().append(Direction.OUTBOUND, CannotSay(blind_spot="x"), None, disposition="block")
-    b = Ledger().append(Direction.OUTBOUND, CannotSay(blind_spot="x"), None, disposition=None)
+    blind = CannotSay(blind_spot="x", cause=BlindCause.DECLARED)
+    a = Ledger().append(Direction.OUTBOUND, blind, None, disposition="block")
+    b = Ledger().append(Direction.OUTBOUND, blind, None, disposition=None)
     assert a.digest != b.digest, "two records that differ only in disposition must not collide"

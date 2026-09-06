@@ -7,7 +7,8 @@ the command line, over a file or stdin, with no transport and no server::
     limes check [--policy P] [--direction inbound|outbound] [--json] [FILE | -]
 
 It prints the verdict and its evidence, and **its exit code is the verdict** — 0
-for ``Allow``, non-zero for ``Deny`` or ``CannotSay`` — so a CI step can gate on
+for ``Allow``, non-zero for ``Deny`` or ``CannotSay`` (whatever its cause, ADR
+0026: a scanner takes no disposition, so it opens nothing) — so a CI step can gate on
 it ("scan this prompt", "scan this tool output") without parsing anything. It
 reuses :func:`limes.guard.decide` unchanged through ``Guard.check``; this module
 adds a usage surface, not a decision (ADR 0004). There is no new evidence format:
@@ -212,7 +213,9 @@ def _as_text(verdict: Verdict, record: DecisionRecord) -> str:
     """Render the verdict and its evidence for a human reader."""
     lines = [render(verdict), f"decision: seq {record.seq}, record {record.digest}"]
     if isinstance(verdict, CannotSay):
-        lines.append("evidence: none — a detector could not look; limes fails closed.")
+        lines.append(
+            f"evidence: none — nobody could look ({verdict.cause.value}); limes fails closed."
+        )
         return "\n".join(lines)
     evidence = verdict.evidence
     lines.append(f"policy: sha256 {evidence.policy_hash}")

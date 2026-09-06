@@ -5,8 +5,12 @@ Three rules. They are the whole policy surface of this transport (ADR 0005):
 * ``Allow``     → forward;
 * ``Deny``      → block;
 * ``CannotSay`` → block **by default**, and forward only if an operator has
-  explicitly declared ``on_cannot_say: allow``. A witness that cannot see may
-  never report "ok" (ADR 0002).
+  explicitly declared ``on_cannot_say: allow`` **and** the blind spot is a
+  *declared* limit (ADR 0026) — a budget, an unreadable encoding, a language
+  the rules do not cover, a leg nobody reads. A witness that cannot see may
+  never report "ok" (ADR 0002); and a witness that *fell over*, or a relay that
+  *refused* to take the content on, is opened by no setting at all. An operator
+  who accepts the guard's declared limits has not accepted a crashed guard.
 
 A blocked ``tools/call`` comes back to the host as a **normal tool result marked
 ``isError``** — never a JSON-RPC transport error. The reason is behavioural: an
@@ -32,7 +36,7 @@ from typing import Any, final
 from limes.record import DecisionRecord
 from limes.transports.mcp.config import OnCannotSay
 from limes.transports.redaction import Action, Redaction
-from limes.verdict import Allow, CannotSay, Deny, Verdict
+from limes.verdict import Allow, BlindCause, CannotSay, Deny, Verdict
 
 __all__ = ["Action", "Ruling", "redaction_meta", "refusal_meta", "refusal_text", "rule"]
 
@@ -58,8 +62,10 @@ def rule(verdict: Verdict, *, on_cannot_say: OnCannotSay) -> Ruling:
 
     Args:
         verdict: The verdict returned by the pipeline.
-        on_cannot_say: What to do about a blind detector. ``DENY`` is the
-            default everywhere it is not explicitly overridden.
+        on_cannot_say: What to do about a *declared* blind spot. ``DENY`` is the
+            default everywhere it is not explicitly overridden, and ``ALLOW``
+            opens only ``BlindCause.DECLARED`` (ADR 0026): a fault and a refusal
+            block under either.
 
     Returns:
         The ruling: the action, the verdict it came from, and the reason line.
@@ -68,8 +74,8 @@ def rule(verdict: Verdict, *, on_cannot_say: OnCannotSay) -> Ruling:
         return Ruling(action=Action.FORWARD, verdict=verdict, reason="allowed")
     if isinstance(verdict, Deny):
         return Ruling(action=Action.BLOCK, verdict=verdict, reason=verdict.reason)
-    reason = f"the guard could not look: {verdict.blind_spot}"
-    if on_cannot_say is OnCannotSay.ALLOW:
+    reason = f"the guard could not look ({verdict.cause.value}): {verdict.blind_spot}"
+    if on_cannot_say is OnCannotSay.ALLOW and verdict.cause is BlindCause.DECLARED:
         return Ruling(action=Action.FORWARD, verdict=verdict, reason=reason)
     return Ruling(action=Action.BLOCK, verdict=verdict, reason=reason)
 
@@ -94,10 +100,7 @@ def refusal_text(ruling: Ruling, record: DecisionRecord, *, subject: str) -> str
     ]
     verdict = ruling.verdict
     if isinstance(verdict, CannotSay):
-        lines.append(
-            "evidence: none — a detector could not look, and limes fails closed "
-            "(set on_cannot_say: allow to change that, knowingly)."
-        )
+        lines.append(_blind_line(verdict))
     else:
         evidence = verdict.evidence
         lines.append(f"policy: sha256 {evidence.policy_hash}")
@@ -108,6 +111,29 @@ def refusal_text(ruling: Ruling, record: DecisionRecord, *, subject: str) -> str
         )
         lines.append("(evidence carries hashes and offsets, never the payload)")
     return "\n".join(lines)
+
+
+def _blind_line(verdict: CannotSay) -> str:
+    """The evidence line of a refusal nobody could look at, by cause (ADR 0026)."""
+    if verdict.cause is BlindCause.DECLARED:
+        return (
+            "evidence: none — a detector declared it could not look, and limes fails closed "
+            "(set on_cannot_say: allow to accept the guard's declared limits, knowingly)."
+        )
+    if verdict.cause is BlindCause.FAULT:
+        return (
+            "evidence: none — a detector fell over instead of answering, and limes fails "
+            "closed; no setting forwards a fault."
+        )
+    return (
+        "evidence: none — the relay refused to take this on, and limes fails closed; no "
+        "setting forwards a refusal."
+    )
+
+
+def _cause_meta(verdict: Verdict) -> str | None:
+    """The blind spot's cause as data, or ``None`` when somebody looked."""
+    return verdict.cause.value if isinstance(verdict, CannotSay) else None
 
 
 def refusal_meta(ruling: Ruling, record: DecisionRecord) -> dict[str, Any]:
@@ -123,13 +149,15 @@ def refusal_meta(ruling: Ruling, record: DecisionRecord) -> dict[str, Any]:
 
     Returns:
         A ``{"limes": {...}}`` mapping carrying the reason, the chain linkage,
-        and the redacted evidence (``None`` for a ``CannotSay``).
+        the redacted evidence (``None`` for a ``CannotSay``) and, for a
+        ``CannotSay``, the cause of the blind spot (ADR 0026).
     """
     return {
         "limes": {
             "blocked": True,
             "redacted": False,
             "reason": ruling.reason,
+            "cause": _cause_meta(ruling.verdict),
             "record": _record_meta(record),
             "evidence": _evidence_meta(ruling.verdict),
         }
@@ -200,6 +228,7 @@ def redaction_meta(
             "blocked": False,
             "redacted": True,
             "reason": reason,
+            "cause": None,
             "record": _record_meta(record),
             "redaction": redaction.annotation(),
             "evidence": _evidence_meta(verdict),

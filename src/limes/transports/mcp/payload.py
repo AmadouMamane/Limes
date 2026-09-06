@@ -15,6 +15,19 @@ named function, documented here rather than inlined in the bridge:
 
 The pieces are joined with a newline.
 
+**What the walk cannot read, it names (ADR 0028).** An MCP content block whose
+``type`` is ``image`` or ``audio`` carries its bytes base64-encoded under
+``data``; a binary resource — embedded in a result, or returned by
+``resources/read`` — carries them under ``blob``. Those strings are not text:
+no rule reads a picture, and a picture is exactly where a directive can hide
+from a text guard while the host's model reads it off the pixels. Until ADR 0028
+the walk swept the base64 as if it were prose, found nothing in it, and let the
+result pass as inspected. Now :func:`derive` leaves those strings out of the
+text and returns, beside it, one plain sentence per block it could not read —
+the transport hands them to the core as declared blind spots, and the verdict
+says so. The block's other fields (its media type, its URI, a name) are text
+and are read as before.
+
 What this deliberately does **not** inspect, and what the README states under
 "what the proxy does not do (v0.2)": object *keys*, and non-string scalars. A
 directive smuggled into a key would not be seen. That is a declared blind spot,
@@ -25,8 +38,9 @@ finding by its offsets in the derived text, and egress redaction overwrites thos
 offsets — in the *payload*, which is the thing that will actually be forwarded.
 :func:`leaves` publishes where each string landed in the derived text, and
 :func:`redact_payload` rebuilds the payload with those regions masked, walking in
-exactly the same canonical order so the two views cannot drift. Object key order
-is restored on the way out: the walk is sorted, the rebuilt payload is not
+exactly the same canonical order so the two views cannot drift — a binary block
+is left out on both sides, and copied through untouched. Object key order is
+restored on the way out: the walk is sorted, the rebuilt payload is not
 reordered.
 """
 
@@ -34,12 +48,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import final
+from typing import Any, Final, final
 
 from limes.transports.redaction import Redaction
 
 __all__ = [
+    "Derived",
     "Leaf",
+    "derive",
     "inspected_content",
     "leaves",
     "redact_payload",
@@ -47,35 +63,109 @@ __all__ = [
     "tool_call_name",
 ]
 
+#: MCP content-block types whose ``data`` field is base64, not text.
+_BINARY_BLOCK_TYPES: Final = frozenset({"image", "audio"})
+#: The field a binary resource's base64 lives under (embedded, or ``resources/read``).
+_BLOB: Final = "blob"
+#: The field a binary content block's base64 lives under.
+_DATA: Final = "data"
 
-def _walk(node: object, out: list[str]) -> None:
-    """Append every string leaf of ``node`` to ``out`` in canonical order."""
+
+@final
+@dataclass(frozen=True, slots=True)
+class Derived:
+    """What the walk made of a payload (ADR 0028).
+
+    Attributes:
+        text: The string leaves the rules can read, joined by newlines in the
+            canonical order — the content the core inspects.
+        unreadable: One sentence per binary block the walk left out of ``text``,
+            in walk order. Empty when the payload carried only text.
+    """
+
+    text: str
+    unreadable: tuple[str, ...]
+
+
+def _binary_keys(node: Mapping[Any, object]) -> frozenset[str]:
+    """The keys of ``node`` whose string values are encoded bytes, not text."""
+    keys: set[str] = set()
+    if isinstance(node.get(_BLOB), str):
+        keys.add(_BLOB)
+    if node.get("type") in _BINARY_BLOCK_TYPES and isinstance(node.get(_DATA), str):
+        keys.add(_DATA)
+    return frozenset(keys)
+
+
+def _describe(node: Mapping[Any, object], key: str) -> str:
+    """One plain sentence naming a binary block the guard cannot read."""
+    encoded = node[key]
+    size = len(encoded) if isinstance(encoded, str) else 0
+    media = node.get("mimeType")
+    media_type = media if isinstance(media, str) and media else "unknown media type"
+    if key == _BLOB:
+        uri = node.get("uri")
+        where = f" at {uri}" if isinstance(uri, str) and uri else ""
+        kind = f"a binary resource{where}"
+    else:
+        kind = f"an {node['type']} block"
+    return (
+        f"{kind} ({media_type}, {size} characters of base64) was not inspected: the guard "
+        "reads text, and this is not text"
+    )
+
+
+def _walk(node: object, out: list[str], unreadable: list[str]) -> None:
+    """Append every readable string leaf of ``node`` to ``out`` in canonical order."""
     if isinstance(node, str):
         out.append(node)
         return
     if isinstance(node, Mapping):
+        binary = _binary_keys(node)
         for key in sorted(node, key=str):
-            _walk(node[key], out)
+            if key in binary:
+                unreadable.append(_describe(node, key))
+                continue
+            _walk(node[key], out, unreadable)
         return
     if isinstance(node, Sequence) and not isinstance(node, str | bytes | bytearray):
         for item in node:
-            _walk(item, out)
+            _walk(item, out, unreadable)
+
+
+def derive(payload: object) -> Derived:
+    """Derive the text the core inspects, and name what could not be derived.
+
+    Args:
+        payload: The ``arguments`` of a ``tools/call``, the ``params`` of a
+            request, or the ``result`` of a response — any JSON-shaped value,
+            including ``None``.
+
+    Returns:
+        The readable string leaves joined by newlines, in the canonical order
+        described in this module's docstring, and one sentence per binary block
+        left out of them (ADR 0028).
+    """
+    parts: list[str] = []
+    unreadable: list[str] = []
+    _walk(payload, parts, unreadable)
+    return Derived(text="\n".join(parts), unreadable=tuple(unreadable))
 
 
 def inspected_content(payload: object) -> str:
     """Derive the text the core inspects from an arbitrary JSON-shaped payload.
 
+    The text half of :func:`derive`, kept under the name the evidence offsets
+    are expressed in.
+
     Args:
-        payload: The ``arguments`` of a ``tools/call``, or the ``result`` of a
-            response — any JSON-shaped value, including ``None``.
+        payload: Any JSON-shaped value, including ``None``.
 
     Returns:
-        The string leaves joined by newlines, in the canonical order described in
-        this module's docstring. Empty when the payload carries no text.
+        The readable string leaves joined by newlines. Empty when the payload
+        carries no text.
     """
-    parts: list[str] = []
-    _walk(payload, parts)
-    return "\n".join(parts)
+    return derive(payload).text
 
 
 @final
@@ -93,7 +183,7 @@ class Leaf:
 
 
 def leaves(payload: object) -> tuple[Leaf, ...]:
-    """Return every string leaf of ``payload`` with its offset in the derived text.
+    """Return every readable string leaf of ``payload`` with its offset in the derived text.
 
     Args:
         payload: Any JSON-shaped value.
@@ -104,7 +194,8 @@ def leaves(payload: object) -> tuple[Leaf, ...]:
         and the offsets are the coordinates evidence spans are expressed in.
     """
     parts: list[str] = []
-    _walk(payload, parts)
+    unreadable: list[str] = []
+    _walk(payload, parts, unreadable)
     found: list[Leaf] = []
     position = 0
     for part in parts:
@@ -146,7 +237,13 @@ def _rebuild(node: object, cursor: _Cursor, redaction: Redaction) -> object:
         cursor.position = start + len(node) + 1
         return _mask_leaf(node, start, redaction)
     if isinstance(node, Mapping):
-        masked = {key: _rebuild(node[key], cursor, redaction) for key in sorted(node, key=str)}
+        binary = _binary_keys(node)
+        masked = {
+            # A binary block was never in the derived text, so it holds no
+            # offset to mask and moves the cursor by nothing: copied through.
+            key: node[key] if key in binary else _rebuild(node[key], cursor, redaction)
+            for key in sorted(node, key=str)
+        }
         # Walked sorted (offsets must be stable), rebuilt in the order the wire
         # used: the host receives its own object, minus the masked regions.
         return {key: masked[key] for key in node}

@@ -33,6 +33,10 @@ Generated 2026-09-06 from **presidio-research** (MIT, commit `70ff860bed29`, <ht
 
 **Decoys killed:** 6. Named, not rounded away: `t012_iban_04_decoy`, `t012_iban_05_decoy`, `t028_iban_04_decoy`, `t028_iban_05_decoy`, `t036_iban_04_decoy`, `t036_iban_05_decoy`
 
+## Declared unreadable
+
+None. Every vector here is text the detector's rules could read; a vector that were not would be listed by name, counted neither as located nor as killed.
+
 ## The two numbers
 
 - **Values located (dev):** 185/185 (100.0%).

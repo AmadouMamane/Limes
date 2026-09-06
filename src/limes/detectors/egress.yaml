@@ -272,6 +272,9 @@ detectors:
   # the shapes' precision.
   injection-egress:
     max_content_chars: 200000
+    # The languages these rules were written for (ADR 0028). The two shape-bound
+    # detectors above declare none: a card number or a key has no language.
+    locales: [fr, de, en]
     rules:
 
       # Uppercase attack markers (the Invariant Labs tool-poisoning shape).

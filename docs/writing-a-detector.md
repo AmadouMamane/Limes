@@ -13,8 +13,8 @@ ledger and the egress dispositions come for free. The admission bar governs what
 
 ## 1. The contract
 
-A detector declares `id` and `version` and implements one method
-(`limes.detector.Detector`):
+A detector declares `id` and `version`, names the legs it reads, and implements
+one method (`limes.detector.Detector`, `limes.detector.DeclaresDirections`):
 
 ```python
 from limes.detector import Context, Direction, Finding, DetectorBlind
@@ -24,9 +24,10 @@ class HexColorDetector:
     """Toy detector: flags hex colour codes on the outbound leg."""
     id = "hex-color"
     version = "0.1.0"          # the shipped detectors report limes.__version__ (ADR 0025)
+    directions = frozenset({Direction.OUTBOUND})   # the core asks you here, and only here (ADR 0027)
 
     def inspect(self, direction: Direction, content: str, ctx: Context) -> list[Finding]:
-        if direction is not Direction.OUTBOUND:      # this detector only guards egress
+        if direction not in self.directions:         # kept for callers that do not read the declaration
             return []
         findings: list[Finding] = []
         import re
@@ -52,9 +53,21 @@ Three rules the contract enforces, and why each matters:
   The transport masks by those offsets and the eval grades by them, so a span you
   report but did not verify would mislead both.
 - **If you cannot look, raise `DetectorBlind`.** Dependency absent, content
-  unreadable, budget exceeded — the core turns it into `CannotSay`, and the egress
-  leg blocks. Returning `[]` when you did not actually inspect is the one lie the
-  system forbids: it reads as "clean".
+  unreadable, budget exceeded — the core turns it into `CannotSay` with cause
+  `declared`, and the egress leg blocks. Returning `[]` when you did not actually
+  inspect is the one lie the system forbids: it reads as "clean". Any *other*
+  exception out of `inspect` is also a blind spot, but with cause `fault` — one no
+  `on_cannot_say` setting opens (ADR 0026) — so declare your limits rather than
+  fall over them.
+- **Name the legs you read.** `directions` is optional and the core reads it:
+  you are asked only on those legs and listed as a witness only there. A detector
+  that declares nothing is asked on every leg and its `[]` is taken at its word,
+  as in v0.1 — which overstates who looked if you only ever read one leg (ADR
+  0027). The shipped detectors also run `limes.detectors.readability.
+  refuse_unreadable_text` after their rules found nothing, so that content their
+  rules cannot read — mostly base64, words split by invisible characters, another
+  script — is a declared blind spot rather than a pass (ADR 0028); a rule-based
+  detector of your own can call it the same way.
 
 Wire it into a guard like any shipped detector:
 

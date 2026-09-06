@@ -19,6 +19,14 @@ transport took — ``forward``, ``redact`` or ``block`` — so the chain proves 
 only that a response was refused but what then left. ``check`` itself records
 ``None``: a caller who receives a bare verdict decides what to do with it, and
 the ledger does not guess on their behalf.
+
+Two things the guard says rather than lets pass (ADR 0027/0028). A detector
+that names its legs is asked only on them, so a guard wired with both an inbound
+and an outbound detector lists as witness only the one that read the leg; a leg
+no wired detector reads answers ``CannotSay`` rather than an ``Allow`` with no
+witness. And a caller may declare ``blind_spots`` of its own — the parts of what
+it handed over that it could derive no text from — which the core aggregates
+like a detector's declared limit.
 """
 
 from __future__ import annotations
@@ -52,7 +60,7 @@ class Blocked(Exception):
         if isinstance(verdict, Deny):
             super().__init__(f"blocked: {verdict.reason}")
         else:
-            super().__init__(f"blocked (cannot say): {verdict.blind_spot}")
+            super().__init__(f"blocked (cannot say, {verdict.cause.value}): {verdict.blind_spot}")
 
 
 @final
@@ -144,6 +152,7 @@ class Guard:
         observed_at: str,
         direction: Direction = Direction.INBOUND,
         locale: str | None = None,
+        blind_spots: Sequence[str] = (),
     ) -> Verdict:
         """Inspect ``content`` and return the verdict **without** recording it.
 
@@ -155,13 +164,26 @@ class Guard:
             actor: The caller's asserted identity (``None`` for anonymous).
             observed_at: ISO-8601 timestamp recorded into evidence.
             direction: The leg to inspect (default inbound).
-            locale: Optional locale hint.
+            locale: Optional locale hint — a word-reading detector whose policy
+                declares its languages declares itself blind on one it does not
+                read (ADR 0028).
+            blind_spots: Limits the caller declares about what it handed over,
+                one sentence each — the parts it could derive no text from
+                (ADR 0028). A finding still dominates them; otherwise they make
+                the verdict ``CannotSay`` with cause ``declared``.
 
         Returns:
             The verdict, not yet on the chain.
         """
         ctx = Context(policy_hash=self._policy_hash, actor=actor, locale=locale)
-        return decide(direction, content, ctx, self._detectors, observed_at=observed_at)
+        return decide(
+            direction,
+            content,
+            ctx,
+            self._detectors,
+            observed_at=observed_at,
+            blind_spots=blind_spots,
+        )
 
     def record(
         self,
@@ -194,6 +216,7 @@ class Guard:
         observed_at: str,
         direction: Direction = Direction.INBOUND,
         locale: str | None = None,
+        blind_spots: Sequence[str] = (),
     ) -> Verdict:
         """Inspect ``content`` and record the verdict in the ledger.
 
@@ -205,13 +228,19 @@ class Guard:
             actor: The caller's asserted identity (``None`` for anonymous).
             observed_at: ISO-8601 timestamp recorded into evidence.
             direction: The leg to inspect (default inbound).
-            locale: Optional locale hint.
+            locale: Optional locale hint (see :meth:`verdict`).
+            blind_spots: Limits the caller declares (see :meth:`verdict`).
 
         Returns:
             The verdict, which is also appended to :attr:`ledger`.
         """
         verdict = self.verdict(
-            content, actor=actor, observed_at=observed_at, direction=direction, locale=locale
+            content,
+            actor=actor,
+            observed_at=observed_at,
+            direction=direction,
+            locale=locale,
+            blind_spots=blind_spots,
         )
         self.record(direction, verdict, actor, disposition=None)
         return verdict
@@ -223,6 +252,7 @@ class Guard:
         actor: str | None,
         observed_at: str,
         locale: str | None = None,
+        blind_spots: Sequence[str] = (),
     ) -> Egress:
         """Inspect content that is about to leave, and say what may leave (ADR 0006).
 
@@ -234,15 +264,17 @@ class Guard:
         * every kind that fired is configured ``redact`` → the matched offsets
           are overwritten with fixed tokens and the rest is forwarded;
         * any kind is configured ``block`` (the default) → nothing leaves;
-        * ``CannotSay`` → nothing leaves. A detector that could not look cannot
-          have located anything to mask, so there is no masked forward to offer;
-          a caller who wants another answer has the verdict in hand.
+        * ``CannotSay`` → nothing leaves, whatever its cause. A detector that
+          could not look cannot have located anything to mask, so there is no
+          masked forward to offer; a caller who wants another answer has the
+          verdict, and its cause, in hand.
 
         Args:
             content: The outbound content.
             actor: The caller's asserted identity (``None`` for anonymous).
             observed_at: ISO-8601 timestamp recorded into evidence.
-            locale: Optional locale hint.
+            locale: Optional locale hint (see :meth:`verdict`).
+            blind_spots: Limits the caller declares (see :meth:`verdict`).
 
         Returns:
             The egress decision, whose ``content`` is what may be sent.
@@ -253,6 +285,7 @@ class Guard:
             observed_at=observed_at,
             direction=Direction.OUTBOUND,
             locale=locale,
+            blind_spots=blind_spots,
         )
         egress = self._dispose(content, verdict)
         self.record(Direction.OUTBOUND, verdict, actor, disposition=egress.action.value)
@@ -274,7 +307,7 @@ class Guard:
                 content=None,
                 verdict=verdict,
                 redaction=None,
-                reason=f"the guard could not look: {verdict.blind_spot}",
+                reason=f"the guard could not look ({verdict.cause.value}): {verdict.blind_spot}",
             )
 
         ruling = rule_egress(verdict, policy=self._egress, content_length=len(content))

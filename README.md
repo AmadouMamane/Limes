@@ -76,7 +76,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
-| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — moved only by decision since v0.1 (each move a named ADR with a re-pinned hash: 0011, 0014, 0019, 0023, 0025), and a *ratchet* — a test that may only tighten — says so |
+| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — moved only by decision since v0.1 (each move a named ADR with a re-pinned hash: 0011, 0014, 0019, 0023, 0025, 0026, 0027, 0028), and a *ratchet* — a test that may only tighten — says so |
 | **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, the context-anchored AWS secret access key, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; *bare* unprefixed credentials — a keyword-anchored AWS secret is caught, a bodyless blob is measured out of reach (ADR 0022). Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
 | **Egress** | three detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
@@ -242,8 +242,10 @@ match verdict:
         ...                         # proceed — ev names every detector that looked
     case Deny(reason=reason):
         ...                         # refuse; the evidence is on guard.ledger
-    case CannotSay(blind_spot=blind):
-        ...                         # the guard could not look: fail closed
+    case CannotSay(blind_spot=blind, cause=cause):
+        ...                         # nobody could look: fail closed. `cause` says why —
+                                    # "declared" (a limit the guard named), "fault"
+                                    # (a detector fell over), "refused" (ADR 0026)
 ```
 
 A verdict is a value you *inspect*, not a true/false flag. Writing `if verdict:`
@@ -251,6 +253,11 @@ raises on purpose: a `Deny` is an ordinary Python object and therefore truthy, s
 a boolean test would quietly read a refusal as success. So you `match` it, as
 above (more on why under *The verdict*). Every decision, allowed or not, is
 appended to `guard.ledger`, hash-chained.
+
+Wire only the detectors that read the leg you check, or wire them all: since
+0.14.0 a detector names the legs it reads, the core asks it only there, and the
+evidence lists exactly who looked (ADR 0027). A leg nobody reads answers
+`CannotSay` — "nobody looked" — never an `Allow` with an empty witness list.
 
 On the way out, `check_egress` returns the verdict *plus what may leave*:
 
@@ -333,16 +340,18 @@ degrades instead of crashing:
 ```
 limes blocked this tool call.
 reason: 2 rule match(es) on inbound content: injection:disable-control, injection:embedded-system-directive
-decision: seq 3, record 95bdcb88b9e9…
-policy: sha256 9ce7d2d1177b…
+decision: seq 4, record 9d8f3fc796a7…
+policy: sha256 97dbb0258f2d…
 inspected content: sha256 c10adc834778…
 matched: injection:embedded-system-directive at [35,50) sha256 e652291d63e7…
 matched: injection:disable-control at [43,59) sha256 9665b2d14aea…
 (evidence carries hashes and offsets, never the payload)
 ```
 
-*(real output for corpus case 08, English, in a tool argument — the fourth
-decision of a session; the hashes are full 64-hex on the wire and abbreviated
+*(real output for corpus case 08, English, in a tool argument — the fourth call
+of a session and the fifth record on its chain: at `seq 1` sits the declaration
+that the first response crossed an outbound leg with no detector wired, ADR
+0028; the hashes are full 64-hex on the wire and abbreviated
 here for the page.)*
 
 …and the real server never received it. Every decision — allowed, refused, or
@@ -384,8 +393,8 @@ An injection is refused, with its evidence, and a non-zero exit:
 ```
 $ limes check attack.txt ; echo "exit=$?"
 [DENY] 2 rule match(es) on inbound content: injection:disable-control, injection:embedded-system-directive
-decision: seq 0, record ecaa6bc6c2c5…
-policy: sha256 9ce7d2d1177b…
+decision: seq 0, record ea27f690f792…
+policy: sha256 97dbb0258f2d…
 inspected content: sha256 c10adc834778…
 matched: injection:embedded-system-directive at [35,50) sha256 e652291d63e7…
 matched: injection:disable-control at [43,59) sha256 9665b2d14aea…
@@ -455,16 +464,28 @@ So a limes verdict is a closed, exhaustively matched union that carries its
 evidence:
 
 ```
-Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot)
+Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot, cause)
 ```
 
 - **`Allow` is unconstructible without evidence** — no default, no convenience
   constructor; `Allow()` is a *type error*. A ratchet pins this at the type
   level: it asserts mypy rejects the call, and fails the moment anyone gives the
   `evidence` field a default (ADR 0002).
-- **`CannotSay` fails closed** — a detector that cannot see (dependency absent,
-  content unreadable, timeout) publishes a blind spot; it never degrades to a
-  silent `Allow`. A witness that cannot see may never report "ok".
+- **`CannotSay` fails closed, and names its cause** — a detector that cannot see
+  (over budget, content it cannot read, a language its rules do not cover)
+  publishes a blind spot; it never degrades to a silent `Allow`. A witness that
+  cannot see may never report "ok". The cause is sealed into the verdict (ADR
+  0026): `declared` — a limit the guard named, which an operator may accept
+  knowingly; `fault` — a detector fell over; `refused` — the relay would not
+  take the content on. The proxy's `on_cannot_say: allow` opens the first and
+  never the other two, so accepting the guard's declared limits does not mean
+  accepting a crashed guard.
+- **The guard says what it cannot read** (ADR 0027/0028) — a leg nobody reads,
+  an image or a binary resource in a tool result, a payload that is mostly
+  base64, words split by invisible characters, text in a script or a declared
+  language the rules were not written for: each is a `CannotSay` with a
+  declared cause, blocked by default, where before it was an `Allow` nobody
+  had earned.
 - **`__bool__` raises** — there is no `if verdict:`. A dataclass instance is
   truthy by default, so a bare truthiness test would read a `Deny` (and a
   `CannotSay`!) as success; raising instead forces callers to pattern-match.
@@ -754,6 +775,18 @@ core, which ADR 0004 does not allow from a detector; ADR 0011 authorised the
 one-line amendment (the digest is total now), the same input answers
 `CannotSay` → **block**, and the test that pinned the crash pins the verdict.
 
+**And where the rules cannot read at all** (ADR 0028). Every detector, after its
+rules found nothing, says whether they could have: content that is mostly
+opaque encoded runs (base64, hex, a serialised blob), or a word or number split
+by an invisible format character, is a declared blind spot — `CannotSay`, blocked
+by default — instead of a "clean" the rules never earned. The two word-reading
+detectors (`injection`, `injection-egress`) add: text mostly in another script,
+or a caller-declared locale the policy's `locales` do not list. A finding always
+dominates the screen, so a key inside a base64 dump is still a key found. The
+one exception is stated: the soft hyphen is read as text, because extracted web
+pages carry it inside ordinary words, so a directive split with one is a
+documented miss rather than a blind spot on every scraped page.
+
 ## The secrets egress detector — `secrets-egress` (outbound, v0.6)
 
 Prefixed API keys (AWS, OpenAI, GitHub, Stripe, Google, Slack), **PEM private-key
@@ -981,12 +1014,13 @@ and, in `_meta`, what was masked:
 {"limes": {
   "blocked": false, "redacted": true,
   "reason": "2 rule match(es) on outbound content: pii:email, pii:pan (egress policy masks kind: pii; 2 region(s) replaced)",
+  "cause": null,
   "record": {"seq": 1, "direction": "outbound", "disposition": "redact",
-             "digest": "26d4f984…", "prev_hash": "3eed1b8c…"},
+             "digest": "22529573711b…", "prev_hash": "92e2cf3f8241…"},
   "redaction": {"masked": 2, "kinds": ["pii"], "spans": [
     {"start": 6,  "end": 25, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"},
     {"start": 51, "end": 68, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"}]},
-  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.13.0"}], "…": "…"}}}
+  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.14.0"}], "…": "…"}}}
 ```
 
 (real output from the shipped `pii-egress` detector, digests abbreviated and the
@@ -1078,12 +1112,26 @@ What it does:
   what it receives — the blocked call is absent from that journal, and the
   control run without the proxy shows the same call arriving.
 - **Fails closed.** `CannotSay` blocks unless an operator explicitly sets
-  `on_cannot_say: allow` (policy file) or `--on-cannot-say allow`. A proxy that
-  cannot load its policy exits `2` rather than becoming a silent pass-through.
+  `on_cannot_say: allow` (policy file) or `--on-cannot-say allow` — and even
+  then only a *declared* limit is forwarded: a detector that fell over or a
+  frame the relay refused stays blocked under either setting (ADR 0026). A proxy
+  that cannot load its policy exits `2` rather than becoming a silent
+  pass-through.
+- **Says what it cannot read** (ADR 0028). A tool result carrying an image, an
+  audio clip or a binary resource is text the guard read plus blocks it could
+  not, and the verdict says so: a `CannotSay` with cause `declared`, **blocked
+  by default**. The same for a result that is mostly base64 — a file-reading
+  tool that returns encoded bytes. A deployment whose tools return screenshots
+  or encoded files accepts that knowingly with `on_cannot_say: allow`, and the
+  record still says the image was not inspected. A finding in the text beside
+  the image still refuses the result.
 - **Records everything.** Allowed, refused and cannot-say alike, as hash-chained
   `DecisionRecord`s — the same shape the in-process transport emits — to stderr
   by default (**never stdout**: that is the host's JSON-RPC channel) or to
-  `--record FILE`. A recorded session replays to byte-identical digests.
+  `--record FILE`. A recorded session replays to byte-identical digests. And
+  what crossed *unread* is on the same chain: the first time each kind of
+  uninspected message crosses in a session (`initialize`, `prompts/list`, a
+  notification, a frame that did not parse), a record says so (ADR 0028).
 
 ### What the proxy does **not** do (v0.2)
 
@@ -1094,13 +1142,17 @@ What it does:
   pipeline over zero detectors, because that would answer `Allow` with no witness
   — a pass that reads like a verdict. That blind spot was stated rather than
   simulated, and v0.5 closes it: `pii-egress` is a real witness on that leg.
+  Since 0.14.0 the core itself answers `CannotSay` on a leg nobody reads (ADR
+  0027), and a deliberately empty outbound leg is declared on the chain.
 - **Arguments only, string values only.** The inbound pipeline inspects the
   string *values* of a tool call's arguments, walked in canonical order. Object
   *keys* and non-string scalars are not inspected. A declared blind spot.
 - **Listings, completions and logs cross uninspected.** `prompts/list`,
   `resources/list`, `resources/templates/list`, `completion/complete` and
   `notifications/message` are declared out of the seam, with the reason, in the
-  threat model (ADR 0024).
+  threat model (ADR 0024) — and, since 0.14.0, on the chain: the first time
+  each kind crosses in a session, a `CannotSay` with cause `declared` and
+  disposition `forward` records that the guard read nothing of it (ADR 0028).
 - One host↔server pair per process — no multiplexing. No dashboard, no rate
   limit, no kill switch, no human approval, no config UI.
 
@@ -1169,7 +1221,7 @@ Deep dives that go past what this page covers:
   pipeline with no transport at all.
 
 Read the founding decisions first: `docs/decisions/0001`–`0004`, then the
-rest in order (`0005`–`0025`). The proxy's
+rest in order (`0005`–`0028`). The proxy's
 design note, with the three places the shipped code deviates from it and why, is
 `docs/design/mcp-proxy-v0.2.md`.
 

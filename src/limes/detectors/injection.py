@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from limes import __version__
 from limes.detector import Context, DetectorBlind, Direction, Finding
+from limes.detectors.readability import refuse_unreadable_text
 from limes.policy import InjectionPolicy, load_injection_policy
 from limes.spans import redact
 
@@ -22,10 +23,13 @@ class InjectionDetector:
     """Rule-based inbound injection detector.
 
     Reads *all* rules of the injection policy (both ``tessera`` and ``limes``
-    origins). Inspects only the inbound leg in v0.1.
+    origins). Reads the inbound leg only, and says so (ADR 0027).
     """
 
     id = "injection"
+    #: The leg this detector reads (ADR 0027): the core asks it here and counts
+    #: it as a witness here, never on the outbound leg.
+    directions = frozenset({Direction.INBOUND})
     #: The build that is answering (ADR 0025): the witness in every piece of
     #: evidence names the same string ``limes --version`` prints, so an auditor
     #: can reinstall exactly the rules and code that produced a verdict. A
@@ -46,11 +50,13 @@ class InjectionDetector:
 
         Raises:
             DetectorBlind: If the content exceeds the policy's declared scan
-                budget (ADR 0023) — the detector did not observe and must not
-                read as clean.
+                budget (ADR 0023), or — with no rule matching — is content the
+                rules cannot read: mostly opaque encoded runs, words split by
+                invisible characters, mostly another script, or a locale the
+                policy does not declare (ADR 0028). In every case the detector
+                did not observe and must not read as clean.
         """
-        del ctx  # the injection detector reads only the content, not the actor
-        if direction is not Direction.INBOUND:
+        if direction not in self.directions:
             return []
         budget = self._policy.max_content_chars
         if len(content) > budget:
@@ -69,4 +75,16 @@ class InjectionDetector:
                 )
                 for match in rule.pattern.finditer(content)
             )
+        if findings:
+            return findings
+        # Nothing matched. Before that reads as "clean", the rules say whether
+        # they could read the content at all (ADR 0028); a finding above already
+        # dominated, so a directive in readable text is never demoted here.
+        refuse_unreadable_text(
+            content,
+            detector_id=self.id,
+            reads_words=True,
+            locale=ctx.locale,
+            locales=self._policy.locales,
+        )
         return findings

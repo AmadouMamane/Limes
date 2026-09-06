@@ -13,6 +13,11 @@ which the inbound detector does not scan and says so (``DetectorBlind`` ->
 ``egress.yaml``. It is optional here, unlike there, because injection policies
 written before it existed are in use; when absent the packaged default applies
 and is recorded — the file's hash covers the declaration or its absence.
+
+And it may declare ``locales`` (ADR 0028): the languages its rules were written
+for. A caller that declares a locale the policy does not list gets a blind spot
+rather than a "clean" the rules could not have earned. Optional for the same
+reason; when absent the detector reads the content's script alone.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-__all__ = ["InjectionPolicy", "Rule", "load_injection_policy"]
+__all__ = ["InjectionPolicy", "Rule", "load_injection_policy", "read_locales"]
 
 _DEFAULT_POLICY = Path(__file__).resolve().parent / "detectors" / "policy.yaml"
 
@@ -32,6 +37,9 @@ _VALID_ORIGINS = frozenset({"tessera", "limes"})
 
 #: The optional key declaring the inbound scan budget (ADR 0023).
 _BUDGET_KEY = "max_content_chars"
+
+#: The optional key declaring the languages the rules were written for (ADR 0028).
+_LOCALES_KEY = "locales"
 
 #: The budget an injection policy gets when it declares none — the same figure
 #: the packaged egress detectors declare, so the two legs refuse at one size.
@@ -63,12 +71,16 @@ class InjectionPolicy:
         rules: Every rule, in declaration order.
         max_content_chars: The size beyond which the inbound detector declares
             itself blind rather than scanning (ADR 0023).
+        locales: The languages the rules were written for, lower-cased language
+            subtags (``fr``, ``de``, ``en``), or ``None`` when the file declares
+            none (ADR 0028).
     """
 
     version: int
     policy_hash: str
     rules: tuple[Rule, ...]
     max_content_chars: int
+    locales: frozenset[str] | None
 
     def rules_from(self, *origins: str) -> tuple[Rule, ...]:
         """Return the rules whose ``origin`` is in ``origins`` (all rules if empty)."""
@@ -89,8 +101,9 @@ def load_injection_policy(path: Path | None = None) -> InjectionPolicy:
 
     Raises:
         ValueError: If the file is malformed, is not valid YAML, a rule is
-            missing a field, a pattern does not compile, or the scan budget is
-            not a positive integer.
+            missing a field, a pattern does not compile, the scan budget is
+            not a positive integer, or ``locales`` is not a list of language
+            tags.
     """
     policy_path = path or _DEFAULT_POLICY
     raw = policy_path.read_bytes()
@@ -111,6 +124,7 @@ def load_injection_policy(path: Path | None = None) -> InjectionPolicy:
             f"policy {policy_path}: {_BUDGET_KEY!r} must be a positive integer. A detector "
             f"with no declared limit is one whose refusal to scan cannot be audited."
         )
+    locales = read_locales(data.get(_LOCALES_KEY), policy_path=policy_path, owner="the policy")
     rules_raw = data.get("rules")
     if not isinstance(rules_raw, list) or not rules_raw:
         raise ValueError(f"policy {policy_path}: 'rules' must be a non-empty list")
@@ -147,4 +161,35 @@ def load_injection_policy(path: Path | None = None) -> InjectionPolicy:
         policy_hash=policy_hash,
         rules=tuple(rules),
         max_content_chars=budget,
+        locales=locales,
     )
+
+
+def read_locales(raw: object, *, policy_path: Path, owner: str) -> frozenset[str] | None:
+    """Read an optional ``locales`` declaration, or say precisely what was wrong.
+
+    Args:
+        raw: The value found under the key, or ``None`` when absent.
+        policy_path: The file being read, for the error message.
+        owner: Who declared it, for the error message (``"the policy"`` or a
+            detector id).
+
+    Returns:
+        The lower-cased language subtags, or ``None`` when nothing was declared.
+
+    Raises:
+        ValueError: If the value is not a non-empty list of non-empty strings.
+    """
+    if raw is None:
+        return None
+    if (
+        not isinstance(raw, list)
+        or not raw
+        or not all(isinstance(item, str) and item.strip() for item in raw)
+    ):
+        raise ValueError(
+            f"policy {policy_path}: {_LOCALES_KEY!r} of {owner} must be a non-empty list of "
+            f"language tags such as [fr, de, en]; a declaration that cannot be read would let "
+            f"the detector answer 'clean' in a language its rules do not cover."
+        )
+    return frozenset(item.replace("_", "-").split("-", 1)[0].strip().lower() for item in raw)

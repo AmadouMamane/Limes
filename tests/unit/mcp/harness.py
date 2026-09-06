@@ -166,7 +166,7 @@ def make_relay(
 
 def drive(
     relay: Relay,
-    messages: Sequence[AnyMessage],
+    messages: Sequence[AnyMessage | Exception],
     *,
     records: list[dict[str, Any]],
     responder: Responder = echo_responder,
@@ -177,7 +177,8 @@ def drive(
 
     Args:
         relay: The relay under test.
-        messages: Host→server messages, sent in order.
+        messages: Host→server messages, sent in order. An ``Exception`` is sent
+            as the SDK sends a parse failure: raw, in place of a message.
         records: The list the relay's sink appends to.
         responder: What the scripted server replies with, per message.
         expect_to_host: How many messages the host should receive before the
@@ -212,6 +213,9 @@ def drive(
 
             async def driver() -> None:
                 for message in messages:
+                    if isinstance(message, Exception):
+                        await host_send.send(message)
+                        continue
                     await host_send.send(SessionMessage(types.JSONRPCMessage(message)))
                 if expect_to_host:
                     with anyio.fail_after(timeout):

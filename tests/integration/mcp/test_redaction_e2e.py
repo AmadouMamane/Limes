@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -207,4 +208,5 @@ def test_the_record_names_what_was_masked_and_still_says_deny(tmp_path):
     logged = json.dumps(entries)
     assert CARD not in logged, "a decision log that quotes what it masked has not masked it"
     assert EMAIL not in logged
-    assert outbound["prev_hash"] == entries[0]["digest"], "the decisions chain"
+    for previous, entry in pairwise(entries):
+        assert entry["prev_hash"] == previous["digest"], "the decisions chain"

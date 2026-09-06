@@ -29,12 +29,11 @@ What the relay does, message by message:
   to the plan applied to the flat content, and a disagreement blocks.
   ``tools/list`` is guarded because a poisoned tool description reaches the
   model through it (ADR 0012); ``prompts/get`` because a prompt's messages go
-  straight into the model's context (ADR 0024). When a deployment wires **no**
-  outbound detector the relay passes the response through *untouched and
-  unrecorded*: it deliberately does **not** call ``decide()`` over an empty
-  detector list, because that returns an ``Allow`` whose evidence names no
-  witness — a pass that reads like a verdict. An unwatched leg is a blind spot,
-  declared rather than simulated.
+  straight into the model's context (ADR 0024). A result carrying an image, an
+  audio clip or a binary resource is text the guard could read plus blocks it
+  could not, and the verdict says so: the blocks become declared blind spots,
+  ``CannotSay`` unless a finding in the text dominates, blocked by default and
+  forwarded only under ``on_cannot_say: allow`` (ADR 0028).
 * ``sampling/createMessage`` and ``elicitation/create`` (server → host
   **requests**) — the same outbound leg, because their parameters are content
   the host's model or user reads (ADR 0024). A refusal is a JSON-RPC error
@@ -42,11 +41,18 @@ What the relay does, message by message:
   so any finding blocks.
 * **everything else** — ``initialize``, ``prompts/list``, ``resources/list``,
   capabilities, notifications, errors, unknown methods — is relayed
-  byte-faithful in both directions, ids preserved, with one reservation: the
-  relay owns the ``limes`` key of a result's ``_meta``. A wrapped server that
-  sends one has it moved to ``limes-upstream`` before the host sees it, so a
-  forged annotation cannot pass for the relay's own (ADR 0024). The host sees
-  the wrapped server's real capabilities, not the proxy's.
+  byte-faithful in both directions, ids preserved, and **declared** (ADR 0028):
+  the first time each kind of uninspected message crosses in a session, the
+  relay appends a ``CannotSay`` with cause ``declared`` and disposition
+  ``forward`` to the chain, so an auditor reading only the journal sees what
+  the guard did not read rather than inferring it from silence. One
+  reservation: the relay owns the ``limes`` key of a result's ``_meta``. A
+  wrapped server that sends one has it moved to ``limes-upstream`` before the
+  host sees it, so a forged annotation cannot pass for the relay's own (ADR
+  0024). The host sees the wrapped server's real capabilities, not the proxy's.
+* a frame that **does not parse** as JSON-RPC, from either peer, is dropped —
+  and journalled as a ``CannotSay`` with cause ``refused`` (ADR 0026), so the
+  chain records that something crossed the relay's threshold that nobody read.
 
 Every decision is sealed with its **disposition** (ADR 0025): the record says
 ``forward``, ``redact`` or ``block`` inside the hashed core, so the chain proves
@@ -55,8 +61,9 @@ what left and not only what was refused.
 The relay owns no protocol state of its own: it does not implement ``initialize``
 and it does not answer on the server's behalf. That is what makes "identical to
 direct" a testable claim rather than a hope. It remembers which guarded requests
-await a response, and refuses — closed, on the chain — rather than forget when
-that table fills: a forgotten request's response would cross unscreened.
+await a response, and refuses — closed, on the chain, through the same ruling as
+every other verdict — rather than forget when that table fills: a forgotten
+request's response would cross unscreened.
 """
 
 from __future__ import annotations
@@ -90,6 +97,7 @@ from limes.transports.mcp.decision import (
     rule,
 )
 from limes.transports.mcp.payload import (
+    derive,
     inspected_content,
     redact_payload,
     tool_call_arguments,
@@ -104,10 +112,11 @@ from limes.transports.redaction import (
     conceals_all,
     rule_egress,
 )
-from limes.verdict import CannotSay, Deny
+from limes.verdict import BlindCause, CannotSay, Deny
 
 __all__ = [
     "BLOCKED_ERROR_CODE",
+    "DECLARED_METHODS_LIMIT",
     "GUARDED_SERVER_REQUESTS",
     "OUTBOUND_METHODS",
     "PENDING_LIMIT",
@@ -149,6 +158,12 @@ GUARDED_SERVER_REQUESTS: Final = frozenset({"sampling/createMessage", "elicitati
 #: many requests unanswered in one session is not answering at all.
 PENDING_LIMIT: Final = 4096
 
+#: How many distinct kinds of uninspected message one session declares on the
+#: chain (ADR 0028). MCP defines a few dozen methods; a peer inventing method
+#: names without end is not a peer whose vocabulary the ledger should grow with,
+#: so beyond this many the further kinds are noted on stderr only.
+DECLARED_METHODS_LIMIT: Final = 64
+
 #: The ``_meta`` key the relay writes its annotation under, and the key an
 #: upstream value found there is moved to (ADR 0024).
 LIMES_META_KEY: Final = "limes"
@@ -156,6 +171,9 @@ UPSTREAM_META_KEY: Final = "limes-upstream"
 
 _META: Final = "_meta"
 _TOOLS_CALL: Final = "tools/call"
+#: The journal's name for a peer's response or error, which carries no method.
+_RESPONSE: Final = "(response)"
+_ERROR: Final = "(error)"
 
 
 def outbound_detectors() -> tuple[Detector, ...]:
@@ -238,10 +256,13 @@ class Relay:
                 server→host requests. The shipped proxies install every admitted
                 egress detector here via :func:`outbound_detectors` (ADR 0018);
                 an empty sequence is a deliberately unguarded leg — a pure
-                pass-through that emits no record, which the transparency tests
-                use to prove exact pass-through.
+                pass-through, which the transparency tests use to prove exact
+                pass-through, and which the relay *declares* on the chain the
+                first time each guarded kind of response crosses it unread
+                (ADR 0028).
             policy_hash: SHA-256 of the active policy, recorded into evidence.
-            on_cannot_say: Fail-closed policy for a blind detector.
+            on_cannot_say: Fail-closed policy for a *declared* blind spot (ADR
+                0026); a fault or a refusal blocks under either setting.
             actor: The identity asserted by the invoking session, or ``None``.
             sink: Where decision records are written.
             clock: Supplies ``observed_at``; injectable so a replay is exact.
@@ -252,10 +273,10 @@ class Relay:
         self._ledger = ledger if ledger is not None else Ledger()
         self._egress = egress if egress is not None else EgressPolicy.blocking()
         self._inbound_guard = Guard(inbound, policy_hash=policy_hash, ledger=self._ledger)
-        # Constructed only when there is something to run. A Guard over zero
-        # detectors would answer Allow with zero witnesses — the shape of a
-        # false "ok" (ADR 0002). `None` is the honest encoding of "no egress
-        # detector exists yet".
+        # Constructed only when there is something to run. An embedder that
+        # passes no outbound detector asked for pass-through on that leg; the
+        # relay gives it, and says so on the chain per kind of response rather
+        # than run the core over a leg nobody reads for every message.
         self._outbound_guard = (
             Guard(outbound, policy_hash=policy_hash, ledger=self._ledger) if outbound else None
         )
@@ -264,6 +285,8 @@ class Relay:
         self._sink = sink
         self._clock = clock
         self._pending: dict[str | int, str] = {}
+        self._declared: set[tuple[Direction, str]] = set()
+        self._declared_overflowed = False
 
     @property
     def ledger(self) -> Ledger:
@@ -321,7 +344,7 @@ class Relay:
     ) -> None:
         """Inspect a host→server message and forward it, or refuse it."""
         if isinstance(item, Exception):
-            _note(f"unparseable message from the host, dropped: {item}")
+            self._refuse_unparseable(Direction.INBOUND, "the host", item)
             return
 
         message = item.message.root
@@ -358,25 +381,58 @@ class Relay:
                     host_write, _blocked_response(message.id, message.method, ruling, record)
                 )
                 return
-        elif isinstance(message, types.JSONRPCNotification) and message.method == _TOOLS_CALL:
-            # MCP defines tools/call as a request; a notification-shaped one has
-            # no id to answer. It is judged like any call (ADR 0024) — an
-            # uninspected path to the server would be a hole with a spelling.
-            ruling, record = self._inspect_call(message.params)
-            self._emit(
-                record,
-                method=_TOOLS_CALL,
-                tool=tool_call_name(message.params),
-                request_id=None,
-                action=ruling.action,
-                redaction=None,
-            )
-            if ruling.action is Action.BLOCK:
-                _note(
-                    f"a tools/call notification (no id) was refused and dropped — "
-                    f"{ruling.reason} (record {record.digest})"
+            if message.method != _TOOLS_CALL:
+                self._declare(
+                    Direction.INBOUND,
+                    message.method,
+                    message.id,
+                    self._unread_host_request(message.method),
                 )
-                return
+        elif isinstance(message, types.JSONRPCNotification):
+            if message.method == _TOOLS_CALL:
+                # MCP defines tools/call as a request; a notification-shaped one
+                # has no id to answer. It is judged like any call (ADR 0024) —
+                # an uninspected path to the server would be a hole with a
+                # spelling.
+                ruling, record = self._inspect_call(message.params)
+                self._emit(
+                    record,
+                    method=_TOOLS_CALL,
+                    tool=tool_call_name(message.params),
+                    request_id=None,
+                    action=ruling.action,
+                    redaction=None,
+                )
+                if ruling.action is Action.BLOCK:
+                    _note(
+                        f"a tools/call notification (no id) was refused and dropped — "
+                        f"{ruling.reason} (record {record.digest})"
+                    )
+                    return
+            else:
+                self._declare(
+                    Direction.INBOUND,
+                    message.method,
+                    None,
+                    f"the host's {message.method} notification crosses uninspected by design "
+                    "(ADR 0024/0028): it is not content the guard reads",
+                )
+        elif isinstance(message, types.JSONRPCResponse):
+            self._declare(
+                Direction.INBOUND,
+                _RESPONSE,
+                message.id,
+                "a response from the host to a request the wrapped server made crosses "
+                "uninspected by design (ADR 0028): the guard reads the server's requests, "
+                "not the host's answers to them",
+            )
+        else:
+            self._declare(
+                Direction.INBOUND,
+                _ERROR,
+                message.id,
+                "a JSON-RPC error from the host crosses uninspected by design (ADR 0028)",
+            )
 
         await self._send(server_write, item)
 
@@ -388,12 +444,19 @@ class Relay:
     ) -> None:
         """Inspect a server→host message and forward it, or refuse it."""
         if isinstance(item, Exception):
-            _note(f"unparseable message from the wrapped server, dropped: {item}")
+            self._refuse_unparseable(Direction.OUTBOUND, "the wrapped server", item)
             return
 
         message = item.message.root
         if isinstance(message, types.JSONRPCError):
             self._pending.pop(message.id, None)
+            self._declare(
+                Direction.OUTBOUND,
+                _ERROR,
+                message.id,
+                "a JSON-RPC error from the wrapped server crosses uninspected by design "
+                "(ADR 0028): its message reaches the host as text nobody read",
+            )
         elif isinstance(message, types.JSONRPCRequest):
             # A request the SERVER makes of the host: its params are what the
             # host's model or user will read, so they cross the outbound seam
@@ -416,6 +479,21 @@ class Relay:
                         _blocked_server_request(message.id, message.method, ruling, record),
                     )
                     return
+            else:
+                self._declare(
+                    Direction.OUTBOUND,
+                    message.method,
+                    message.id,
+                    self._unread_server_request(message.method),
+                )
+        elif isinstance(message, types.JSONRPCNotification):
+            self._declare(
+                Direction.OUTBOUND,
+                message.method,
+                None,
+                f"the server's {message.method} notification crosses uninspected by design "
+                "(ADR 0024/0028); a host that shows it to its model shows it unread",
+            )
         elif isinstance(message, types.JSONRPCResponse):
             method = self._pending.pop(message.id, None)
             # The outbound seam: wired when an egress detector is installed.
@@ -432,6 +510,14 @@ class Relay:
                 if screening.replacement is not None:
                     await self._send(host_write, screening.replacement)
                     return
+            elif method is not None:
+                self._declare(
+                    Direction.OUTBOUND,
+                    method,
+                    message.id,
+                    f"the response to {method} crosses uninspected: no outbound detector is "
+                    "wired, so the leg the host's model reads from is a declared blind spot",
+                )
             reserved = _reserve_meta(message)
             if reserved is not None:
                 await self._send(host_write, reserved)
@@ -446,19 +532,111 @@ class Relay:
         self._pending[request_id] = method
         return True
 
+    def _unread_host_request(self, method: str) -> str:
+        """The blind spot a host→server request the inbound leg does not read declares."""
+        if method in OUTBOUND_METHODS:
+            if self._outbound_guard is not None:
+                return (
+                    f"{method} crosses uninspected by design (ADR 0028): its parameters are "
+                    "not content the inbound leg reads; its response is screened on the "
+                    "outbound leg"
+                )
+            return (
+                f"{method} crosses uninspected: its parameters are not content the inbound "
+                "leg reads, and no outbound detector is wired, so its response crosses "
+                "uninspected too"
+            )
+        return (
+            f"{method} crosses uninspected by design (ADR 0024/0028): neither its parameters "
+            "nor its response is content the guard reads"
+        )
+
+    def _unread_server_request(self, method: str) -> str:
+        """The blind spot a server→host request the outbound leg does not read declares."""
+        if method in GUARDED_SERVER_REQUESTS:
+            return (
+                f"the server's {method} request crosses uninspected: no outbound detector is "
+                "wired, and its parameters are content the host's model or user reads"
+            )
+        return (
+            f"the server's {method} request crosses uninspected by design (ADR 0024/0028): only "
+            "sampling/createMessage and elicitation/create carry content the host's model or "
+            "user reads"
+        )
+
+    def _declare(
+        self, direction: Direction, method: str, request_id: str | int | None, blind_spot: str
+    ) -> None:
+        """Seal, once per session and kind, that a kind of message crossed unread (ADR 0028).
+
+        A declared blind spot is not a ruling on content: the message is
+        forwarded by design, so the record carries disposition ``forward`` and
+        does not pass through :func:`rule`. What it adds is that the journal
+        says so, where before only the documentation did.
+        """
+        key = (direction, method)
+        if key in self._declared:
+            return
+        if len(self._declared) >= DECLARED_METHODS_LIMIT:
+            if not self._declared_overflowed:
+                self._declared_overflowed = True
+                _note(
+                    f"{DECLARED_METHODS_LIMIT} kinds of uninspected message have been declared "
+                    f"on the chain this session; further kinds (first: {method}) are noted "
+                    "here and not journalled individually"
+                )
+            return
+        self._declared.add(key)
+        verdict = CannotSay(blind_spot=blind_spot, cause=BlindCause.DECLARED)
+        record = self._ledger.append(
+            direction, verdict, self._actor, disposition=Action.FORWARD.value
+        )
+        self._emit(
+            record,
+            method=method,
+            tool=None,
+            request_id=request_id,
+            action=Action.FORWARD,
+            redaction=None,
+        )
+
+    def _refuse_unparseable(self, direction: Direction, peer: str, failure: Exception) -> None:
+        """Journal a frame the relay could not parse, and drop it (ADR 0026).
+
+        Only the failure's type is recorded: a parser's message quotes the input
+        it choked on, and the chain never carries a payload.
+        """
+        verdict = CannotSay(
+            blind_spot=(
+                f"the relay could not parse a frame from {peer} "
+                f"({type(failure).__name__}); it was dropped, and nothing about its content "
+                "is known"
+            ),
+            cause=BlindCause.REFUSED,
+        )
+        ruling = rule(verdict, on_cannot_say=self._on_cannot_say)
+        record = self._ledger.append(
+            direction, verdict, self._actor, disposition=ruling.action.value
+        )
+        self._emit(
+            record, method=None, tool=None, request_id=None, action=ruling.action, redaction=None
+        )
+        _note(f"unparseable message from {peer}, dropped (record {record.digest})")
+
     def _refuse_unscreenable(self, method: str) -> tuple[Ruling, DecisionRecord]:
-        """Refuse a guarded request whose response the relay could not promise to screen."""
+        """Refuse a guarded request whose response the relay could not promise to screen.
+
+        The refusal goes through :func:`rule` like every other verdict: its cause
+        is ``refused``, which no ``on_cannot_say`` setting opens (ADR 0026).
+        """
         verdict = CannotSay(
             blind_spot=(
                 f"the relay is holding {PENDING_LIMIT} guarded requests the wrapped server has "
                 f"not answered, so it cannot promise to screen the response to this {method}"
-            )
+            ),
+            cause=BlindCause.REFUSED,
         )
-        ruling = Ruling(
-            action=Action.BLOCK,
-            verdict=verdict,
-            reason=f"the guard could not look: {verdict.blind_spot}",
-        )
+        ruling = rule(verdict, on_cannot_say=self._on_cannot_say)
         record = self._ledger.append(
             Direction.OUTBOUND, verdict, self._actor, disposition=ruling.action.value
         )
@@ -466,12 +644,13 @@ class Relay:
 
     def _inspect_call(self, params: Mapping[str, Any] | None) -> tuple[Ruling, DecisionRecord]:
         """Run the inbound pipeline over a ``tools/call``'s arguments and seal the ruling."""
-        content = inspected_content(tool_call_arguments(params))
+        derived = derive(tool_call_arguments(params))
         verdict = self._inbound_guard.verdict(
-            content,
+            derived.text,
             actor=self._actor,
             observed_at=self._clock(),
             direction=Direction.INBOUND,
+            blind_spots=derived.unreadable,
         )
         ruling = rule(verdict, on_cannot_say=self._on_cannot_say)
         record = self._inbound_guard.record(
@@ -487,12 +666,13 @@ class Relay:
         Redaction is a behaviour for *results* (ADR 0006); a request that trips
         a detector is refused whatever the egress policy says about its kind.
         """
-        content = inspected_content(params)
+        derived = derive(params)
         verdict = guard.verdict(
-            content,
+            derived.text,
             actor=self._actor,
             observed_at=self._clock(),
             direction=Direction.OUTBOUND,
+            blind_spots=derived.unreadable,
         )
         ruling = rule(verdict, on_cannot_say=self._on_cannot_say)
         record = guard.record(
@@ -520,12 +700,14 @@ class Relay:
             (``None`` to forward it as it stands), and the masking plan if one
             was applied.
         """
-        content = inspected_content(message.result)
+        derived = derive(message.result)
+        content = derived.text
         verdict = guard.verdict(
             content,
             actor=self._actor,
             observed_at=self._clock(),
             direction=Direction.OUTBOUND,
+            blind_spots=derived.unreadable,
         )
 
         if isinstance(verdict, Deny):
@@ -591,7 +773,7 @@ class Relay:
         self,
         record: DecisionRecord,
         *,
-        method: str,
+        method: str | None,
         tool: str | None,
         request_id: str | int | None,
         action: Action,

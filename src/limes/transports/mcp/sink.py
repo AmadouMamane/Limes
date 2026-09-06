@@ -94,7 +94,7 @@ def open_sink(record_path: Path | None) -> RecordSink:
 def record_entry(
     record: DecisionRecord,
     *,
-    method: str,
+    method: str | None,
     tool: str | None,
     request_id: str | int | None,
     action: str,
@@ -104,7 +104,8 @@ def record_entry(
 
     Args:
         record: The chain record, emitted field for field.
-        method: The MCP method the decision was about, e.g. ``"tools/call"``.
+        method: The MCP method the decision was about, e.g. ``"tools/call"`` —
+            or ``None`` for a frame the relay could not even parse (ADR 0026).
         tool: The tool name, when the message named one.
         request_id: The JSON-RPC id the decision belongs to.
         action: ``"forward"``, ``"redact"`` or ``"block"``.

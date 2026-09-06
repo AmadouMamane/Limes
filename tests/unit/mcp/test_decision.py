@@ -9,7 +9,7 @@ from limes.record import Ledger
 from limes.spans import RedactedSpan
 from limes.transports.mcp.config import OnCannotSay
 from limes.transports.mcp.decision import Action, refusal_meta, refusal_text, rule
-from limes.verdict import Allow, CannotSay, Deny, Evidence, Witness
+from limes.verdict import Allow, BlindCause, CannotSay, Deny, Evidence, Witness
 
 _SPAN = RedactedSpan(start=3, end=9, label="injection:disable-control", matched_sha="a" * 64)
 
@@ -45,7 +45,8 @@ def test_deny_blocks_and_keeps_the_reason():
     [(OnCannotSay.DENY, Action.BLOCK), (OnCannotSay.ALLOW, Action.FORWARD)],
 )
 def test_cannot_say_follows_the_declared_policy_and_defaults_to_blocking(policy, expected):
-    ruling = rule(CannotSay(blind_spot="detector timed out"), on_cannot_say=policy)
+    blind = CannotSay(blind_spot="detector timed out", cause=BlindCause.DECLARED)
+    ruling = rule(blind, on_cannot_say=policy)
     assert ruling.action is expected
     assert "could not look" in ruling.reason
     assert OnCannotSay.DENY is OnCannotSay("deny"), "the default is the fail-closed one"
@@ -66,7 +67,7 @@ def test_a_refusal_names_the_reason_the_record_and_the_spans():
 
 
 def test_a_cannot_say_refusal_says_there_is_no_evidence_rather_than_inventing_some():
-    verdict = CannotSay(blind_spot="policy file unreadable")
+    verdict = CannotSay(blind_spot="policy file unreadable", cause=BlindCause.DECLARED)
     ruling = rule(verdict, on_cannot_say=OnCannotSay.DENY)
     record = _record(verdict)
 
@@ -74,6 +75,7 @@ def test_a_cannot_say_refusal_says_there_is_no_evidence_rather_than_inventing_so
     assert "evidence: none" in text
     assert "policy file unreadable" in text
     assert refusal_meta(ruling, record)["limes"]["evidence"] is None
+    assert refusal_meta(ruling, record)["limes"]["cause"] == "declared"
 
 
 def test_the_structured_meta_mirrors_the_text():

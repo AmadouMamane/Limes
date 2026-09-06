@@ -1,6 +1,6 @@
 """The limes verdict algebra — a verdict carries its evidence (ADR 0002).
 
-``Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot)``
+``Verdict = Allow(evidence) | Deny(reason, evidence) | CannotSay(blind_spot, cause)``
 
 Three invariants this module makes load-bearing:
 
@@ -10,8 +10,13 @@ Three invariants this module makes load-bearing:
 * **A verdict may not be used as a boolean.** ``bool(verdict)`` raises. Every
   Python object is truthy, so ``if guard(...):`` would read a ``Deny`` — and a
   ``CannotSay``! — as success. Callers pattern-match.
-* **``CannotSay`` is a first-class state.** A detector that could not look says
-  so, and never says ``Allow``: a witness that cannot see may never report "ok".
+* **``CannotSay`` is a first-class state, and it names its cause.** A detector
+  that could not look says so, and never says ``Allow``: a witness that cannot
+  see may never report "ok". *Why* nobody could look is a fact of the verdict,
+  sealed into its fingerprint (ADR 0026): a limit the witness declared, a witness
+  that fell over, or a transport that refused to take the content on. The three
+  are not the same thing to an operator, and a policy that opens one must not
+  silently open the others.
 
 The doctrine is inherited from Tessera (ADR 0026/0027) and re-stated here for a
 guard, where a false "allow" is an incident.
@@ -21,12 +26,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import NoReturn, final
 
 from limes.spans import RedactedSpan
 
 __all__ = [
     "Allow",
+    "BlindCause",
     "CannotSay",
     "Deny",
     "Evidence",
@@ -35,6 +42,26 @@ __all__ = [
     "fingerprint",
     "render",
 ]
+
+
+class BlindCause(StrEnum):
+    """Why a ``CannotSay`` could not say (ADR 0026).
+
+    Attributes:
+        DECLARED: A witness declared a limit of its own coverage — the content is
+            over its budget, is not text its rules read, is in a language they
+            were not written for, or no witness is wired for the leg at all.
+            Deterministic and reproducible; an operator may accept it knowingly.
+        FAULT: A witness fell over instead of answering. A bug, and possibly one
+            an attacker provoked on purpose; no setting turns it into a pass.
+        REFUSED: Nobody was asked. The transport refused to take the content on —
+            a frame it could not parse, a table it could not grow — and nothing
+            about the content itself is known.
+    """
+
+    DECLARED = "declared"
+    FAULT = "fault"
+    REFUSED = "refused"
 
 
 @final
@@ -80,7 +107,7 @@ class _Verdict:
             "    match guard(...):\n"
             "        case Allow(evidence): ...\n"
             "        case Deny(reason, evidence): ...\n"
-            "        case CannotSay(blind_spot): ..."
+            "        case CannotSay(blind_spot, cause): ..."
         )
 
 
@@ -108,14 +135,27 @@ class Deny(_Verdict):
 @final
 @dataclass(frozen=True, slots=True)
 class CannotSay(_Verdict):
-    """A detector could not look. A blind spot to publish, never a reason to pass."""
+    """Nobody could look. A blind spot to publish, never a reason to pass.
+
+    Attributes:
+        blind_spot: What could not be seen, in words.
+        cause: Why (ADR 0026) — a declared limit, a fault, or a refusal. No
+            default: a cause the type guessed on the caller's behalf would be a
+            lie that reads complete, and the transport policy turns on it.
+    """
 
     blind_spot: str
+    cause: BlindCause
 
     def __post_init__(self) -> None:
         if not self.blind_spot.strip():
             raise ValueError(
                 "CannotSay('') is a blind spot about a blind spot. Name what you could not see."
+            )
+        if not isinstance(self.cause, BlindCause):
+            raise TypeError(
+                f"CannotSay.cause must be a BlindCause, not {type(self.cause).__name__}: the "
+                "transport decides on it, so it may not be a string somebody typed."
             )
 
 
@@ -141,9 +181,9 @@ def _evidence_repr(evidence: Evidence) -> dict[str, object]:
 def fingerprint(verdict: Verdict) -> str:
     """Return a canonical, deterministic JSON fingerprint of a verdict.
 
-    The fingerprint covers the verdict's full content (reason / blind spot /
-    evidence), so the decision chain's digest changes if any of it changes, and
-    a replay of the same decision re-derives the same fingerprint.
+    The fingerprint covers the verdict's full content (reason / blind spot and
+    its cause / evidence), so the decision chain's digest changes if any of it
+    changes, and a replay of the same decision re-derives the same fingerprint.
 
     Args:
         verdict: The verdict to fingerprint.
@@ -160,7 +200,11 @@ def fingerprint(verdict: Verdict) -> str:
             "evidence": _evidence_repr(verdict.evidence),
         }
     else:
-        core = {"kind": "cannot_say", "blind_spot": verdict.blind_spot}
+        core = {
+            "kind": "cannot_say",
+            "blind_spot": verdict.blind_spot,
+            "cause": verdict.cause.value,
+        }
     return json.dumps(core, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -170,4 +214,4 @@ def render(verdict: Verdict) -> str:
         return f"[ALLOW] observed by {len(verdict.evidence.witnesses)} detector(s), 0 findings"
     if isinstance(verdict, Deny):
         return f"[DENY] {verdict.reason}"
-    return f"[CANNOT SAY] {verdict.blind_spot}"
+    return f"[CANNOT SAY] ({verdict.cause.value}) {verdict.blind_spot}"

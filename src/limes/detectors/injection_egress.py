@@ -34,6 +34,7 @@ from limes import __version__
 from limes.detector import Context, Direction, Finding
 from limes.detectors.egress_policy import EgressPolicy, load_egress_policy
 from limes.detectors.egress_scan import refuse_unreadable, scan
+from limes.detectors.readability import refuse_unreadable_text
 
 __all__ = ["InjectionEgressDetector"]
 
@@ -44,6 +45,9 @@ class InjectionEgressDetector:
     id = "injection-egress"
     #: The build that is answering (ADR 0025) — the same string `limes --version` prints.
     version = __version__
+    #: The leg this detector reads (ADR 0027): asked here, a witness here, and
+    #: never listed as one who looked on the inbound leg.
+    directions = frozenset({Direction.OUTBOUND})
 
     def __init__(self, policy: EgressPolicy | None = None) -> None:
         """Wire the detector to ``policy`` (defaults to the packaged egress policy)."""
@@ -63,18 +67,30 @@ class InjectionEgressDetector:
             direction: The leg being inspected; only ``OUTBOUND`` is scanned.
             content: The content about to reach the host — a tool description or
                 a tool result.
-            ctx: Unused — the rules read the content, not the actor.
+            ctx: Read for its locale hint (ADR 0028); the actor is not used.
 
         Returns:
             One finding per validated match, each spanning exactly the directive.
 
         Raises:
-            DetectorBlind: If the content exceeds the declared scan budget, or
-                does not encode to UTF-8 — in either case the detector did not
+            DetectorBlind: If the content exceeds the declared scan budget, does
+                not encode to UTF-8, or — with no rule matching — is content the
+                rules cannot read (ADR 0028). In every case the detector did not
                 observe and must not read as clean.
         """
-        del ctx  # the egress rules read only the content, not the actor
-        if direction is not Direction.OUTBOUND:
+        if direction not in self.directions:
             return []
         refuse_unreadable(content, detector_id=self.id, budget=self._budget)
-        return scan(content, self._rules, detector_id=self.id)
+        findings = scan(content, self._rules, detector_id=self.id)
+        if findings:
+            return findings
+        # Nothing matched: say whether the rules could read the content at all
+        # (ADR 0028) before that silence reads as "clean". A finding dominates.
+        refuse_unreadable_text(
+            content,
+            detector_id=self.id,
+            reads_words=True,
+            locale=ctx.locale,
+            locales=self._policy.locales_for(self.id),
+        )
+        return findings

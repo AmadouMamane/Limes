@@ -55,7 +55,15 @@ inspects calls never sees a poisoned description. limes inspects that response
 (ADR 0012, ADR 0018), and since 0.13.0 the prompt messages and the server's own
 requests too (ADR 0024). Listings other than the tool list, completions and
 server log lines cross uninspected, by decision — the
-[threat model](threat-model.md) says which and why.
+[threat model](threat-model.md) says which and why, and since 0.14.0 the chain
+says so too: the first time each kind crosses in a session, a record with cause
+`declared` and disposition `forward` marks it (ADR 0028).
+
+An **image, an audio clip or a binary resource** inside any guarded message is
+not text, and limes says so instead of pretending to read it: the result is a
+`CannotSay` with cause `declared`, **blocked by default** (ADR 0028). If your
+tools return screenshots or base64-encoded files, decide knowingly — see
+*Tuning*.
 
 ## See it happen
 
@@ -106,9 +114,13 @@ proves what happened without becoming a copy of the secret that flowed through i
 
 ## Tuning
 
-- **Fail-closed by default.** If a detector cannot decide (`CannotSay`), the
-  response is blocked, not forwarded. `--on-cannot-say` can loosen this per
-  deployment; the default is the safe one.
+- **Fail-closed by default.** If nobody could look (`CannotSay`), the response
+  is blocked, not forwarded. `--on-cannot-say allow` accepts the guard's
+  **declared** limits — an image your model can read and limes cannot, a
+  base64 payload, a language the rules do not cover, content over the budget —
+  and the record still names what was not inspected. A detector that fell over
+  or a frame the relay refused stays blocked under either setting (ADR 0026):
+  accepting the guard's limits is not accepting a crashed guard.
 - **Redaction instead of blocking**, per kind, is a policy choice
   (`--policy`, ADR 0006): a card number can be masked in place and forwarded
   while a private key is always blocked.

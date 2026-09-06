@@ -147,16 +147,17 @@ def test_the_core_renders_the_unencodable_blind_spot_as_cannot_say(detector):
 def test_the_core_answers_unencodable_content_with_no_detector_at_all(detector):
     # The other half of the old diagnosis, kept: with zero detectors wired the
     # same input took the same crash path down, which is why it was never this
-    # detector's bug. Post-ADR 0011 it follows the ordinary zero-detector
-    # semantics — an Allow whose evidence names every detector that ran: none.
-    # Scannability is the detectors' concern, and both egress detectors refuse
-    # it; the core does not invent a witness.
+    # detector's bug. Post-ADR 0011 it followed the zero-detector semantics of
+    # the day — an Allow whose evidence named no witness. ADR 0027 closed that
+    # shape: a leg nobody reads is a blind spot, and the core says "nobody
+    # looked" rather than invent a witness or a pass.
     del detector
     verdict = decide(
         Direction.OUTBOUND, "solde \ud800 EUR", CTX, (), observed_at="2026-07-24T00:00:00Z"
     )
-    assert isinstance(verdict, Allow)
-    assert verdict.evidence.witnesses == ()
+    assert isinstance(verdict, CannotSay)
+    assert "nobody looked" in verdict.blind_spot
+    assert Allow not in type(verdict).__mro__
 
 
 def test_clean_content_still_produces_an_allow_that_names_its_witness(detector):

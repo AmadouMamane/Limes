@@ -42,8 +42,9 @@ any perimeter**. Widening a list no longer buys silence.
 
 Core files move only by decision, never by drift, and each move is pinned beside
 the ADR that authorised it. :data:`AMENDED` holds whole-file digests — ``guard.py``
-since ADR 0011 made the content digest total, and the type-level ratchet since ADR
-0015 made it resolve mypy's presence before reading any exit code.
+since ADR 0011 made the content digest total, the type-level ratchet since ADR
+0015 made it resolve mypy's presence before reading any exit code, and the verdict
+algebra itself since ADR 0026 gave a blind spot its cause.
 :data:`DECLARED_CODE_DELTA` holds the same idea for a prose-only module whose code
 was allowed to move once: ``limes/__init__.py`` gained ``__version__`` under ADR
 0014, and the constant holds the authorised code itself rather than a hash of it,
@@ -108,6 +109,13 @@ ALLOWED = (
     "tests/unit/ratchets/test_inbound_scan_is_budgeted.py",
     "tests/unit/ratchets/test_disposition_is_sealed.py",
     "tests/unit/ratchets/test_witness_names_its_build.py",
+    # ADR 0026, 0027 and 0028's pins: a blind spot names its cause and the
+    # ruling opens only a declared one; a witness names its leg and a leg nobody
+    # reads says so; the guard says what it cannot read, and the relay declares
+    # on the chain what it forwards unread.
+    "tests/unit/ratchets/test_a_blind_spot_names_its_cause.py",
+    "tests/unit/ratchets/test_a_witness_names_its_leg.py",
+    "tests/unit/ratchets/test_the_guard_says_what_it_cannot_read.py",
     "tests/integration/mcp/",
     "docs/decisions/0005-mcp-proxy-transport.md",
     "docs/decisions/0006-egress-redaction.md",
@@ -139,6 +147,10 @@ DETECTOR_PERIMETER = (
     "src/limes/detectors/checksums.py",
     "src/limes/detectors/egress_policy.py",
     "src/limes/detectors/egress_scan.py",
+    # ADR 0028 — the readability screen every admitted detector runs after its
+    # rules found nothing: opaque encoded runs, wedged invisibles, another
+    # script or an undeclared language become a declared blind spot.
+    "src/limes/detectors/readability.py",
     "src/limes/detectors/egress.yaml",
     "src/limes/detectors/pii_egress.py",
     "src/limes/detectors/secrets_egress.py",
@@ -227,7 +239,12 @@ CORE = (
 #: the guard mid-verdict. Am. 2 made a crashing detector a blind spot rather
 #: than a traceback. ADR 0023 gave the inbound leg a scan budget (`policy.py`,
 #: `injection.py`, `policy.yaml`), and ADR 0025 sealed the disposition into the
-#: chain (`record.py`). The ratchet's strength is intact —
+#: chain (`record.py`). ADR 0026 gave a blind spot its cause (`verdict.py`,
+#: `guard.py`, and the two contract tests that construct one), ADR 0027 let a
+#: detector name its leg (`detector.py`, `guard.py`, `injection.py`, the
+#: protocol test), and ADR 0028 gave the guard a readability screen and the
+#: policy a `locales` declaration (`policy.py`, `policy.yaml`, `injection.py`,
+#: `guard.py`'s caller-declared blind spots). The ratchet's strength is intact —
 #: any further drift of the file is red — what changed is the reference bytes,
 #: once per record, with the authorisation written down. Every key here must
 #: be in CORE and must actually differ from v0.1 (asserted below): an entry
@@ -236,17 +253,40 @@ CORE = (
 AMENDED = {
     # ADR 0011 — the content digest became total (`surrogatepass`); Am. 2 — a
     # detector that crashes is rendered as a blind spot, never a traceback.
-    "src/limes/guard.py": "6d4cfaf3e8ae99700585fe221cbf7f78cf070858f95f896644b21f03a321b189",
+    # ADR 0026 — the crash is a FAULT and a DetectorBlind a DECLARED limit; ADR
+    # 0027 — a detector that names its leg is asked only there, and a leg nobody
+    # reads is CannotSay; ADR 0028 — the caller may declare blind spots of its own.
+    "src/limes/guard.py": "b331c591ba1accebbc8452376d9d3c6dc1c4a33d08672299013d9bb23cbbc93d",
+    # ADR 0026 — `CannotSay` carries its `cause`, sealed into the fingerprint.
+    # The algebra file's first amendment since v0.1.
+    "src/limes/verdict.py": "a2a31280b448646aea73ebae3d5151ade98fd6228b6bd50912f6c42e1844e961",
+    # ADR 0027 — the optional `DeclaresDirections` protocol the core reads; ADR
+    # 0026/0028 — the contract's prose names the two causes and the locale hint.
+    "src/limes/detector.py": "498a5daeb09a89d9d869e960673abc0e4d1b807009b8c1711c537f12ece04ad7",
     # ADR 0025 — the record seals the transport's disposition beside the verdict.
     "src/limes/record.py": "8688fc9934a8c5e9b4ff8a24c304f2b01c834fe90d8d435de51ffb76d06e9d41",
     # ADR 0023 — the injection policy declares `max_content_chars`, the loader
     # reads it, and a pattern that does not compile or a file that is not YAML
-    # is the ValueError the docstring always promised.
-    "src/limes/policy.py": "25c15e47088ba88d625e20c85211554e52516f97d35e4be3eb145222c926436c",
+    # is the ValueError the docstring always promised. ADR 0028 — it may declare
+    # `locales`, read by one function both policy loaders share.
+    "src/limes/policy.py": "658a47396dbc10997980add0ed5088f5afa07f77e397782c18bf7cae795b2592",
     # ADR 0023 — the inbound detector refuses beyond its declared budget; ADR
-    # 0025 — its version is the package's, so a witness names its build.
+    # 0025 — its version is the package's, so a witness names its build; ADR
+    # 0027 — it declares the inbound leg; ADR 0028 — with no rule matching, it
+    # says whether it could read the content at all.
     "src/limes/detectors/injection.py": (
-        "a4e9059fe0832093c9b5ee8933c26bbf4c4ff038e84dc21edf93abecb79df016"
+        "ecf72171cbbf17c3d47deb4b9337f1486a04f9d8c447d0fecce440e0f1c9733f"
+    ),
+    # ADR 0026/0027 — the contract tests construct a CannotSay with its cause,
+    # and the protocol test expects "nobody looked" where it expected Allow.
+    "tests/unit/test_verdict.py": (
+        "ffa16874558df8f845e9654ab54a2293bd9a4a6a875219cbcfb0fb24b7b0d9f6"
+    ),
+    "tests/unit/test_record_chain.py": (
+        "e61784734b59a0d9647bff8b87d6eca5ee195932f58a766125b3e834f50b6414"
+    ),
+    "tests/unit/test_detector_protocol.py": (
+        "6e2ce6ed103ab682d6a9cd7f927bbd28b0605c31ee3614daa9ef1682215f90be"
     ),
     # ADR 0011 Am. 1 — the span digest became total too: redact() had kept the
     # bare encode, reached on the inbound leg by any matched span containing a
@@ -256,9 +296,10 @@ AMENDED = {
     # Ported verbatim after the external corpus measured this detector at 0/131 on
     # goal hijacking while the other leg, with these rules, caught 82%. Re-pinned
     # under ADR 0023: `tag-breakout` bounded to a 600-character window, and the
-    # file declares the inbound scan budget.
+    # file declares the inbound scan budget. Re-pinned under ADR 0028: the file
+    # declares the languages its rules were written for (`locales`).
     "src/limes/detectors/policy.yaml": (
-        "9ce7d2d1177b086811232f9892427a086b9f72b931581986c85852a821b8a7bc"
+        "97dbb0258f2d782ad6e3104a97570e2bf78040439ef519dab3db2b414e7474ff"
     ),
     # ADR 0015 — the type-level ratchet resolves mypy's presence before it reads
     # any exit code. `python -m mypy` exits non-zero when mypy is MISSING, so the
@@ -345,6 +386,9 @@ AMENDING_RECORDS = (
     "docs/decisions/0019-one-override-family-for-both-legs.md",
     "docs/decisions/0023-a-scan-is-bounded-in-time-not-only-in-size.md",
     "docs/decisions/0025-the-chain-seals-the-disposition-and-the-witness-names-its-build.md",
+    "docs/decisions/0026-a-blind-spot-names-its-cause.md",
+    "docs/decisions/0027-a-witness-names-its-leg.md",
+    "docs/decisions/0028-the-guard-says-what-it-cannot-read.md",
     "docs/decisions/0014-the-package-names-its-own-version.md",
     "docs/decisions/0015-a-ratchet-reports-its-own-blind-spot.md",
     "docs/decisions/0016-apache-2-throughout.md",
@@ -587,9 +631,9 @@ def test_the_named_core_is_byte_identical_to_its_pin(path):
     current = (REPO / path).read_bytes()
     if path in AMENDED:
         assert hashlib.sha256(current).hexdigest() == AMENDED[path], (
-            f"{path} may differ from v0.1 exactly as ADR 0011 wrote it and no further: it is "
-            "pinned to the digest recorded in AMENDED, and this drift is a new, unauthorised "
-            "core edit."
+            f"{path} may differ from v0.1 exactly as the ADR named beside its pin wrote it and "
+            "no further: it is pinned to the digest recorded in AMENDED, and this drift is a "
+            "new, unauthorised core edit."
         )
         return
     assert current == _v0_1_bytes(path), (

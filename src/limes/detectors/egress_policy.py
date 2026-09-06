@@ -35,6 +35,10 @@ detector nobody can audit:
   refuses a name the pattern does not define — a declared value that cannot be
   extracted would be a rule spanning nothing, silently.
 
+A word-reading detector's block may declare ``locales`` (ADR 0028): the languages
+its rules were written for, read by :func:`limes.policy.read_locales` exactly as
+the injection policy's. A caller declaring another locale gets a blind spot.
+
 Each detector block also declares ``max_content_chars``: the size beyond which it
 does not scan. It is data rather than a constant because refusing to sweep an
 unbounded payload is an operational trade-off somebody has to be able to read and
@@ -61,6 +65,7 @@ from limes.detectors.checksums import (
     luhn_valid,
     nir_key_valid,
 )
+from limes.policy import read_locales
 
 __all__ = [
     "VALIDATORS",
@@ -73,6 +78,9 @@ _DEFAULT_POLICY: Final = Path(__file__).resolve().parent / "egress.yaml"
 
 #: The per-detector key declaring the size beyond which it will not scan.
 _BUDGET_KEY: Final = "max_content_chars"
+
+#: The per-detector key declaring the languages its rules were written for.
+_LOCALES_KEY: Final = "locales"
 
 _PHONE_MIN_DIGITS: Final = 9
 _PHONE_MAX_DIGITS: Final = 15
@@ -202,12 +210,15 @@ class EgressPolicy:
         rules: Every rule, in declaration order, each naming its owner.
         budgets: Per detector, the content size beyond which it declares itself
             blind rather than scanning.
+        locales: Per detector that declared any, the languages its rules were
+            written for (ADR 0028).
     """
 
     version: int
     policy_hash: str
     rules: tuple[EgressRule, ...]
     budgets: Mapping[str, int]
+    locales: Mapping[str, frozenset[str]]
 
     def rules_for(self, detector: str) -> tuple[EgressRule, ...]:
         """Return the rules owned by ``detector``, in declaration order."""
@@ -216,6 +227,10 @@ class EgressPolicy:
     def budget_for(self, detector: str) -> int:
         """Return the scan budget declared for ``detector``, in characters."""
         return self.budgets[detector]
+
+    def locales_for(self, detector: str) -> frozenset[str] | None:
+        """Return the languages ``detector`` declared, or ``None`` if it declared none."""
+        return self.locales.get(detector)
 
     def detectors(self) -> tuple[str, ...]:
         """Return every detector id this policy declares rules for, sorted."""
@@ -316,6 +331,7 @@ def load_egress_policy(path: Path | None = None) -> EgressPolicy:
 
     rules: list[EgressRule] = []
     budgets: dict[str, int] = {}
+    locales: dict[str, frozenset[str]] = {}
     seen_labels: set[str] = set()
     for detector, block in declared.items():
         if not isinstance(detector, str) or not detector:
@@ -331,6 +347,11 @@ def load_egress_policy(path: Path | None = None) -> EgressPolicy:
                 f"surface."
             )
         budgets[detector] = budget
+        declared_locales = read_locales(
+            block.get(_LOCALES_KEY), policy_path=policy_path, owner=repr(detector)
+        )
+        if declared_locales is not None:
+            locales[detector] = declared_locales
         rules_raw = block.get("rules")
         if not isinstance(rules_raw, list) or not rules_raw:
             raise ValueError(
@@ -344,5 +365,9 @@ def load_egress_policy(path: Path | None = None) -> EgressPolicy:
             rules.append(rule)
 
     return EgressPolicy(
-        version=version, policy_hash=policy_hash, rules=tuple(rules), budgets=budgets
+        version=version,
+        policy_hash=policy_hash,
+        rules=tuple(rules),
+        budgets=budgets,
+        locales=locales,
     )

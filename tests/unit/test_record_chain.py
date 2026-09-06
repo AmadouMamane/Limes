@@ -6,14 +6,14 @@ import dataclasses
 
 from limes.detector import Direction
 from limes.record import GENESIS, Ledger
-from limes.verdict import Allow, CannotSay, Deny
+from limes.verdict import Allow, BlindCause, CannotSay, Deny
 
 
 def _session(evidence):
     return [
         (Direction.INBOUND, Allow(evidence=evidence)),
         (Direction.INBOUND, Deny(reason="injection", evidence=evidence)),
-        (Direction.OUTBOUND, CannotSay(blind_spot="detector offline")),
+        (Direction.OUTBOUND, CannotSay(blind_spot="detector offline", cause=BlindCause.FAULT)),
     ]
 
 

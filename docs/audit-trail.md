@@ -21,8 +21,8 @@ One decision is one `DecisionRecord`. It has exactly seven fields:
 | `actor` | `"alice"` | the caller's asserted identity (`null` if anonymous) |
 | `disposition` | `"redact"` | what the transport then did — `forward`, `redact`, `block` — or `null` where it takes no disposition of its own (`check`, `limes check`) (ADR 0025) |
 | `verdict_fingerprint` | *(JSON string, below)* | the *what and why* of the decision — all as hashes |
-| `prev_hash` | `9020a692…` | the digest of the **previous** record (`0000…` for the first) |
-| `digest` | `586d8b16…` | `SHA-256` of this record's core — what seals it |
+| `prev_hash` | `ec06d6fe…` | the digest of the **previous** record (`0000…` for the first) |
+| `digest` | `bd6d52c3…` | `SHA-256` of this record's core — what seals it |
 
 The `verdict_fingerprint` is a canonical JSON string. Expanded, a real one looks
 like this (an outbound decision that masked a card number):
@@ -30,20 +30,28 @@ like this (an outbound decision that masked a card number):
 ```json
 {
   "evidence": {
-    "content_sha": "66850244dbc8…",          // SHA-256 of the whole inspected content
+    "content_sha": "b09cf4385b97…",          // SHA-256 of the whole inspected content
     "observed_at": "2026-08-30T10:00:00Z",    // a full ISO-8601 instant, caller-supplied
-    "policy_hash": "d81baf67343c…",           // which policy decided
+    "policy_hash": "ce1eb1323283…",           // which policy decided
     "spans": [
       { "start": 6, "end": 25,                // WHERE a rule fired (offsets)
         "label": "pii:pan",
         "sha": "9219e0affa4b…" }              // SHA-256 of the matched value — never the value
     ],
-    "witnesses": [ { "id": "pii-egress", "version": "0.13.0" } ]   // the build that looked
+    "witnesses": [ { "id": "pii-egress", "version": "0.14.0" } ]   // the build that looked
   },
   "kind": "deny",
   "reason": "1 rule match(es) on outbound content: pii:pan"
 }
 ```
+
+A `CannotSay` fingerprint has no evidence — nobody looked — and three keys
+instead: `"kind": "cannot_say"`, the `blind_spot` in words, and its `cause`
+(ADR 0026): `declared` (a limit the guard named — a budget, an image it cannot
+read, a leg nobody reads), `fault` (a detector fell over) or `refused` (the relay
+would not take the content on). The cause is inside the digest, so it cannot be
+edited after the fact, and `'"cause":"fault"' in r.verdict_fingerprint` is how
+an auditor counts faults without reading prose.
 
 **What is deliberately *not* stored:** the raw content (`"Carte 4242 4242 4242
 4242…"`) and the raw matched value (the card number). Only their SHA-256
@@ -53,11 +61,20 @@ without ever writing the card down. That is what lets an audit log exist without
 becoming a liability that leaks every secret it ever saw.
 
 > **The MCP proxy adds one annotation.** When limes runs as a proxy, each JSONL
-> line carries the six record fields **plus** an `mcp` object — `method`, `tool`,
+> line carries the seven record fields **plus** an `mcp` object — `method`, `tool`,
 > `request_id`, `action` (`forward`/`redact`/`block`), and `redaction` (kinds,
 > offsets, token — never the masked text). This annotation is **outside** the
 > hashed core and cannot change a digest; it exists to correlate a record with a
-> specific call (see §5).
+> specific call (see §5). `method` is `null` for the one record that has no
+> message behind it: a frame the relay could not parse (ADR 0026).
+>
+> **Not every record is a ruling on content.** Since 0.14.0 the proxy also
+> records what it forwarded *unread* (ADR 0028): the first time each kind of
+> uninspected message crosses in a session — `initialize`, `prompts/list`, a
+> notification, a peer's `(response)` or `(error)` — a `CannotSay` with cause
+> `declared` and disposition `forward` says so. Filter them out with
+> `'"cause":"declared"' not in r.verdict_fingerprint` when you count decisions;
+> read them when you want to know what the guard did not read.
 
 ---
 
@@ -84,8 +101,8 @@ blocked when it left masked — or the reverse — without breaking every later 
 So the records form a linked chain:
 
 ```
-  GENESIS(0000…) ◄─prev─ record 0 [digest 9020a692…]
-                          ◄─prev─ record 1 [digest 586d8b16…]
+  GENESIS(0000…) ◄─prev─ record 0 [digest ec06d6fe…]
+                          ◄─prev─ record 1 [digest bd6d52c3…]
                                    ◄─prev─ record 2 [digest …]
 ```
 
@@ -143,9 +160,9 @@ Suppose someone edits a stored record — changes `actor` from `alice` to
 record's `digest` yields a different value:
 
 ```
-digest_0 original            = 9020a692…
-digest_0 recomputed (mallory) = 3d0a2bd9…   ← different
-but record 1's prev_hash      = 9020a692…   ← still points at the original
+digest_0 original            = ec06d6fe…
+digest_0 recomputed (mallory) = 7c2aec7f…   ← different
+but record 1's prev_hash      = ec06d6fe…   ← still points at the original
 ```
 
 The link is **broken**, and `verify()` reports `broken_at` that index. To hide the
@@ -239,8 +256,12 @@ so it cannot be back-dated on a past record without breaking the links.
   built in.
 - **The proxy remembers which guarded requests await a response**, and that
   table is bounded at 4 096 entries: beyond it the relay refuses the next
-  guarded request with a `CannotSay` on the chain rather than forget one whose
-  response would then cross unscreened (ADR 0024).
+  guarded request with a `CannotSay` (cause `refused`) on the chain rather than
+  forget one whose response would then cross unscreened (ADR 0024/0026).
+- **The declarations of what crossed unread are bounded too**: one record per
+  kind of uninspected message per session, at most 64 kinds; a peer inventing
+  method names without end gets a line on stderr, not a ledger that grows with
+  its vocabulary (ADR 0028).
 
 ---
 

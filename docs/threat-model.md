@@ -49,9 +49,27 @@ Detector: `injection-egress`.
 descriptions), `completion/complete` (completion values), `notifications/message`
 (server logging, which a host writes to a log rather than to the model, and where
 a blocking policy would drop every line that happened to carry an address), and
-every host→server message other than `tools/call`. The relay does reserve
-`_meta.limes` on every result: an annotation a server sends under that key is
-moved to `_meta.limes-upstream`, so it cannot pass for the relay's own.
+every host→server message other than `tools/call`. Each kind is **declared on
+the chain** the first time it crosses in a session — a `CannotSay` with cause
+`declared` and disposition `forward` (ADR 0028) — so an auditor reading only the
+journal sees the gap rather than inferring it from silence. The relay does
+reserve `_meta.limes` on every result: an annotation a server sends under that
+key is moved to `_meta.limes-upstream`, so it cannot pass for the relay's own.
+
+**What the guard cannot read, and says so** (ADR 0028). limes reads text. An
+image, an audio clip or a binary resource in a tool result — or in the messages
+of a `sampling/createMessage` request — is exactly where a directive hides from
+a text guard while the host's model reads it off the pixels, so the payload walk
+leaves the base64 out of the text and declares the block: `CannotSay`, cause
+`declared`, **blocked by default**, forwarded only under `on_cannot_say: allow`.
+After its rules found nothing, every detector says whether they could have read
+the content at all: mostly opaque encoded runs (base64, hex), a word or a number
+split by an invisible format character, and — for the two word-reading
+detectors — text mostly in another script or a caller-declared locale the policy
+does not list are declared blind spots, not "clean". One exception is stated
+rather than hidden: the soft hyphen is read as text because extracted web pages
+carry it inside ordinary words, so a directive split with one is a documented
+miss. A finding always dominates the screen.
 
 ### Sensitive data trying to leave — stripped or blocked (incoming)
 
@@ -107,8 +125,12 @@ dressed as coverage:
   with at the point of consequence.
 - **A verdict must be inspectable, and silence must never read as safety.** A
   detector that cannot look returns `CannotSay` and the leg **fails closed**; a
-  detector that *crashes* is rendered the same way (ADR 0011 Am. 2); a proxy that
-  cannot load its policy exits rather than becoming a silent pass-through. (See
+  detector that *crashes* is rendered the same way (ADR 0011 Am. 2) but with a
+  different **cause** (ADR 0026): `on_cannot_say: allow` opens a limit the guard
+  *declared* and never a fault or a refusal, so a crash an attacker can provoke
+  is not a bypass under any setting. A leg nobody reads is `CannotSay` too, never
+  an `Allow` with no witness (ADR 0027). A proxy that cannot load its policy
+  exits rather than becoming a silent pass-through. (See
   [The verdict](../README.md#the-verdict).)
 - **The guard's own cost is bounded.** Every detector declares the size beyond
   which it refuses to scan, and a ratchet holds every rule linear in the content

@@ -90,7 +90,17 @@ def test_every_other_method_crosses_unchanged_in_both_directions():
     assert [as_response(message).id for message in session.to_host] == [1, "two", 3], (
         "ids must be preserved"
     )
-    assert records == [], "only guarded messages produce a decision"
+    # Nothing here is guarded, so nothing is ruled on — and each kind of message
+    # that crossed unread is declared once on the chain, forwarded (ADR 0028).
+    assert all(entry["mcp"]["action"] == "forward" for entry in records)
+    assert all('"cause":"declared"' in entry["verdict_fingerprint"] for entry in records)
+    assert {(entry["direction"], entry["mcp"]["method"]) for entry in records} == {
+        ("inbound", "initialize"),
+        ("inbound", "tools/list"),
+        ("inbound", "vendor/experimental"),
+        ("inbound", "notifications/initialized"),
+        ("outbound", "tools/list"),
+    }
 
 
 def test_a_benign_tool_call_reaches_the_server_and_is_recorded_as_forwarded():
@@ -105,7 +115,10 @@ def test_a_benign_tool_call_reaches_the_server_and_is_recorded_as_forwarded():
     )
 
     assert session.server_saw_tool_call("echo")
-    assert len(records) == 1
+    assert len(records) == 2, (
+        "the call's decision, and the declaration that its response crossed unread: no "
+        "outbound detector is wired here (ADR 0028)"
+    )
     assert records[0]["mcp"] == {
         "method": "tools/call",
         "tool": "echo",
@@ -227,7 +240,9 @@ def test_a_recorded_session_re_derives_identical_digests():
     first = _replay_once()
     second = _replay_once()
     assert first == second
-    assert len(first) == len(_SESSION)
+    # The three calls, plus one declaration that a tools/call response crossed
+    # unread (no outbound detector is wired; one per kind per session, ADR 0028).
+    assert len(first) == len(_SESSION) + 1
 
 
 def test_the_sink_publishes_the_ledger_digests_and_the_chain_verifies():
@@ -238,7 +253,7 @@ def test_the_sink_publishes_the_ledger_digests_and_the_chain_verifies():
     assert session.digests() == [record.digest for record in relay.ledger.records()]
     status = relay.ledger.verify()
     assert status.verified
-    assert status.length == len(_SESSION)
+    assert status.length == len(session.records)
 
 
 # --- the outbound seam: wired, and empty --------------------------------------
@@ -256,7 +271,7 @@ def _leaky_responder(message):
     return response
 
 
-def test_with_no_egress_detector_the_outbound_leg_is_pass_through_and_silent():
+def test_with_no_egress_detector_the_outbound_leg_is_pass_through_and_declared():
     records: list[dict[str, Any]] = []
     relay = _relay(records)
     assert relay.outbound_is_wired is False
@@ -272,11 +287,21 @@ def test_with_no_egress_detector_the_outbound_leg_is_pass_through_and_silent():
     reply = as_response(session.to_host[0])
     assert reply.result["isError"] is False, "an unwatched leg passes through untouched"
     assert EgressDouble.marker in reply.result["content"][0]["text"]
-    assert len(records) == 1, (
-        "an empty seam must emit NO outbound record: decide() over zero detectors "
-        "would answer Allow with zero witnesses, which is a false 'ok'"
-    )
-    assert records[0]["direction"] == "inbound"
+    assert [entry["direction"] for entry in records] == ["inbound", "outbound"]
+    declared = records[1]
+    # An empty seam runs no pipeline — an Allow with zero witnesses would be a
+    # false "ok" — and since ADR 0028 it says so on the chain instead of in
+    # silence: one declared blind spot per kind of response, forwarded.
+    assert declared["mcp"] == {
+        "method": "tools/call",
+        "tool": None,
+        "request_id": 31,
+        "action": "forward",
+        "redaction": None,
+    }
+    assert declared["disposition"] == "forward"
+    assert '"cause":"declared"' in declared["verdict_fingerprint"]
+    assert "no outbound detector is wired" in declared["verdict_fingerprint"]
 
 
 def test_the_seam_is_really_wired_a_detector_installed_there_is_run_and_enforced():
@@ -354,8 +379,12 @@ def test_a_poisoned_tools_list_is_refused_before_the_host_reads_it():
     reply = as_error(session.to_host[0])
     assert reply.error.code == -32001
     assert "id_rsa" not in reply.model_dump_json()
-    assert [record["direction"] for record in records] == ["outbound"]
-    assert records[0]["mcp"]["action"] == "block"
+    # The request's own parameters cross unread and are declared so (ADR 0028);
+    # the poisoned response is the ruling.
+    assert [record["direction"] for record in records] == ["inbound", "outbound"]
+    assert records[0]["mcp"]["action"] == "forward"
+    assert '"cause":"declared"' in records[0]["verdict_fingerprint"]
+    assert records[-1]["mcp"]["action"] == "block"
 
 
 def test_a_clean_tools_list_crosses_untouched_even_with_the_detector_wired():
@@ -376,13 +405,13 @@ def test_a_clean_tools_list_crosses_untouched_even_with_the_detector_wired():
 
     reply = as_response(session.to_host[0])
     assert reply.result["tools"][0]["description"].startswith("Reads a UTF-8 text file")
-    assert records[0]["mcp"]["action"] == "forward"
+    assert records[-1]["mcp"]["action"] == "forward"
+    assert '"kind":"allow"' in records[-1]["verdict_fingerprint"]
 
 
 # --- ADR 0024: the relay owns every tool call, and its own annotation ---------
 
 from limes.transports.mcp import bridge as _bridge  # noqa: E402
-from limes.verdict import CannotSay as _CannotSay  # noqa: E402
 
 
 def _notification(name, arguments):
@@ -667,7 +696,12 @@ def test_with_no_egress_detector_a_server_request_crosses_untouched():
     )
 
     assert any(isinstance(m, types.JSONRPCRequest) for m in session.to_host)
-    assert all(e["mcp"]["method"] == "tools/call" for e in records)
+    assert not any(e["mcp"]["action"] == "block" for e in records)
+    sampled = next(e for e in records if e["mcp"]["method"] == "sampling/createMessage")
+    assert sampled["mcp"]["action"] == "forward"
+    assert '"cause":"declared"' in sampled["verdict_fingerprint"], (
+        "an unguarded leg is declared on the chain, not silent (ADR 0028)"
+    )
 
 
 # --- ADR 0024: the pending table refuses rather than forgets ------------------
@@ -696,7 +730,7 @@ def test_when_too_many_guarded_requests_await_a_response_the_next_is_refused_clo
     assert entry["direction"] == "outbound"
     assert entry["disposition"] == "block"
     assert "cannot_say" in entry["verdict_fingerprint"]
-    assert isinstance(_CannotSay(blind_spot="x"), _CannotSay)  # the refusal's shape, named
+    assert '"cause":"refused"' in entry["verdict_fingerprint"], "the refusal's shape, named"
 
 
 # --- ADR 0025: the disposition is sealed, and it is what the journal says ------

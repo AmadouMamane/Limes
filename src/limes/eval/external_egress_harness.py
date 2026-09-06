@@ -26,6 +26,14 @@ spans the carrier too.
 four gitleaks rules the vendoring script could not instantiate are carried into
 this report as named blind spots and excluded from the denominator (ADR 0015).
 
+**A vector the detector declares unreadable is neither located nor killed.**
+Since ADR 0028 a detector whose rules could not read the content — mostly
+opaque encoded runs, say — raises ``DetectorBlind`` instead of answering
+"nothing found". This harness calls the detectors directly, so it renders that
+answer exactly as the ``decide()``-based harnesses do: no spans. A positive case
+it happens to is a miss, a negative case is not a false positive, and both are
+listed by name under "declared unreadable" so the number is read with them.
+
 Run ``python -m limes.eval.external_egress_harness pii`` (or ``secrets``) to print
 the matrix, ``--write`` to write it to ``eval/matrices/external_<name>.md``.
 Default is ``--split dev``; the held-out number exists only when somebody
@@ -41,7 +49,7 @@ from datetime import date
 from pathlib import Path
 from typing import Final, final
 
-from limes.detector import Context, Detector, Direction
+from limes.detector import Context, Detector, DetectorBlind, Direction
 from limes.detectors.pii_egress import PiiEgressDetector
 from limes.detectors.secrets_egress import SecretsEgressDetector
 from limes.eval.egress_harness import BASELINES, _BlockEverything
@@ -100,12 +108,24 @@ class Row:
 
 
 def _spans(detectors: Sequence[Detector], content: str) -> tuple[RedactedSpan, ...]:
-    findings = [
-        finding
-        for detector in detectors
-        for finding in detector.inspect(Direction.OUTBOUND, content, _CONTEXT)
-    ]
+    findings = []
+    for detector in detectors:
+        try:
+            findings.extend(detector.inspect(Direction.OUTBOUND, content, _CONTEXT))
+        except DetectorBlind:
+            # A declared blind spot (ADR 0028) is not a finding and not a pass:
+            # no span, exactly as `decide()` renders it for the other harnesses.
+            continue
     return tuple(span for finding in findings for span in finding.spans)
+
+
+def _unreadable(detector: Detector, content: str) -> bool:
+    """Whether ``detector`` declared it could not read ``content`` (ADR 0028)."""
+    try:
+        detector.inspect(Direction.OUTBOUND, content, _CONTEXT)
+    except DetectorBlind:
+        return True
+    return False
 
 
 def _locates_exactly(case: ExternalEgressCase, spans: Sequence[RedactedSpan]) -> bool:
@@ -152,6 +172,7 @@ class PiiReport:
     by_category: tuple[tuple[str, int, int, int], ...]
     by_template_worst: tuple[tuple[str, int, int], ...]
     decoys_killed: tuple[str, ...]
+    unreadable: tuple[str, ...]
 
 
 def compute_pii(splits: Sequence[str]) -> PiiReport:
@@ -213,6 +234,11 @@ def compute_pii(splits: Sequence[str]) -> PiiReport:
     killed_decoys = tuple(
         c.case_id for c in decoys if c.split in set(splits) and _spans(limes, c.content)
     )
+    unreadable = tuple(
+        c.case_id
+        for c in (*scored, *decoys, *removed, *corpus.out_of_scope)
+        if _unreadable(limes[0], c.content)
+    )
     return PiiReport(
         corpus_strength=corpus.strength,
         source_url=str(corpus.source["url"]),
@@ -225,6 +251,7 @@ def compute_pii(splits: Sequence[str]) -> PiiReport:
         by_category=tuple(by_category),
         by_template_worst=tuple(worst),
         decoys_killed=killed_decoys,
+        unreadable=unreadable,
     )
 
 
@@ -245,6 +272,7 @@ class SecretsReport:
     caught: tuple[str, ...]
     blind_spots: tuple[tuple[str, str], ...]
     negatives_killed: tuple[str, ...]
+    unreadable: tuple[str, ...]
 
 
 def compute_secrets(splits: Sequence[str]) -> SecretsReport:
@@ -280,6 +308,9 @@ def compute_secrets(splits: Sequence[str]) -> SecretsReport:
         sorted(c.category for c in scored if _locates_inside(c, _spans(limes, c.content)))
     )
     killed_negatives = tuple(c.case_id for c in corpus.negatives if _spans(limes, c.content))
+    unreadable = tuple(
+        c.case_id for c in (*scored, *corpus.negatives) if _unreadable(limes[0], c.content)
+    )
     return SecretsReport(
         corpus_strength=corpus.strength,
         source_url=str(corpus.source["url"]),
@@ -293,7 +324,28 @@ def compute_secrets(splits: Sequence[str]) -> SecretsReport:
         caught=caught,
         blind_spots=tuple((str(b["rule"]), str(b["reason"])) for b in corpus.blind_spots),
         negatives_killed=killed_negatives,
+        unreadable=unreadable,
     )
+
+
+def _unreadable_section(unreadable: Sequence[str]) -> list[str]:
+    """Render the vectors the limes detector declared it could not read (ADR 0028)."""
+    lines = ["", "## Declared unreadable", ""]
+    if not unreadable:
+        lines.append(
+            "None. Every vector here is text the detector's rules could read; a vector that "
+            "were not would be listed by name, counted neither as located nor as killed."
+        )
+        return lines
+    lines.append(
+        f"{len(unreadable)} vector(s) the detector declared it could not read — mostly opaque "
+        "encoded runs its rules cannot see into (ADR 0028). Under a proxy that is a "
+        "`CannotSay`, blocked by default; here it is neither a hit nor a false positive, and "
+        "it is named rather than folded into either column: "
+        + ", ".join(f"`{name}`" for name in unreadable)
+        + "."
+    )
+    return lines
 
 
 def _matrix(rows: Sequence[Row], populations: Sequence[str]) -> list[str]:
@@ -373,6 +425,8 @@ def render_pii(report: PiiReport, when: str) -> str:
             f"**Decoys killed:** {len(report.decoys_killed)}. Named, not rounded away: "
             + ", ".join(f"`{name}`" for name in report.decoys_killed[:12]),
         ]
+
+    lines += _unreadable_section(report.unreadable)
 
     power = sign_test_power(sum(cell.total for cell in report.rows[0].cells if cell.is_cost))
     lines += ["", "## The two numbers", ""]
@@ -466,6 +520,7 @@ def render_secrets(report: SecretsReport, when: str) -> str:
     ]
     for rule, reason in report.blind_spots:
         lines.append(f"| `{rule}` | {reason} |")
+    lines += _unreadable_section(report.unreadable)
 
     power = sign_test_power(next(cell.total for cell in report.rows[0].cells if cell.is_cost))
     lines += ["", "## The two numbers", ""]
