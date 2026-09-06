@@ -4,6 +4,96 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-09-06
+
+**The guard says what it does not know.** An audit found that every `CannotSay`
+was the same `CannotSay` — a budget the guard declared, a detector that fell
+over, a relay that refused — and that `on_cannot_say: allow` opened all three.
+It proposed a fourth verdict. The remedy here is different (ADR 0026 says why):
+the blind spot names its **cause**, the ruling opens one cause and no other, and
+the same discipline is then applied to every place the guard was answering
+"clean" over content it had not read. Three ADRs (0026, 0027, 0028), three
+ratchets, each seen red under a named mutation before it was written.
+
+### Changed — security
+
+- **`CannotSay` carries its cause, and `allow` opens only a declared one** (ADR
+  0026). `CannotSay(blind_spot, cause)` with `cause` one of `declared` (a limit
+  the guard named — over budget, unreadable content, a leg nobody reads), `fault`
+  (a detector fell over) or `refused` (the relay would not take the content on).
+  The cause is sealed into the fingerprint, so every `CannotSay` digest changes.
+  `rule()` forwards under `on_cannot_say: allow` **only** a `declared` cause: a
+  crashed detector — a crash an attacker can provoke — blocked under `allow`
+  before ADR 0011 Am. 2 (the session died) and *forwarded* since 0.13.0; it
+  blocks again, and a ratchet holds it there. The relay's table-full refusal now
+  goes through `rule()` like every verdict instead of a hand-built ruling.
+- **A tool result carrying an image, an audio clip or a binary resource is a
+  declared blind spot, blocked by default** (ADR 0028). The payload walk swept
+  the base64 as if it were prose and let the result pass as inspected; it now
+  leaves those blocks out of the text and names them, the core aggregates them
+  like a detector's declared limit, and the verdict says the image was not read.
+  The same for the messages of a `sampling/createMessage` request. A deployment
+  whose tools return screenshots or encoded files accepts that knowingly with
+  `on_cannot_say: allow`; a finding in the text beside the image still refuses.
+- **Every detector says what its rules could not read** (ADR 0028). After the
+  rules found nothing: content mostly made of opaque encoded runs (base64, hex,
+  a serialised blob), or a word or number split by an invisible format
+  character, is `CannotSay` (`declared`) rather than "clean". The word-reading
+  detectors add text mostly in another script, and a caller-declared locale the
+  policy does not list — `Context.locale`, carried since v0.1, is finally read.
+  A finding always dominates. The soft hyphen is deliberately read as text
+  (extracted web pages carry it inside words); a directive split with one is a
+  documented miss. No matrix number moves; the external secrets bench names the
+  six gitleaks vectors it now declares unreadable instead of counting them.
+- **A witness names its leg, and a leg nobody reads says so** (ADR 0027). A
+  detector may declare `directions`; the core asks it only there and lists it as
+  a witness only there — an in-process guard wired with both legs' detectors no
+  longer reports four witnesses when one read the content. `decide()` over zero
+  detectors, or over detectors that all read the other leg, is `CannotSay`
+  ("nobody looked"), never an `Allow` with an empty witness list; the in-process
+  `check_egress` over the wrong leg's detector blocks where it passed.
+- **What the relay forwards unread is on the chain** (ADR 0028). The first time
+  each kind of uninspected message crosses in a session — `initialize`,
+  `prompts/list`, a notification, a peer's response or error, a guarded response
+  on a deliberately empty outbound leg — a `CannotSay` with cause `declared` and
+  disposition `forward` records it, bounded at 64 kinds per session. A frame
+  that does not parse, from either peer, was dropped with a line on stderr; it is
+  now also a `CannotSay` with cause `refused` on the chain, disposition `block`,
+  carrying the failure's type and never its message (which quotes the input).
+
+### Added
+
+- `limes.verdict.BlindCause`; `limes.detector.DeclaresDirections`;
+  `limes.detectors.readability` (the screen, its thresholds and measures);
+  `limes.transports.mcp.payload.derive()` returning the text and what was left
+  out of it; `blind_spots=` on `decide()`, `Guard.verdict`, `check` and
+  `check_egress`; `locales:` in `policy.yaml` and in the `injection-egress`
+  block of `egress.yaml` (optional, read by one shared loader function);
+  `cause` in `_meta.limes` (`null` when somebody looked); `render()` shows the
+  cause; `limes check` names it.
+- ADR 0026 (a blind spot names its cause), ADR 0027 (a witness names its leg),
+  ADR 0028 (the guard says what it cannot read); the frontier re-pins
+  `verdict.py` (its first amendment since v0.1), `detector.py`, `guard.py`,
+  `policy.py`, `policy.yaml`, `injection.py` and three contract tests.
+- `tests/unit/ratchets/test_a_blind_spot_names_its_cause.py`,
+  `test_a_witness_names_its_leg.py`,
+  `test_the_guard_says_what_it_cannot_read.py` — 51 tests, each file seen red
+  under a named mutation of the new code (allow opening every cause, a crash
+  rendered as declared, every detector reading every leg, nobody-looked as
+  Allow, binary swept as text, a screen that never declares, a relay that
+  declares nothing, an unparseable frame left unrecorded).
+
+### Breaking
+
+- `CannotSay("...")` with one argument no longer constructs; `case
+  CannotSay(blind_spot):` keeps matching. Every recorded `CannotSay` digest
+  changes; `Allow` and `Deny` digests do not.
+- A proxy session's journal now begins with the declaration that `initialize`
+  crossed unread and carries one line per kind of message the guard never read.
+  Count decisions with `'"cause":"declared"' not in verdict_fingerprint`.
+- Results carrying images or mostly-base64 payloads are blocked by default;
+  see *Tuning* in the guide for the one-line, knowing acceptance.
+
 ## [0.13.0] - 2026-09-06
 
 **The pre-publication audit: a guard that could be frozen by its own budget, a
@@ -893,6 +983,7 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.14.0]: https://github.com/AmadouMamane/Limes/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/AmadouMamane/Limes/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/AmadouMamane/Limes/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/AmadouMamane/Limes/compare/v0.10.0...v0.11.0
