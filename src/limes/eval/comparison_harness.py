@@ -93,7 +93,9 @@ __all__ = [
     "case_key",
     "comparison_cases",
     "compute",
+    "format_threshold",
     "hijack_templates",
+    "is_boolean",
     "limes_flags",
     "load_competitors",
     "render",
@@ -158,7 +160,13 @@ DEV_POPULATIONS = (ATTACKS_DEV, BENIGN_DEV)
 #: The tools this comparison intends to carry. A name here with no committed
 #: results is reported as *not measured*, with its reason — never as a zero.
 #: Rule 7 of the protocol: a blind spot is not a score.
-DECLARED_TOOLS = ("deberta-injection-v2", "deepset-injection", "llm-guard", "rebuff")
+DECLARED_TOOLS = (
+    "deberta-injection-v2",
+    "deepset-injection",
+    "llm-guard",
+    "mcp-firewall",
+    "rebuff",
+)
 
 
 def hijack_templates(cases: Sequence[ComparisonCase]) -> dict[str, str] | None:
@@ -599,7 +607,7 @@ def limes_flags(text: str) -> bool:
     return isinstance(outbound, Deny)
 
 
-def _threshold(value: float) -> str:
+def format_threshold(value: float) -> str:
     """A threshold with enough digits to be the threshold it is.
 
     ``{:g}`` renders 0.99999994 as ``1``, which would have made two rows that
@@ -695,6 +703,20 @@ def _youden(scored: Sequence[tuple[float, bool]], threshold: float) -> float | N
     tpr = sum(1 for score in attacks if score > threshold) / len(attacks)
     fpr = sum(1 for score in benign if score > threshold) / len(benign)
     return tpr - fpr
+
+
+def is_boolean(competitor: Competitor) -> bool:
+    """Whether the tool has no score — every recorded value is 0 or 1 (ADR 0030).
+
+    Such a tool has one operating point per configuration. A tuned cut can only
+    pick another of its shipped configurations or switch it off, and a switched-off
+    tool is not an operating point.
+    """
+    return all(
+        score in (0.0, 1.0)
+        for scores in competitor.configurations.values()
+        for score in scores.values()
+    )
 
 
 def _tuned(cases: Sequence[ComparisonCase], competitor: Competitor) -> tuple[str, float] | None:
@@ -797,13 +819,17 @@ def compute(directory: Path | None = None) -> ComparisonReport:
         rows.append(
             _row(
                 f"{competitor.label} — vendor default",
-                f"`{default}`, threshold {_threshold(competitor.default_threshold)}, both its own",
+                f"`{default}`, threshold {format_threshold(competitor.default_threshold)}, "
+                "both its own",
                 cases,
                 competitor.verdicts(cases, default, competitor.default_threshold),
                 competitor.latency_ms,
             )
         )
-        seen: set[tuple[str, float]] = {(default, competitor.default_threshold)}
+        seen: list[Mapping[str, bool | None]] = [
+            competitor.verdicts(cases, default, competitor.default_threshold)
+        ]
+        boolean = is_boolean(competitor)
         for suffix, detail, choice in (
             (
                 "dev-tuned",
@@ -813,19 +839,28 @@ def compute(directory: Path | None = None) -> ComparisonReport:
             (
                 "dev-tuned at zero false positives",
                 "the cut that kills none of the dev controls — limes's own precision",
-                _tuned_at_zero_false_positives(cases, competitor),
+                None if boolean else _tuned_at_zero_false_positives(cases, competitor),
             ),
         ):
-            if choice is None or choice in seen:
+            if choice is None:
                 continue
-            seen.add(choice)
             configuration, threshold = choice
+            verdicts = competitor.verdicts(cases, configuration, threshold)
+            # A cut that changes no verdict is not a second row whatever number it
+            # is written as; and a tool with no score — a rule matches or it does
+            # not — has one operating point per configuration, so a cut that flags
+            # nothing is the tool switched off, not a row (ADR 0030).
+            if any(verdicts == earlier for earlier in seen):
+                continue
+            if boolean and not any(verdicts.values()):
+                continue
+            seen.append(verdicts)
             rows.append(
                 _row(
                     f"{competitor.label} — {suffix}",
-                    f"`{configuration}`, threshold {_threshold(threshold)}, {detail}",
+                    f"`{configuration}`, threshold {format_threshold(threshold)}, {detail}",
                     cases,
-                    competitor.verdicts(cases, configuration, threshold),
+                    verdicts,
                     competitor.latency_ms,
                 )
             )
@@ -886,7 +921,10 @@ def _separation_lines(report: ComparisonReport) -> list[str]:
         "| contestant | configuration | dev | holdout | hijack (blind) |",
         "|---|---|---|---|---|",
     ]
+    unscored = [c.label for c in report.competitors if is_boolean(c)]
     for competitor in report.competitors:
+        if is_boolean(competitor):
+            continue
         for configuration in sorted(competitor.configurations):
             cells: list[str] = []
             for attack_population in ATTACK_POPULATIONS:
@@ -907,7 +945,12 @@ def _separation_lines(report: ComparisonReport) -> list[str]:
         "",
         "limes has no row here and cannot have one: its rules produce a verdict, not a "
         "score, so there is no curve to take the area under. Its single (recall, "
-        "false-positive) point is the table above.",
+        "false-positive) point is the table above."
+        + (
+            " The same holds for " + ", ".join(f"*{name}*" for name in unscored) + "."
+            if unscored
+            else ""
+        ),
     ]
     return lines
 
@@ -1066,6 +1109,8 @@ def _precision_floor_lines(report: ComparisonReport) -> list[str]:
     ]
     pinned: list[str] = []
     for competitor in report.competitors:
+        if is_boolean(competitor):
+            continue
         choice = _tuned_at_zero_false_positives(report.cases, competitor)
         if choice is None:
             continue
@@ -1090,7 +1135,7 @@ def _precision_floor_lines(report: ComparisonReport) -> list[str]:
         blind = row.cell(HIJACK_BLIND).render() if row is not None else "—"
         head = ceiling[0].text.strip().replace("\n", " ")[:96] if ceiling else ""
         lines.append(
-            f"- **{competitor.label}** — `{configuration}` at {_threshold(threshold)} is the "
+            f"- **{competitor.label}** — `{configuration}` at {format_threshold(threshold)} is the "
             f"highest cut that spares every `dev` control. Held there it catches {held} of "
             f"the held-out attacks and {blind} of the blind hijacks. {len(ceiling)} of the "
             f"{report.population_size(BENIGN_DEV)} controls sit at that ceiling"
@@ -1242,7 +1287,10 @@ def render(report: ComparisonReport, when: str) -> str:
         "threshold, which nothing here picked; the cut that maximises Youden's J; and the "
         "cut that kills **none** of the development controls — limes's own precision, so a "
         "reader can ask the question that matters to a deployment: *at the same false-"
-        "positive floor, who catches more?*",
+        "positive floor, who catches more?* A tool with no score has one operating point "
+        "per configuration: a tuned row appears only when `dev` prefers another of its "
+        "shipped configurations, and a cut that flags nothing is the tool switched off, "
+        "not a row (ADR 0030).",
         "",
         "**Where the columns come from.** `dev` is what a threshold or a configuration may "
         "be chosen on. `holdout` is split by attack template and scored with everything "
@@ -1388,7 +1436,9 @@ def render(report: ComparisonReport, when: str) -> str:
         "Snyk Agent Scan) analyses MCP server configurations and tool descriptions rather "
         "than classifying a text. Bending it into a text-to-boolean grader would have meant "
         "inventing an adapter that scores something it does not claim to score, and that "
-        "number would be worse than no number.",
+        "number would be worse than no number. mcp-firewall, by contrast, carries a "
+        "pattern-based injection detector that reads a tool call's arguments, and is in "
+        "the table as that detector, at each of its three sensitivities (ADR 0030).",
         "- **rebuff's row is a floor for rebuff, not a measurement of rebuff.** Its deployed "
         "detector is heuristics plus an LLM judge plus a vector store of past attacks plus "
         "canary tokens; three of the four need an OpenAI key and a Pinecone index and do "

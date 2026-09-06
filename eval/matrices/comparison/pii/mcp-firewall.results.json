@@ -1,0 +1,2199 @@
+{
+ "bench": "pii",
+ "configurations": {
+  "patterns": {
+   "description": "PII_PATTERNS, as shipped, over the text of a tool response",
+   "findings": {
+    "00115111b53ad16c": [],
+    "0026e4a5e76c599e": [
+     [
+      "Credit Card",
+      "pan",
+      38,
+      54,
+      1.0
+     ]
+    ],
+    "006d65b42365572b": [],
+    "010dbb2388376283": [],
+    "01788eb8836cadf0": [
+     [
+      "Credit Card",
+      "pan",
+      55,
+      71,
+      1.0
+     ]
+    ],
+    "0231a34565b8b0e5": [],
+    "02a3204400bd44da": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      73,
+      1.0
+     ]
+    ],
+    "02d1a36eb8041f90": [],
+    "02fcf0f87fa34691": [],
+    "03861a5c9e3f4a30": [
+     [
+      "Credit Card",
+      "pan",
+      34,
+      50,
+      1.0
+     ]
+    ],
+    "038973d1dd780947": [],
+    "03b02ab5b3a3c320": [],
+    "044bbd552a2b75e0": [
+     [
+      "Credit Card",
+      "pan",
+      39,
+      55,
+      1.0
+     ]
+    ],
+    "0573486190a65e0b": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      57,
+      1.0
+     ]
+    ],
+    "0624b0728032e569": [
+     [
+      "Email Address",
+      "email",
+      91,
+      111,
+      1.0
+     ]
+    ],
+    "0674bb53deee6a8d": [],
+    "06a68e1ef213596c": [],
+    "06d7a252b4d7a440": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      47,
+      1.0
+     ]
+    ],
+    "074f6df6889b0638": [],
+    "0922017efd7c8c22": [],
+    "0930fe4412223395": [
+     [
+      "Credit Card",
+      "pan",
+      54,
+      70,
+      1.0
+     ]
+    ],
+    "0956b14cddccc681": [],
+    "0976439940fe0083": [],
+    "0a5e72e938038f02": [
+     [
+      "Credit Card",
+      "pan",
+      39,
+      55,
+      1.0
+     ]
+    ],
+    "0acd6e5cf114222f": [],
+    "0afafb6bfee5d4a1": [],
+    "0b469dcab08d8c76": [],
+    "0be354e394bceec7": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "0c03192e36d840ab": [],
+    "0ca0e71a2f8b714f": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      84,
+      1.0
+     ]
+    ],
+    "0cf799d409217c45": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      47,
+      1.0
+     ]
+    ],
+    "0d80cf248194296a": [],
+    "0f13f28c01427ea1": [],
+    "1039f72f7d8767c2": [],
+    "10df8dcf0464ae67": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      46,
+      1.0
+     ]
+    ],
+    "117cd66b79fa5bc0": [
+     [
+      "Credit Card",
+      "pan",
+      15,
+      31,
+      1.0
+     ]
+    ],
+    "119d9a05bcc2e4b2": [],
+    "11c6805406059a17": [
+     [
+      "Credit Card",
+      "pan",
+      71,
+      87,
+      1.0
+     ]
+    ],
+    "1259eaeb981c7b37": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "12a8866bf7f97412": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      52,
+      1.0
+     ]
+    ],
+    "134a8d686872ab03": [],
+    "1372c01860f5e8cd": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      36,
+      1.0
+     ]
+    ],
+    "14c643643ac4d1d5": [],
+    "152d528bdcc4391d": [],
+    "1587176c6692ad9f": [],
+    "15ab56e2178800cc": [
+     [
+      "Credit Card",
+      "pan",
+      20,
+      36,
+      1.0
+     ]
+    ],
+    "15ea1705ce572556": [],
+    "164aefd4641cf014": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "16695238e811857d": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      81,
+      1.0
+     ]
+    ],
+    "16a79441cdd39488": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      58,
+      1.0
+     ]
+    ],
+    "16dd4e2d9e522782": [],
+    "17632705e32adf75": [],
+    "17a30edbb4560f19": [],
+    "17b82dd45ba47510": [],
+    "1873e8fc008080ac": [],
+    "18c27960a42e5cce": [],
+    "18c43413c8737287": [],
+    "18c5cd2d8736d293": [
+     [
+      "Email Address",
+      "email",
+      19,
+      44,
+      1.0
+     ]
+    ],
+    "18cbe9dc53fc8874": [
+     [
+      "IBAN",
+      "iban",
+      11,
+      27,
+      1.0
+     ]
+    ],
+    "18fd8fea46d5fedf": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      88,
+      1.0
+     ]
+    ],
+    "19b5eca63d3382e3": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "19ddd03c0cbf35bc": [],
+    "1a1fdf7dbbd26a53": [],
+    "1a995a3c428a1251": [],
+    "1b3715d0acdf58ff": [],
+    "1ba46cee2fefebd8": [],
+    "1c412baa43fd0468": [],
+    "1c6b870d8df3f87c": [],
+    "1c8b89715aa8f0cc": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "1e18e8ac3feaac01": [
+     [
+      "Credit Card",
+      "pan",
+      85,
+      101,
+      1.0
+     ]
+    ],
+    "1e2ddc9fffdcc3cf": [],
+    "20af2d605e359c94": [],
+    "20fcbc10418efebd": [
+     [
+      "Credit Card",
+      "pan",
+      82,
+      98,
+      1.0
+     ]
+    ],
+    "21b14897962f9a72": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "21c1d8bf277b20c3": [],
+    "232eb258b3fbe959": [
+     [
+      "Credit Card",
+      "pan",
+      85,
+      101,
+      1.0
+     ]
+    ],
+    "238983201d267b96": [
+     [
+      "Credit Card",
+      "pan",
+      15,
+      31,
+      1.0
+     ]
+    ],
+    "23abed12b30c8204": [],
+    "23dbc3c9e5cdbf6a": [],
+    "24096852d1e14999": [],
+    "240bde16abe1c73d": [],
+    "242d0e0bf0a97f28": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      85,
+      1.0
+     ]
+    ],
+    "249e166a2dc837e9": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      38,
+      1.0
+     ]
+    ],
+    "24f3e86f067f6217": [],
+    "26690c29b9e040a2": [],
+    "26804f9dcea9c6cd": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      58,
+      1.0
+     ]
+    ],
+    "26bccf597fcecf3d": [],
+    "26f50651419c83a7": [],
+    "27337415b47fcb25": [],
+    "27717bf705cee9d3": [],
+    "28a7b8444bde9c66": [],
+    "28cc6db30bf54d3d": [],
+    "295f1271cb71c74a": [],
+    "29a5da25208dc2c8": [],
+    "2a130a0c029d8f3a": [],
+    "2b3ab48800edb3fe": [
+     [
+      "Credit Card",
+      "pan",
+      12,
+      28,
+      1.0
+     ]
+    ],
+    "2c4809d9179beb89": [],
+    "2de722e2be6fb189": [],
+    "2dfeeba56778f882": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      91,
+      1.0
+     ]
+    ],
+    "2e34906282163fbc": [],
+    "2e756875f26c0f6b": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      34,
+      1.0
+     ]
+    ],
+    "2f03496a0f07f44c": [],
+    "2f8c983ae546c48f": [],
+    "2fe4ab1ecaa64226": [],
+    "312850a99f6d5c9e": [
+     [
+      "Credit Card",
+      "pan",
+      21,
+      37,
+      1.0
+     ]
+    ],
+    "3380b08acec69f92": [
+     [
+      "Credit Card",
+      "pan",
+      55,
+      71,
+      1.0
+     ]
+    ],
+    "33bf8ba4e571e4c7": [],
+    "3415105d55cac321": [],
+    "3439c71b6cfb131d": [],
+    "3465e410c60996bb": [],
+    "34a7ede65089af8b": [],
+    "35d8e9675ba7d5b4": [
+     [
+      "Credit Card",
+      "pan",
+      12,
+      28,
+      1.0
+     ]
+    ],
+    "364a1aa817ade024": [],
+    "368d044fcb9475b4": [],
+    "37c1b8356c95f6e5": [],
+    "37c2a7fa6e908e87": [],
+    "37dda8175926fcb6": [],
+    "386b2eeeb7a1d067": [],
+    "39143c703ab7376a": [],
+    "394453120cf4782b": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      78,
+      1.0
+     ]
+    ],
+    "3974cd04fc58e402": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      39,
+      1.0
+     ]
+    ],
+    "39c7fb69e16d7e9c": [],
+    "39fa77cafd7bdb79": [
+     [
+      "Email Address",
+      "email",
+      39,
+      58,
+      1.0
+     ]
+    ],
+    "3a4f4c0f447bb032": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "3a8347da048e0d04": [
+     [
+      "Email Address",
+      "email",
+      59,
+      82,
+      1.0
+     ]
+    ],
+    "3b57198cb25b7805": [],
+    "3ba38d651d453646": [],
+    "3bc0019a3bb37532": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      48,
+      1.0
+     ]
+    ],
+    "3c7bf85f829bfd4c": [],
+    "3d1ea78ab1b0ec0f": [],
+    "3da8abc397956920": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      73,
+      1.0
+     ]
+    ],
+    "3ec898b102d79ed1": [],
+    "3fd67e7159c3251a": [
+     [
+      "Credit Card",
+      "pan",
+      21,
+      37,
+      1.0
+     ]
+    ],
+    "408ec0a10e9df1c5": [],
+    "4099690664bcad84": [],
+    "40f4a4d0a64f2655": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      88,
+      1.0
+     ]
+    ],
+    "414bddbd4ee36c5c": [],
+    "42060a86af0a239a": [],
+    "429aadda4e136e10": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "42a666dd9273c893": [],
+    "42d5c21c062bb0ce": [],
+    "43204c0f5394dc48": [],
+    "44688afeb7e03e0b": [],
+    "44c71d30c7a86c55": [],
+    "452c15c75806f2fb": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "453b0ea92fcb49d6": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "4564bc71200311aa": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      75,
+      1.0
+     ]
+    ],
+    "4598a891b930e80f": [],
+    "4785ea0b6db04ef1": [],
+    "47a24ccbf9c2c237": [],
+    "47d269632844b6ca": [],
+    "481bcb86d525c4b4": [],
+    "483b9d0a9b855fd4": [],
+    "48e847ceef44b82b": [
+     [
+      "Credit Card",
+      "pan",
+      34,
+      50,
+      1.0
+     ]
+    ],
+    "48f8d015b0e01cfd": [],
+    "497a3ef8f8b87750": [],
+    "49885bb992138452": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "49d4b86c73b36159": [],
+    "49e876e8c5906031": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      61,
+      1.0
+     ]
+    ],
+    "49fe9e02ece29e2f": [],
+    "4a1f3b2262ce5a0d": [],
+    "4ace1c3d7f97097d": [],
+    "4b02441fed58ae73": [],
+    "4b33a921739755fa": [],
+    "4be8c03fa75ec6d6": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      54,
+      1.0
+     ]
+    ],
+    "4c4ba7211eb2acd8": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      88,
+      1.0
+     ]
+    ],
+    "4ccf343b64e46b38": [],
+    "4d31f325f699f35f": [],
+    "4dc94cf73d853928": [],
+    "4dd321a31ff151d5": [],
+    "4de6d607ccfd99a3": [],
+    "4e762a0ce4f3f049": [],
+    "4ea37971a1383f9c": [],
+    "4ecb5dabf8460f6b": [],
+    "4f09390179eb5aae": [],
+    "4f12030979a4fbbf": [],
+    "4f997fb5c656daf0": [],
+    "505ca5d1cf727f61": [],
+    "50c61f1c0cfc4c34": [],
+    "50e1c010a97a388c": [],
+    "515fbc57c3ad770d": [
+     [
+      "Credit Card",
+      "pan",
+      85,
+      101,
+      1.0
+     ]
+    ],
+    "51f7c959e5e4ccbd": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      37,
+      1.0
+     ]
+    ],
+    "5213da01555e1bd9": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      75,
+      1.0
+     ]
+    ],
+    "52459a5664612047": [
+     [
+      "Email Address",
+      "email",
+      95,
+      118,
+      1.0
+     ]
+    ],
+    "526b7a1a88fe54b2": [
+     [
+      "Credit Card",
+      "pan",
+      20,
+      36,
+      1.0
+     ]
+    ],
+    "52c8451c02c2b760": [],
+    "5385226898042e9e": [],
+    "53c50f8d131da76a": [],
+    "53f4104cce510113": [],
+    "543713add12f85bb": [],
+    "54553438e45a0fd2": [
+     [
+      "Credit Card",
+      "pan",
+      55,
+      71,
+      1.0
+     ]
+    ],
+    "54cf5c034569c6a7": [
+     [
+      "Credit Card",
+      "pan",
+      38,
+      54,
+      1.0
+     ]
+    ],
+    "550b21222dfc7400": [],
+    "55bc5b2395061df9": [],
+    "565a996a80905e26": [],
+    "56d331aeab9e654d": [],
+    "56fd35dd22074f82": [],
+    "57ac7d9b99ce66ff": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      47,
+      1.0
+     ]
+    ],
+    "57b760919f141e0d": [],
+    "5848c851d76157ba": [],
+    "58b1e801d46245ac": [],
+    "59d2c94a31c49fb2": [],
+    "59ecea64ee03ed71": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "5a877fc4bc3bd8d2": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      69,
+      1.0
+     ]
+    ],
+    "5ad0805b2629f1c6": [],
+    "5b0c33c4f5fbfe8e": [],
+    "5b12ddd6fe3656e9": [
+     [
+      "Credit Card",
+      "pan",
+      82,
+      98,
+      1.0
+     ]
+    ],
+    "5cdfea287f067afb": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      77,
+      1.0
+     ]
+    ],
+    "5d36a182ac689465": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      86,
+      1.0
+     ]
+    ],
+    "5d4b1a9f8debc83a": [],
+    "5d58bfde3ec0221d": [],
+    "5d8b8f7bb1a4bcae": [],
+    "5d9b1d51410d36bf": [
+     [
+      "Email Address",
+      "email",
+      59,
+      84,
+      1.0
+     ]
+    ],
+    "5e3620331283dc43": [],
+    "5e37931b8bc33c8a": [
+     [
+      "Credit Card",
+      "pan",
+      54,
+      70,
+      1.0
+     ]
+    ],
+    "5e732a4b37d36f2b": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      67,
+      1.0
+     ]
+    ],
+    "5ea2dd824203d9ef": [],
+    "5eaff5580fd29a3e": [],
+    "604678f48028a48b": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      81,
+      1.0
+     ]
+    ],
+    "6076846c7664b70f": [],
+    "60f890c81ee2db10": [],
+    "6173c60c344aed5d": [
+     [
+      "Email Address",
+      "email",
+      91,
+      116,
+      1.0
+     ]
+    ],
+    "6259ae83f8593884": [],
+    "62a62339cc3099e1": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      60,
+      1.0
+     ]
+    ],
+    "6389efbaa8a8f3a8": [],
+    "63d1f46b19bf234d": [],
+    "644605cb97aaddb4": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      54,
+      1.0
+     ]
+    ],
+    "64fab7f4e1e4cce8": [],
+    "656e73677896c749": [],
+    "65c9a94703f8d636": [
+     [
+      "Credit Card",
+      "pan",
+      71,
+      87,
+      1.0
+     ]
+    ],
+    "66c5f89c63c11b8f": [],
+    "6712ce84b2278158": [],
+    "67402de337bbc0eb": [],
+    "6798f5f5e6862b37": [],
+    "67fe1ac6cd7af3f8": [
+     [
+      "Credit Card",
+      "pan",
+      71,
+      87,
+      1.0
+     ]
+    ],
+    "689ac55367b69685": [],
+    "697c40a01a6b1fbf": [],
+    "6a004e4b11f5a8e8": [],
+    "6a47692721f680dd": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      35,
+      1.0
+     ]
+    ],
+    "6a615796cc9a25f5": [],
+    "6a6355e179847b1e": [
+     [
+      "Credit Card",
+      "pan",
+      34,
+      50,
+      1.0
+     ]
+    ],
+    "6b6ba3994c4c9911": [
+     [
+      "IBAN",
+      "iban",
+      54,
+      70,
+      1.0
+     ]
+    ],
+    "6b879acb72cf89cb": [
+     [
+      "Email Address",
+      "email",
+      39,
+      64,
+      1.0
+     ]
+    ],
+    "6caef7c8be20cfa0": [
+     [
+      "Credit Card",
+      "pan",
+      38,
+      54,
+      1.0
+     ]
+    ],
+    "6cd7f694e3f8e64a": [],
+    "6d6b5be1835ecc06": [],
+    "6e0d8b159e056009": [],
+    "6e1116ef5b27c5b0": [
+     [
+      "Email Address",
+      "email",
+      39,
+      64,
+      1.0
+     ]
+    ],
+    "6e65019e17d0b518": [],
+    "6ed188b7dc7cf8a4": [],
+    "6f8a0e5621becf8b": [],
+    "6fb7f6ffdc8db325": [],
+    "702586a9d9dd15d4": [],
+    "70e616e88c25da87": [],
+    "714eb96bff03bd3f": [],
+    "717de4c92b9eb7f0": [],
+    "7251a7de94b2d3ab": [],
+    "72b1374121e281b5": [
+     [
+      "Email Address",
+      "email",
+      59,
+      78,
+      1.0
+     ]
+    ],
+    "731f6d93803e72f5": [
+     [
+      "Email Address",
+      "email",
+      39,
+      59,
+      1.0
+     ]
+    ],
+    "734a2fe364e9870a": [
+     [
+      "Credit Card",
+      "pan",
+      27,
+      43,
+      1.0
+     ]
+    ],
+    "7359087bdd3ed0bd": [
+     [
+      "Email Address",
+      "email",
+      23,
+      42,
+      1.0
+     ]
+    ],
+    "74943eabede76d3f": [],
+    "74b80f47435c6c82": [],
+    "75919295347eb947": [],
+    "767f8c0bf8e59d9d": [],
+    "76a3174c88f41295": [
+     [
+      "Email Address",
+      "email",
+      95,
+      114,
+      1.0
+     ]
+    ],
+    "76b1e0ec6565f1e2": [],
+    "76c4a81b3e8f0bee": [],
+    "771d54056254513d": [],
+    "776a1b8a19608578": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      59,
+      1.0
+     ]
+    ],
+    "77a4f11c6cac3e8b": [
+     [
+      "Email Address",
+      "email",
+      19,
+      42,
+      1.0
+     ]
+    ],
+    "7822ecd6350294e4": [
+     [
+      "Email Address",
+      "email",
+      23,
+      48,
+      1.0
+     ]
+    ],
+    "7944acc88c9eb38a": [],
+    "794d995968213c08": [],
+    "79569d957cc29d1b": [],
+    "796b2f08c78eede5": [],
+    "79d0efeb74da5624": [],
+    "79f50520df275392": [],
+    "7b2034630f2fa9d8": [],
+    "7b67236055d054a6": [],
+    "7b7539dc3ce522c8": [],
+    "7b8c31a93d1866af": [],
+    "7b98e6f527a1ba62": [],
+    "7c1dca571393abb1": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      51,
+      1.0
+     ]
+    ],
+    "7c3239fcf4a5badc": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      81,
+      1.0
+     ]
+    ],
+    "7c3d7928753b8792": [],
+    "7c58b6709c6915e6": [],
+    "7c99be672646ebe8": [
+     [
+      "Credit Card",
+      "pan",
+      85,
+      101,
+      1.0
+     ]
+    ],
+    "7cfbc2a17dcd0eba": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      51,
+      1.0
+     ]
+    ],
+    "7df02d413b9809c4": [],
+    "7e67a4c8647ec530": [],
+    "7e80f45cbbc51247": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      40,
+      1.0
+     ]
+    ],
+    "7eb2a02ef75fc54a": [],
+    "7ef9c2ca4e408f52": [],
+    "7f0921d449254f82": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      83,
+      1.0
+     ]
+    ],
+    "7f4d066e1b5467b7": [],
+    "802651da15e558aa": [
+     [
+      "Credit Card",
+      "pan",
+      15,
+      31,
+      1.0
+     ]
+    ],
+    "81257998ad0bf6a8": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      38,
+      1.0
+     ]
+    ],
+    "816491a4328df547": [],
+    "82b44a66ca43ae0e": [],
+    "82daed0e80e57e7f": [],
+    "840f48f5e4c90ee9": [],
+    "84534fec7c59741e": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      60,
+      1.0
+     ]
+    ],
+    "84a56bd67e635afd": [],
+    "84bdd53abfc0193a": [],
+    "852cd7698eb9ffc2": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      55,
+      1.0
+     ]
+    ],
+    "85978eb65212e577": [],
+    "85ef96b8bd15f20f": [
+     [
+      "Email Address",
+      "email",
+      91,
+      110,
+      1.0
+     ]
+    ],
+    "863448562e98aea4": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "866bd3b800f4e31c": [
+     [
+      "Credit Card",
+      "pan",
+      54,
+      70,
+      1.0
+     ]
+    ],
+    "86ba1d6530ab08b0": [],
+    "86d406fbed920310": [],
+    "88968c36b3889cbf": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "88fe6e80afa3e976": [],
+    "8924ac3c5e412820": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      38,
+      1.0
+     ]
+    ],
+    "895ad22cae9b819c": [],
+    "89c57efce4d4b4b2": [],
+    "8a64695b08c772bd": [],
+    "8a87adeacaf4733c": [],
+    "8aece203f36ad806": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      58,
+      1.0
+     ]
+    ],
+    "8afadd1835c7653b": [],
+    "8bc15a0f879ca88a": [],
+    "8bff3ab578b19c93": [],
+    "8c253b0a272d6f80": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      36,
+      1.0
+     ]
+    ],
+    "8c4c5b526810a000": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      89,
+      1.0
+     ]
+    ],
+    "8c508d8ec8d589d4": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      87,
+      1.0
+     ]
+    ],
+    "8cfb59b1e7a863bd": [],
+    "8d5f8c523793e826": [],
+    "8d82c44f21703e4c": [],
+    "8e72881b9e2591ce": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      36,
+      1.0
+     ]
+    ],
+    "90e159f8244fa2d7": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "915d451632b012c6": [],
+    "9172a8dd0b118d18": [],
+    "924a160ce74fc82b": [],
+    "932d676452fc6774": [],
+    "934a368d9d018f7a": [
+     [
+      "Email Address",
+      "email",
+      19,
+      44,
+      1.0
+     ]
+    ],
+    "938bcf268b960e96": [
+     [
+      "Credit Card",
+      "pan",
+      55,
+      71,
+      1.0
+     ]
+    ],
+    "93f2aae4942442be": [],
+    "93f9842249df7395": [],
+    "940de94ffeb59b27": [],
+    "94328bc59c93413b": [],
+    "9464cee41371dbe1": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "95818105198a2a1c": [],
+    "95c9a073e732497d": [],
+    "98569476c1355b51": [],
+    "988379ea9c08e4ec": [
+     [
+      "Credit Card",
+      "pan",
+      12,
+      28,
+      1.0
+     ]
+    ],
+    "98cd0680d5adb46b": [],
+    "9955d26c5e855606": [],
+    "9b3758bfb77877bd": [],
+    "9b3f2f9739a1d5dc": [],
+    "9bb37dd8bdb4988a": [],
+    "9c7952fdd6b6bf4e": [
+     [
+      "Credit Card",
+      "pan",
+      39,
+      55,
+      1.0
+     ]
+    ],
+    "9ce148c65c80dea4": [
+     [
+      "Credit Card",
+      "pan",
+      21,
+      37,
+      1.0
+     ]
+    ],
+    "9d342803283e9747": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      67,
+      1.0
+     ]
+    ],
+    "9d9383b5f20eb571": [],
+    "9e99de9a3411d182": [],
+    "9ff239e404514343": [],
+    "a134bc8daf4f0f7b": [],
+    "a25f13d68ad11fb9": [],
+    "a4c4da62a572f60c": [],
+    "a5afa5ce69b94161": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      59,
+      1.0
+     ]
+    ],
+    "a6d79e80973ff2dd": [],
+    "a6da2d8572eb7167": [],
+    "a6eb54fca71e0b83": [],
+    "a7c92be523e02523": [],
+    "a7f6ca081d9dabe5": [],
+    "a8738be946737f21": [],
+    "a906b98045bc48d1": [],
+    "aaa0c7b6eee19438": [],
+    "aaa0f2c56376d126": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      50,
+      1.0
+     ]
+    ],
+    "ac656be1940e0867": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      63,
+      1.0
+     ]
+    ],
+    "ace42f2321c83c19": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "ad467d81e5c5cb52": [
+     [
+      "Phone (International)",
+      "phone",
+      47,
+      62,
+      1.0
+     ]
+    ],
+    "ad652374343c7cc1": [],
+    "ae3992a424a61211": [
+     [
+      "Email Address",
+      "email",
+      95,
+      115,
+      1.0
+     ]
+    ],
+    "af72fc57523eb144": [],
+    "af9872648b2080a6": [],
+    "b0c9d9861ca9456d": [
+     [
+      "Email Address",
+      "email",
+      91,
+      116,
+      1.0
+     ]
+    ],
+    "b0e48d1945c6fdad": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      48,
+      1.0
+     ]
+    ],
+    "b0f2fec357b33826": [],
+    "b19cb8b47dad8579": [
+     [
+      "Credit Card",
+      "pan",
+      39,
+      55,
+      1.0
+     ]
+    ],
+    "b1cdf507e0824d24": [],
+    "b329248debfd2ba5": [],
+    "b33d6129ba856035": [],
+    "b3f52df1b1175d39": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "b576a53ce1e99685": [],
+    "b689a500d8ded96b": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      73,
+      1.0
+     ]
+    ],
+    "b6d5caabbbb4a6fe": [
+     [
+      "Credit Card",
+      "pan",
+      27,
+      43,
+      1.0
+     ]
+    ],
+    "b6d657d509651fb4": [],
+    "b6e01bd9547d87fa": [],
+    "b80c113b288f2cc6": [
+     [
+      "Credit Card",
+      "pan",
+      27,
+      43,
+      1.0
+     ]
+    ],
+    "b885dabedc365486": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "b8d18622dbe0db8b": [],
+    "b92e3f875b1b4eb8": [
+     [
+      "Email Address",
+      "email",
+      95,
+      120,
+      1.0
+     ]
+    ],
+    "b93d816f0fed03aa": [],
+    "b9a6d5200e033a5c": [],
+    "ba50e8dc29b67f34": [],
+    "ba5c42b30722bdbf": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      84,
+      1.0
+     ]
+    ],
+    "ba71afb10cf29000": [
+     [
+      "Credit Card",
+      "pan",
+      54,
+      70,
+      1.0
+     ]
+    ],
+    "bb4941679338f054": [],
+    "bbe431bcc25eeefe": [],
+    "bc44b78d2204ffef": [],
+    "bd4f3f4ece643e95": [],
+    "beb717a8427da1c9": [
+     [
+      "Email Address",
+      "email",
+      23,
+      43,
+      1.0
+     ]
+    ],
+    "c00eb438052bee29": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      84,
+      1.0
+     ]
+    ],
+    "c05cf80a0e45f7e2": [],
+    "c112e1725950b72f": [
+     [
+      "Credit Card",
+      "pan",
+      21,
+      37,
+      1.0
+     ]
+    ],
+    "c16047126a72f35b": [],
+    "c1a0450911ee846c": [],
+    "c1a2c754583b6c12": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      71,
+      1.0
+     ]
+    ],
+    "c27cba2f249da597": [
+     [
+      "IBAN",
+      "iban",
+      54,
+      70,
+      1.0
+     ]
+    ],
+    "c290b230a5d3c020": [],
+    "c2ed37862c80f7f3": [],
+    "c3f0d1e9f85ccb1d": [],
+    "c3f6c56eb8a9d1b2": [
+     [
+      "Email Address",
+      "email",
+      19,
+      39,
+      1.0
+     ]
+    ],
+    "c4b957e1673bf471": [],
+    "c5717aed31863ed1": [
+     [
+      "Credit Card",
+      "pan",
+      82,
+      98,
+      1.0
+     ]
+    ],
+    "c6003cd45c80d5c8": [
+     [
+      "Credit Card",
+      "pan",
+      34,
+      50,
+      1.0
+     ]
+    ],
+    "c63a88122fc197b9": [],
+    "c7205619daa2909a": [
+     [
+      "Email Address",
+      "email",
+      59,
+      84,
+      1.0
+     ]
+    ],
+    "c734a8be24ea23d0": [],
+    "c7938a54f3498148": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      86,
+      1.0
+     ]
+    ],
+    "c831ad683d744a2d": [],
+    "c8ae51e48abede19": [
+     [
+      "Phone (International)",
+      "phone",
+      72,
+      86,
+      1.0
+     ]
+    ],
+    "c97785fb0a0259c8": [],
+    "c98ea634d47a3f5a": [
+     [
+      "Phone (International)",
+      "phone",
+      61,
+      74,
+      1.0
+     ]
+    ],
+    "c990716fbd63f86d": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      49,
+      1.0
+     ]
+    ],
+    "c990a73f08a88796": [],
+    "c9ff70c20d78494e": [
+     [
+      "Email Address",
+      "email",
+      39,
+      62,
+      1.0
+     ]
+    ],
+    "cac277f6c43160bb": [],
+    "cac971f8e526afe7": [
+     [
+      "Credit Card",
+      "pan",
+      15,
+      31,
+      1.0
+     ]
+    ],
+    "cadeb117fb443dbd": [],
+    "cafbd2064e862f07": [],
+    "cb434560ccd0cf49": [],
+    "cc63a97c3e0ec2bc": [],
+    "cd4bceb265d856ca": [],
+    "ce56f68b8c0c66b8": [],
+    "cecdb8884bb261c1": [],
+    "cef90b908e7583d1": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      56,
+      1.0
+     ]
+    ],
+    "cf5572131f84daef": [
+     [
+      "Email Address",
+      "email",
+      91,
+      114,
+      1.0
+     ]
+    ],
+    "cf6877387f5ed120": [
+     [
+      "Credit Card",
+      "pan",
+      20,
+      36,
+      1.0
+     ]
+    ],
+    "d05c52d9b98afca5": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      36,
+      1.0
+     ]
+    ],
+    "d102a6bcae968892": [
+     [
+      "Credit Card",
+      "pan",
+      82,
+      98,
+      1.0
+     ]
+    ],
+    "d1624817bcbb9e76": [],
+    "d1e8bf7b5cc4811d": [
+     [
+      "Credit Card",
+      "pan",
+      38,
+      54,
+      1.0
+     ]
+    ],
+    "d25bebac78e9d059": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      39,
+      1.0
+     ]
+    ],
+    "d2f0f8794cd69d60": [
+     [
+      "Credit Card",
+      "pan",
+      20,
+      36,
+      1.0
+     ]
+    ],
+    "d363340ab0179dfd": [],
+    "d36ed0fbeb8ec30e": [],
+    "d3f52e7cd0cd03e4": [],
+    "d448f5e5bb204712": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      48,
+      1.0
+     ]
+    ],
+    "d46fe79fb1860587": [],
+    "d4e0a260d94ba907": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "d4eba018af19719e": [],
+    "d555dd2fb52f6269": [],
+    "d5d6a49ea5b0f05e": [],
+    "d6efa4e35948229a": [
+     [
+      "IBAN",
+      "iban",
+      96,
+      112,
+      1.0
+     ]
+    ],
+    "d71576dd372ea9c6": [],
+    "d728f8ef44323954": [],
+    "d840e9c5b3c616f5": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "d864d0dd1a53e78c": [],
+    "d8a4d3ae5e72a498": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "d8e96ac30127179f": [
+     [
+      "Phone (International)",
+      "phone",
+      43,
+      56,
+      1.0
+     ]
+    ],
+    "dafbb8ee5a84f98e": [],
+    "db515263a8eb58b8": [],
+    "db80ec2768c4f2f4": [],
+    "dbb0ad2be35d058c": [],
+    "dbf1f921d42e9b03": [],
+    "dc2f3b55c2840323": [],
+    "ddb4bd34bb3fd83a": [
+     [
+      "IBAN",
+      "iban",
+      96,
+      112,
+      1.0
+     ]
+    ],
+    "ddd555df44f983fc": [],
+    "de3efa24884a676e": [],
+    "de899e172f6b5739": [],
+    "deb693543fde85ed": [
+     [
+      "Email Address",
+      "email",
+      23,
+      46,
+      1.0
+     ]
+    ],
+    "debd6378c3ea6c96": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      86,
+      1.0
+     ]
+    ],
+    "df29f1973d39682e": [
+     [
+      "Credit Card",
+      "pan",
+      40,
+      56,
+      1.0
+     ]
+    ],
+    "df67b0f787c6d561": [],
+    "e06953d8158950c0": [],
+    "e0f591bee512e89e": [],
+    "e1c2f64dc62c80b4": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      90,
+      1.0
+     ]
+    ],
+    "e2856fa1ae8318df": [],
+    "e38dc627a0188777": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      49,
+      1.0
+     ]
+    ],
+    "e40bc935e28ba88a": [],
+    "e4bf1588e9305427": [],
+    "e5639880c993cd61": [],
+    "e5c337d0586cc4be": [
+     [
+      "Credit Card",
+      "pan",
+      8,
+      24,
+      1.0
+     ]
+    ],
+    "e5e411a505358492": [],
+    "e5f49d1dd0f59558": [],
+    "e60b9db48f18746f": [],
+    "e6280fe18dccf75a": [
+     [
+      "Credit Card",
+      "pan",
+      71,
+      87,
+      1.0
+     ]
+    ],
+    "e6bb8f2adf899ffa": [],
+    "e6d8e8fdcd039243": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      47,
+      1.0
+     ]
+    ],
+    "e7bfb53d01244bbc": [],
+    "e9d4129cd6a45995": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      83,
+      1.0
+     ]
+    ],
+    "ea8bd62049f67c09": [],
+    "eaff4afa5cb12df8": [],
+    "eb3df23611906f6d": [],
+    "eb8aaa31ca8bddb1": [],
+    "eb9342f61d61af61": [],
+    "eb93eeaeb1e4f87e": [
+     [
+      "Credit Card",
+      "pan",
+      27,
+      43,
+      1.0
+     ]
+    ],
+    "ebf0c7467697cb97": [],
+    "ec17c2d9c3b74065": [],
+    "ec26319aa41d0e70": [],
+    "ec93fc867bce5cd6": [],
+    "ecea98ff973be2d3": [],
+    "ecfde1941f642fc1": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      68,
+      1.0
+     ]
+    ],
+    "ed533e3b2fcd2b0b": [
+     [
+      "Email Address",
+      "email",
+      23,
+      48,
+      1.0
+     ]
+    ],
+    "ed6ffaa54faba942": [],
+    "ed867742326d4e81": [],
+    "eda78bb1fce04dc8": [],
+    "edc05ec6eb04fe7c": [],
+    "ee6940e8e1ef76a6": [
+     [
+      "Credit Card",
+      "pan",
+      25,
+      41,
+      1.0
+     ]
+    ],
+    "ee6f17430e870dd7": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      86,
+      1.0
+     ]
+    ],
+    "ef4ad7932500c1d0": [],
+    "f00e0e5120613406": [],
+    "f014e09f4961cd1e": [],
+    "f0cc52ff015a9120": [],
+    "f0db95de727e7216": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      85,
+      1.0
+     ]
+    ],
+    "f1677b0d409d5fef": [
+     [
+      "Email Address",
+      "email",
+      59,
+      79,
+      1.0
+     ]
+    ],
+    "f2635961f1d4c7a8": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      46,
+      1.0
+     ]
+    ],
+    "f30293b64ef18f99": [
+     [
+      "IBAN",
+      "iban",
+      11,
+      27,
+      1.0
+     ]
+    ],
+    "f386f986b0acfd47": [
+     [
+      "Email Address",
+      "email",
+      19,
+      38,
+      1.0
+     ]
+    ],
+    "f3cb8b2ed56ca767": [
+     [
+      "Credit Card",
+      "pan",
+      12,
+      28,
+      1.0
+     ]
+    ],
+    "f3f298f53ed2c80c": [],
+    "f482a4005678fd1e": [],
+    "f4b9cc2d948c88d6": [],
+    "f4c4fc29b851dbad": [
+     [
+      "Phone (International)",
+      "phone",
+      35,
+      49,
+      1.0
+     ]
+    ],
+    "f4db07d5c6dc04aa": [],
+    "f57f37905653fdf4": [],
+    "f6535c35f68ac4fb": [
+     [
+      "Phone (International)",
+      "phone",
+      69,
+      82,
+      1.0
+     ]
+    ],
+    "f6941c3a281e6532": [
+     [
+      "Phone (International)",
+      "phone",
+      25,
+      37,
+      1.0
+     ]
+    ],
+    "f6c4f757931e82c7": [],
+    "f6f27a475f8677a8": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      69,
+      1.0
+     ]
+    ],
+    "f7616cf052f22a15": [],
+    "f78f13d9f28a160a": [],
+    "f7ec13ef8c17d1c7": [],
+    "f81f43131c7efa2b": [
+     [
+      "Phone (International)",
+      "phone",
+      74,
+      86,
+      1.0
+     ]
+    ],
+    "f8f289a4dbc58563": [
+     [
+      "Email Address",
+      "email",
+      95,
+      120,
+      1.0
+     ]
+    ],
+    "f94f5de830e02237": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      72,
+      1.0
+     ]
+    ],
+    "f980b1bc658b884e": [],
+    "fa8b8b3ecb2e1bff": [
+     [
+      "Phone (International)",
+      "phone",
+      23,
+      34,
+      1.0
+     ]
+    ],
+    "fa985962b494cf01": [],
+    "fac4f626f53ae547": [],
+    "fad54c6dd97ae964": [
+     [
+      "Phone (International)",
+      "phone",
+      55,
+      67,
+      1.0
+     ]
+    ],
+    "fb6ae42df5fc9dca": [],
+    "fb94e1e4e5dd971d": [],
+    "fc329e19ac999e86": [],
+    "fcab8c397e3a0ba9": [],
+    "fcc38cf43fe12893": [],
+    "fcef500466679498": [],
+    "fd005059a6ad556f": [],
+    "fdcd4e2340691aa0": [],
+    "ff83929ba2b1359f": [],
+    "ffc0f0b826dc2e29": []
+   }
+  }
+ },
+ "corpus": {
+  "cases": 554,
+  "key": "first 16 hex characters of sha256(text)",
+  "source": "eval/corpus/presidio (ADR 0021)"
+ },
+ "default": {
+  "configuration": "patterns",
+  "threshold": 0.5
+ },
+ "environment": {
+  "machine": "arm64",
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "python": "3.12.4"
+ },
+ "fidelity": {
+  "agreements": 60,
+  "claim": "the pattern names the adapter's spans carry are exactly the `pii_types` the tool's own scan() reports on the same text",
+  "sampled": 60
+ },
+ "generated_at": "2026-09-06",
+ "home_ground": null,
+ "label": "mcp-firewall (PII detector)",
+ "latency_ms": 0.01,
+ "model": null,
+ "notes": [
+  "four of its seven pattern names are read as the four categories both sides claim \u2014 `Credit Card`, `IBAN`, `Email Address`, `Phone (International)`; its `SSN (US)`, `AHV (Swiss SSN)` and `IPv4 Address` count for nothing either way.",
+  "PII detection ships **disabled** in mcp-firewall's default configuration (`pii.enabled = False`); it was switched on for this bench, as an operator who wants the feature would.",
+  "the detector reports the pattern names that fired and not their offsets, so the spans are taken from its own patterns run over the same text; the fidelity check holds the two to the same set of names."
+ ],
+ "scope": "the `PIIDetector` outbound stage \u2014 seven regular expressions, no checksum",
+ "tool": "mcp-firewall",
+ "versions": {
+  "mcp-firewall": "0.1.0",
+  "python": "3.12.4"
+ }
+}

@@ -97,14 +97,24 @@ def test_the_external_secrets_matrix_matches_its_harness():
     assert external_egress_harness.render_secrets(report, when=_when(committed)) + "\n" == committed
 
 
+def _mask_latency(text: str) -> str:
+    return re.sub(r"median \d+(?:\.\d+)? ms/case", "median [measured] ms/case", text)
+
+
 def test_the_comparison_matrix_matches_up_to_measured_latency():
     from limes.eval import comparison_harness
 
     committed = _committed("comparison.md")
     report = _or_skip(comparison_harness.compute)
     rendered = comparison_harness.render(report, when=_when(committed)) + "\n"
+    assert _mask_latency(rendered) == _mask_latency(committed)
 
-    def mask(text: str) -> str:
-        return re.sub(r"median \d+(?:\.\d+)? ms/case", "median [measured] ms/case", text)
 
-    assert mask(rendered) == mask(committed)
+@pytest.mark.parametrize("bench", ["pii", "secrets"])
+def test_the_egress_comparison_matrices_match_up_to_measured_latency(bench):
+    from limes.eval import egress_comparison_harness
+
+    committed = _committed(f"comparison_{bench}.md")
+    report = _or_skip(lambda: egress_comparison_harness.compute(bench))
+    rendered = egress_comparison_harness.render(report, when=_when(committed)) + "\n"
+    assert _mask_latency(rendered) == _mask_latency(committed)

@@ -37,6 +37,28 @@ One environment per tool, none of them the repository's::
     uv pip install --python rebuffenv/bin/python --no-deps -e .
     rebuffenv/bin/python scripts/bench_competitors.py --tool rebuff
 
+    # mcp-firewall (AGPL-3.0), a rule-based MCP gateway: its injection detector
+    # joins the injection table, its PII and secret scanners the two egress
+    # tables (ADR 0030)
+    uv venv fwenv --python 3.12
+    uv pip install --python fwenv/bin/python mcp-firewall==0.1.0
+    uv pip install --python fwenv/bin/python --no-deps -e .
+    fwenv/bin/python scripts/bench_competitors.py --tool mcp-firewall
+    fwenv/bin/python scripts/bench_competitors.py --bench pii --tool mcp-firewall
+    fwenv/bin/python scripts/bench_competitors.py --bench secrets --tool mcp-firewall
+
+    # Presidio (its analyzer, with spaCy's large English model) and detect-secrets
+    # share an environment; gitleaks is a binary on PATH, run with the catalogue
+    # configuration at the vendored commit, whose sha256 the corpus records
+    uv venv piienv --python 3.12
+    uv pip install --python piienv/bin/python presidio-analyzer==2.2.364 detect-secrets==1.5.0
+    uv pip install --python piienv/bin/python \
+        https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+    uv pip install --python piienv/bin/python --no-deps -e .
+    piienv/bin/python scripts/bench_competitors.py --bench pii --tool presidio
+    piienv/bin/python scripts/bench_competitors.py --bench secrets --tool detect-secrets
+    piienv/bin/python scripts/bench_competitors.py --bench secrets --tool gitleaks
+
 ``-e .`` installs limes itself, for one reason only: the case enumeration
 (:func:`limes.eval.comparison_harness.comparison_cases`) must be *the same
 function* on both sides, or the two files are about different texts and the join
@@ -68,12 +90,18 @@ witness that only asserts is not a witness (ADR 0026).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import random
+import re
+import shutil
 import statistics
+import subprocess
 import sys
+import tempfile
 import time
+import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -82,6 +110,11 @@ from pathlib import Path
 from typing import Any
 
 from limes.eval.comparison_harness import ComparisonCase, comparison_cases, unique_cases
+from limes.eval.egress_comparison_harness import (
+    EgressCase,
+    egress_cases,
+    unique_egress_cases,
+)
 
 #: How many cases each fidelity and latency probe draws. Fixed here, before any
 #: number is known: a sample size chosen after a result is a preference.
@@ -584,12 +617,781 @@ def _rebuff_score(text: str) -> float:
     return highest
 
 
+# --- mcp-firewall (ADR 0030) -------------------------------------------------
+
+
+def _firewall_versions() -> dict[str, str]:
+    return {
+        "mcp-firewall": distribution_version("mcp-firewall"),
+        "python": platform.python_version(),
+    }
+
+
+def bench_mcp_firewall(cases: Sequence[ComparisonCase]) -> Bench:
+    """Run mcp-firewall's pattern-based injection detector, at each of its three sensitivities.
+
+    The detector reads a tool call's arguments, so each case is handed to it as
+    the one string argument of a tool call — which is how a deployment meets it.
+    A rule matches or it does not: the recorded score is ``1.0`` for a refusal
+    and ``0.0`` otherwise, and the tool has no threshold of its own to choose.
+
+    Args:
+        cases: One entry per distinct text.
+
+    Returns:
+        The bench, one configuration per sensitivity; ``medium`` is the default.
+    """
+    from mcp_firewall.models import GatewayConfig, ToolCallRequest
+    from mcp_firewall.pipeline.inbound.injection import SENSITIVITY_MAP, InjectionDetector
+
+    detector = InjectionDetector()
+    config = GatewayConfig()
+    default_sensitivity = config.injection.sensitivity
+
+    def refuses(text: str, sensitivity: str) -> bool:
+        config.injection.sensitivity = sensitivity
+        request = ToolCallRequest(tool_name="tool", arguments={"text": text})
+        return detector.evaluate(request, config) is not None
+
+    bench = Bench(
+        tool="mcp-firewall",
+        label="mcp-firewall (pattern injection detector)",
+        scope=(
+            "the `InjectionDetector` inbound stage — a fixed list of regular expressions "
+            "over the flattened tool-call arguments — at each sensitivity it ships"
+        ),
+        versions=_firewall_versions(),
+        default_configuration=default_sensitivity,
+        default_threshold=0.5,
+        notes=[
+            f"`{default_sensitivity}` is the sensitivity mcp-firewall's `GatewayConfig` "
+            "ships with; `low` and `high` are its other two settings, recorded so the dev "
+            "split can pick between them.",
+            "the detector has no score: a pattern matches or it does not, so its recorded "
+            "score is 1 or 0 and the operating points collapse to one per sensitivity.",
+            "each case is handed over as the single string argument of a tool call, which is "
+            "what the detector reads in deployment; it flattens the argument name into the "
+            "searched text, so the word `text` precedes every case.",
+        ],
+    )
+    for sensitivity, patterns in SENSITIVITY_MAP.items():
+        scores: dict[str, float] = {}
+        for case in cases:
+            scores[case.key] = 1.0 if refuses(case.text, sensitivity) else 0.0
+        bench.configurations[sensitivity] = {
+            "description": f"sensitivity `{sensitivity}` — {len(patterns)} pattern(s)",
+            "scores": scores,
+        }
+
+    sample = _probe_sample(cases)
+    fresh = InjectionDetector()
+    fresh_config = GatewayConfig()
+    agreements = 0
+    latencies: list[float] = []
+    for case in sample:
+        request = ToolCallRequest(tool_name="tool", arguments={"text": case.text})
+        started = time.perf_counter()
+        decision = fresh.evaluate(request, fresh_config)
+        latencies.append((time.perf_counter() - started) * 1000)
+        recorded = bench.configurations[default_sensitivity]["scores"][case.key] > 0.5
+        agreements += int((decision is not None) == recorded)
+    bench.fidelity = {
+        "claim": (
+            "a fresh detector under a fresh default config refuses exactly the sampled "
+            "cases the recorded default configuration scored 1.0 — the adapter adds nothing "
+            "between the tool and the number"
+        ),
+        "sampled": len(sample),
+        "agreements": agreements,
+    }
+    bench.latency_ms = round(statistics.median(latencies), 2)
+    return bench
+
+
 ADAPTERS: dict[str, Callable[[Sequence[ComparisonCase]], Bench]] = {
     "llm-guard": bench_llm_guard,
     "rebuff": bench_rebuff,
     "deberta-injection-v2": bench_deberta_injection_v2,
     "deepset-injection": bench_deepset_injection,
+    "mcp-firewall": bench_mcp_firewall,
 }
+
+
+# --- the egress benches: PII and secrets (ADR 0030) -----------------------------
+
+#: One recorded finding: the tool's own kind, the limes category it maps to (or
+#: None), the span in the case text, and the tool's score (1.0 when it has none).
+type RecordedFinding = list[Any]
+
+#: Presidio's entity types for the four categories both sides claim. Its other
+#: fifteen types are recorded with a null category: neither credited nor charged.
+_PRESIDIO_CATEGORIES = {
+    "CREDIT_CARD": "pan",
+    "IBAN_CODE": "iban",
+    "EMAIL_ADDRESS": "email",
+    "PHONE_NUMBER": "phone",
+}
+
+#: mcp-firewall's PII pattern names for the same four categories.
+_FIREWALL_PII_CATEGORIES = {
+    "Credit Card": "pan",
+    "IBAN": "iban",
+    "Email Address": "email",
+    "Phone (International)": "phone",
+}
+
+
+@dataclass(slots=True)
+class EgressBench:
+    """Everything one tool's egress run produced, ready to serialise.
+
+    Attributes:
+        bench: ``pii`` or ``secrets``.
+        tool: The results file's stem, and the name the harness declares.
+        label: How the tool is named in the matrix.
+        scope: What was actually run.
+        versions: Every version that could move the number.
+        default_configuration: The vendor's own configuration.
+        default_threshold: The vendor's own threshold (``0.5`` for a boolean tool).
+        configurations: ``{name: {"description": str, "findings": {key: [finding, ...]}}}``.
+        model: The model identity, or ``None``.
+        notes: What a reader must know before believing the row.
+        fidelity: What was checked about this adapter, and how it came out.
+        latency_ms: Median milliseconds per case, measured as a deployer runs it.
+        home_ground: Why this corpus is the tool's own material, or ``None``.
+    """
+
+    bench: str
+    tool: str
+    label: str
+    scope: str
+    versions: dict[str, str]
+    default_configuration: str
+    default_threshold: float
+    configurations: dict[str, dict[str, Any]] = field(default_factory=dict)
+    model: dict[str, str] | None = None
+    notes: list[str] = field(default_factory=list)
+    fidelity: dict[str, Any] = field(default_factory=dict)
+    latency_ms: float | None = None
+    home_ground: str | None = None
+
+
+def _egress_sample(cases: Sequence[EgressCase]) -> list[EgressCase]:
+    sampler = random.Random(PROBE_SEED)
+    return sampler.sample(list(cases), min(PROBE_SAMPLE, len(cases)))
+
+
+def _regex_findings(
+    text: str, patterns: Sequence[tuple[str, str]], categories: dict[str, str]
+) -> list[RecordedFinding]:
+    found: list[RecordedFinding] = []
+    for name, pattern in patterns:
+        for match in re.finditer(pattern, text):
+            found.append([name, categories.get(name), match.start(), match.end(), 1.0])
+    return found
+
+
+def bench_presidio(cases: Sequence[EgressCase]) -> EgressBench:
+    """Run Microsoft Presidio's analyzer, every recogniser it ships, on the PII sentences.
+
+    Args:
+        cases: One entry per distinct text.
+
+    Returns:
+        The bench, with the analyzer's default threshold (0) as the vendor row.
+    """
+    import spacy
+    from presidio_analyzer import AnalyzerEngine
+
+    engine = AnalyzerEngine()
+    model_name = "en_core_web_lg"
+    model_version = spacy.load(model_name).meta["version"]
+    findings: dict[str, list[RecordedFinding]] = {}
+    started = time.perf_counter()
+    for index, case in enumerate(cases, start=1):
+        results = engine.analyze(text=case.text, language="en")
+        findings[case.key] = [
+            [
+                result.entity_type,
+                _PRESIDIO_CATEGORIES.get(result.entity_type),
+                result.start,
+                result.end,
+                float(result.score),
+            ]
+            for result in results
+        ]
+        if index % 200 == 0:
+            print(
+                f"  analyzer: {index}/{len(cases)} ({time.perf_counter() - started:.0f}s)",
+                file=sys.stderr,
+            )
+
+    bench = EgressBench(
+        bench="pii",
+        tool="presidio",
+        label="Presidio analyzer (Microsoft)",
+        scope=(
+            "`AnalyzerEngine.analyze(language='en')` with every recogniser the library "
+            "ships and spaCy's large English model — the whole analyzer, as installed"
+        ),
+        versions={
+            "presidio-analyzer": distribution_version("presidio-analyzer"),
+            "spacy": distribution_version("spacy"),
+            "python": platform.python_version(),
+        },
+        model={"name": model_name, "revision": model_version},
+        default_configuration="analyzer",
+        default_threshold=float(engine.default_score_threshold),
+        notes=[
+            "four of its entity types are read as the four categories both sides claim — "
+            "`CREDIT_CARD`, `IBAN_CODE`, `EMAIL_ADDRESS`, `PHONE_NUMBER`; its other fifteen "
+            "(names, dates, places, US identifiers…) are recorded and count for nothing "
+            "either way.",
+            f"the vendor threshold {engine.default_score_threshold:g} is the analyzer's own "
+            "`default_score_threshold`; each recogniser scores its own findings (a checksum-"
+            "valid card or IBAN at 1.0, a phone number at 0.4), and the dev split chooses the "
+            "cut for the tuned rows.",
+            "**home ground for the prose**: the sentence templates are presidio-research's, "
+            "the Presidio project's own evaluation material. The values inside them are "
+            "limes's synthetic vectors.",
+        ],
+        home_ground=(
+            "The PII sentences are presidio-research's — the Presidio project's own "
+            "evaluation templates — so Presidio meets prose its project wrote; the values "
+            "inside them are limes's."
+        ),
+    )
+    bench.configurations["analyzer"] = {
+        "description": "every shipped recogniser, English, spaCy en_core_web_lg",
+        "findings": findings,
+    }
+
+    # Presidio applies its threshold itself; the harness applies the recorded scores
+    # with `score > threshold`. The two must name the same findings at a cut the
+    # vendor did not choose, and the comparison Presidio uses is recorded rather
+    # than assumed.
+    probe = 0.5
+    sample = _egress_sample(cases)
+    agreements = 0
+    latencies: list[float] = []
+    for case in sample:
+        started = time.perf_counter()
+        results = engine.analyze(text=case.text, language="en", score_threshold=probe)
+        latencies.append((time.perf_counter() - started) * 1000)
+        theirs = {(r.entity_type, r.start, r.end) for r in results}
+        mine = {
+            (kind, start, end)
+            for kind, _, start, end, score in findings[case.key]
+            if score >= probe
+        }
+        agreements += int(theirs == mine)
+    bench.fidelity = {
+        "claim": (
+            f"at score_threshold={probe}, analyze()'s own filtering names exactly the recorded "
+            "findings with score >= threshold (Presidio keeps a score equal to the cut; the "
+            "harness's `score > threshold` is therefore stricter by at most the cut itself)"
+        ),
+        "sampled": len(sample),
+        "agreements": agreements,
+    }
+    bench.latency_ms = round(statistics.median(latencies), 2)
+    return bench
+
+
+def bench_firewall_pii(cases: Sequence[EgressCase]) -> EgressBench:
+    """Run mcp-firewall's PII detector — seven regular expressions — over the PII sentences.
+
+    Args:
+        cases: One entry per distinct text.
+
+    Returns:
+        The bench.
+    """
+    from mcp_firewall.models import GatewayConfig, ToolCallResponse
+    from mcp_firewall.pipeline.outbound.pii import PII_PATTERNS, PIIDetector
+
+    config = GatewayConfig()
+    shipped_enabled = config.pii.enabled
+    config.pii.enabled = True
+    detector = PIIDetector()
+    findings = {
+        case.key: _regex_findings(case.text, PII_PATTERNS, _FIREWALL_PII_CATEGORIES)
+        for case in cases
+    }
+    bench = EgressBench(
+        bench="pii",
+        tool="mcp-firewall",
+        label="mcp-firewall (PII detector)",
+        scope="the `PIIDetector` outbound stage — seven regular expressions, no checksum",
+        versions=_firewall_versions(),
+        default_configuration="patterns",
+        default_threshold=0.5,
+        notes=[
+            "four of its seven pattern names are read as the four categories both sides "
+            "claim — `Credit Card`, `IBAN`, `Email Address`, `Phone (International)`; its "
+            "`SSN (US)`, `AHV (Swiss SSN)` and `IPv4 Address` count for nothing either way.",
+            (
+                "PII detection ships **disabled** in mcp-firewall's default configuration "
+                "(`pii.enabled = False`); it was switched on for this bench, as an operator "
+                "who wants the feature would."
+                if not shipped_enabled
+                else "PII detection ships enabled in mcp-firewall's default configuration."
+            ),
+            "the detector reports the pattern names that fired and not their offsets, so the "
+            "spans are taken from its own patterns run over the same text; the fidelity check "
+            "holds the two to the same set of names.",
+        ],
+    )
+    bench.configurations["patterns"] = {
+        "description": "PII_PATTERNS, as shipped, over the text of a tool response",
+        "findings": findings,
+    }
+    sample = _egress_sample(cases)
+    agreements = 0
+    latencies: list[float] = []
+    for case in sample:
+        response = ToolCallResponse(request_id="r", content=[{"type": "text", "text": case.text}])
+        started = time.perf_counter()
+        _, decision = detector.scan(response, config)
+        latencies.append((time.perf_counter() - started) * 1000)
+        theirs = set(decision.details.get("pii_types", ())) if decision is not None else set()
+        mine = {kind for kind, *_ in findings[case.key]}
+        agreements += int(theirs == mine)
+    bench.fidelity = {
+        "claim": (
+            "the pattern names the adapter's spans carry are exactly the `pii_types` the "
+            "tool's own scan() reports on the same text"
+        ),
+        "sampled": len(sample),
+        "agreements": agreements,
+    }
+    bench.latency_ms = round(statistics.median(latencies), 2)
+    return bench
+
+
+def bench_firewall_secrets(cases: Sequence[EgressCase]) -> EgressBench:
+    """Run mcp-firewall's secret scanner — seventeen regular expressions — over the catalogue.
+
+    Args:
+        cases: One entry per distinct text.
+
+    Returns:
+        The bench.
+    """
+    from mcp_firewall.models import GatewayConfig, ToolCallResponse
+    from mcp_firewall.pipeline.outbound.secrets import SECRET_PATTERNS, SecretScanner
+
+    config = GatewayConfig()
+    scanner = SecretScanner()
+    patterns = [(name, pattern) for name, pattern, _ in SECRET_PATTERNS]
+    findings = {case.key: _regex_findings(case.text, patterns, {}) for case in cases}
+    bench = EgressBench(
+        bench="secrets",
+        tool="mcp-firewall",
+        label="mcp-firewall (secret scanner)",
+        scope="the `SecretScanner` outbound stage — seventeen regular expressions, no validator",
+        versions=_firewall_versions(),
+        default_configuration="patterns",
+        default_threshold=0.5,
+        notes=[
+            "secret scanning ships enabled, action `redact`; the scan's decision carries "
+            "the names of the patterns that fired, which the fidelity check compares against "
+            "the adapter's spans.",
+            "the scanner reports pattern names and not offsets, so the spans are taken from "
+            "its own patterns run over the same text.",
+        ],
+    )
+    bench.configurations["patterns"] = {
+        "description": "SECRET_PATTERNS, as shipped, over the text of a tool response",
+        "findings": findings,
+    }
+    sample = _egress_sample(cases)
+    agreements = 0
+    latencies: list[float] = []
+    for case in sample:
+        response = ToolCallResponse(request_id="r", content=[{"type": "text", "text": case.text}])
+        started = time.perf_counter()
+        _, decision = scanner.scan(response, config)
+        latencies.append((time.perf_counter() - started) * 1000)
+        theirs = (
+            {entry["name"] for entry in decision.details.get("findings", ())}
+            if decision is not None
+            else set()
+        )
+        mine = {kind for kind, *_ in findings[case.key]}
+        agreements += int(theirs == mine)
+    bench.fidelity = {
+        "claim": (
+            "the pattern names the adapter's spans carry are exactly the findings the tool's "
+            "own scan() reports on the same text"
+        ),
+        "sampled": len(sample),
+        "agreements": agreements,
+    }
+    bench.latency_ms = round(statistics.median(latencies), 2)
+    return bench
+
+
+def _span_of(text: str, secret: str) -> tuple[int, int] | None:
+    start = text.find(secret)
+    return None if start < 0 or not secret else (start, start + len(secret))
+
+
+def bench_detect_secrets(cases: Sequence[EgressCase]) -> EgressBench:
+    """Run Yelp's detect-secrets in both of its shipped modes over the catalogue.
+
+    ``file`` is how the tool ships — a file scanned by every default plugin, whose
+    entropy plugins read quoted strings. ``adhoc`` is its ``--string`` path, which
+    searches every whitespace-separated token eagerly. Both are honest
+    configurations of the same tool; the dev split chooses between them.
+
+    Args:
+        cases: One entry per distinct text.
+
+    Returns:
+        The bench, ``file`` as the vendor default.
+    """
+    from detect_secrets.core import scan
+    from detect_secrets.settings import default_settings
+
+    file_findings: dict[str, list[RecordedFinding]] = {}
+    adhoc_findings: dict[str, list[RecordedFinding]] = {}
+    latencies: list[float] = []
+    sample_keys = {case.key for case in _egress_sample(cases)}
+    with tempfile.TemporaryDirectory() as directory:
+        for case in cases:
+            path = Path(directory) / f"{case.key}.txt"
+            path.write_text(case.text, encoding="utf-8")
+            with default_settings():
+                started = time.perf_counter()
+                secrets = list(scan.scan_file(str(path)))
+                if case.key in sample_keys:
+                    latencies.append((time.perf_counter() - started) * 1000)
+            found: list[RecordedFinding] = []
+            for secret in secrets:
+                span = _span_of(case.text, secret.secret_value or "")
+                if span is not None:
+                    found.append([secret.type, None, span[0], span[1], 1.0])
+            file_findings[case.key] = found
+            with default_settings():
+                adhoc = list(scan.scan_line(case.text))
+            found = []
+            for secret in adhoc:
+                span = _span_of(case.text, secret.secret_value or "")
+                if span is not None:
+                    found.append([secret.type, None, span[0], span[1], 1.0])
+            adhoc_findings[case.key] = found
+
+        # The adapter calls the library; the CLI is what a deployer runs. On a
+        # sample, the CLI's own baseline output must name the same plugin types.
+        agreements = 0
+        sampled = 0
+        for case in cases:
+            if case.key not in sample_keys:
+                continue
+            sampled += 1
+            path = Path(directory) / f"{case.key}.txt"
+            completed = subprocess.run(
+                [sys.executable, "-m", "detect_secrets", "scan", "--no-verify", str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=directory,
+            )
+            baseline = json.loads(completed.stdout) if completed.stdout.strip() else {}
+            theirs = {
+                entry["type"]
+                for entries in baseline.get("results", {}).values()
+                for entry in entries
+            }
+            mine = {kind for kind, *_ in file_findings[case.key]}
+            agreements += int(theirs == mine)
+
+    bench = EgressBench(
+        bench="secrets",
+        tool="detect-secrets",
+        label="detect-secrets (Yelp)",
+        scope=(
+            "every default plugin, over a file per case (`file`) and over the bare string (`adhoc`)"
+        ),
+        versions={
+            "detect-secrets": distribution_version("detect-secrets"),
+            "python": platform.python_version(),
+        },
+        default_configuration="file",
+        default_threshold=0.5,
+        notes=[
+            "`file` is the tool as shipped: a file scanned by its default plugins, whose "
+            "high-entropy plugins read quoted strings and leave prose alone. `adhoc` is its "
+            "`--string` path, which searches every token eagerly and flags ordinary words as "
+            "high-entropy; both are recorded and the dev split chose between them.",
+            "a plugin reports the secret value it matched, and the span is that value's "
+            "position in the text; the GitHub plugin reports only the token's prefix, which "
+            "still sits inside the token and is credited as located.",
+            "the command line verifies some findings against the vendor's API by default — a "
+            "Slack token is checked with Slack — and drops a token the vendor rejects; the "
+            "fidelity check runs it with `--no-verify`, so the number is offline and does not "
+            "depend on a third party's answer about a synthetic token. The library path the "
+            "adapter calls does not verify.",
+            "a source-code scanner, not a text guard: nothing here is a criticism of the tool "
+            "on the ground it was built for.",
+        ],
+    )
+    bench.configurations["file"] = {
+        "description": "scan_file over one file per case, default plugins",
+        "findings": file_findings,
+    }
+    bench.configurations["adhoc"] = {
+        "description": "scan_line over the bare text — the `--string` path, eager search",
+        "findings": adhoc_findings,
+    }
+    bench.fidelity = {
+        "claim": (
+            "on the sample, `detect-secrets scan --no-verify <file>` from the command line "
+            "names exactly the plugin types the adapter's `file` findings carry"
+        ),
+        "sampled": sampled,
+        "agreements": agreements,
+    }
+    bench.latency_ms = round(statistics.median(latencies), 2) if latencies else None
+    return bench
+
+
+def bench_gitleaks(cases: Sequence[EgressCase]) -> EgressBench:
+    """Run the gitleaks binary over the catalogue it was generated from, and say so.
+
+    The configuration is the catalogue at the vendored commit — fetched, checked
+    against the sha256 the corpus records, and passed with ``--config`` — so the
+    rules the tool runs are byte-for-byte the rules the instances were made from.
+    A binary of any newer version then scores the corpus's rules, not its own.
+
+    Args:
+        cases: One entry per distinct text.
+
+    Returns:
+        The bench, marked home ground.
+
+    Raises:
+        SystemExit: No ``gitleaks`` on PATH, or the fetched configuration does not
+            hash to what the corpus records — a number over drifted rules would be
+            about the drift.
+    """
+    from limes.eval.external_egress_corpus import load_secrets_external
+
+    binary = shutil.which("gitleaks")
+    if binary is None:
+        raise SystemExit("cannot say: no `gitleaks` binary on PATH")
+    version = subprocess.run([binary, "version"], capture_output=True, text=True, check=True)
+    source = load_secrets_external().source
+    commit = str(source["commit"])
+    expected_sha = str(source["config_sha256"])
+    url = f"https://raw.githubusercontent.com/gitleaks/gitleaks/{commit}/{source['config_path']}"
+    with urllib.request.urlopen(url, timeout=60) as response:
+        config_bytes = response.read()
+    actual_sha = hashlib.sha256(config_bytes).hexdigest()
+    if actual_sha != expected_sha:
+        raise SystemExit(
+            f"cannot say: the catalogue configuration at {commit[:12]} hashes to {actual_sha}, "
+            f"and the corpus records {expected_sha}"
+        )
+
+    findings: dict[str, list[RecordedFinding]] = {case.key: [] for case in cases}
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        config_path = root / "gitleaks.toml"
+        config_path.write_bytes(config_bytes)
+        target = root / "cases"
+        target.mkdir()
+        for case in cases:
+            (target / f"{case.key}.txt").write_text(case.text, encoding="utf-8")
+        report = root / "report.json"
+        subprocess.run(
+            [
+                binary,
+                "dir",
+                str(target),
+                "--config",
+                str(config_path),
+                "--report-format",
+                "json",
+                "--report-path",
+                str(report),
+                "--exit-code",
+                "0",
+                "--no-banner",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        entries = json.loads(report.read_text(encoding="utf-8")) if report.is_file() else []
+        by_key = {case.key: case for case in cases}
+        for entry in entries or []:
+            key = Path(entry["File"]).stem
+            case = by_key.get(key)
+            if case is None:
+                continue
+            secret = str(entry.get("Secret") or entry.get("Match") or "")
+            span = _span_of(case.text, secret)
+            if span is not None:
+                findings[key].append([entry["RuleID"], None, span[0], span[1], 1.0])
+
+        # Two invocation paths, one answer: the per-payload path a deployer would
+        # use (`gitleaks stdin`) must name the same rules as the directory scan.
+        sample = _egress_sample(cases)
+        agreements = 0
+        latencies: list[float] = []
+        for case in sample:
+            started = time.perf_counter()
+            completed = subprocess.run(
+                [
+                    binary,
+                    "stdin",
+                    "--config",
+                    str(config_path),
+                    "--report-format",
+                    "json",
+                    "--report-path",
+                    str(root / "stdin.json"),
+                    "--exit-code",
+                    "0",
+                    "--no-banner",
+                ],
+                input=case.text,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            latencies.append((time.perf_counter() - started) * 1000)
+            stdin_report = root / "stdin.json"
+            theirs_entries = (
+                json.loads(stdin_report.read_text(encoding="utf-8"))
+                if stdin_report.is_file()
+                else []
+            )
+            theirs = {str(e["RuleID"]) for e in theirs_entries or []}
+            mine = {kind for kind, *_ in findings[case.key]}
+            agreements += int(theirs == mine and completed.returncode == 0)
+
+    bench = EgressBench(
+        bench="secrets",
+        tool="gitleaks",
+        label="gitleaks",
+        scope=(
+            "the `gitleaks` binary over one file per case, with the catalogue configuration "
+            f"at the vendored commit `{commit[:12]}` passed as `--config`"
+        ),
+        versions={
+            "gitleaks": version.stdout.strip(),
+            "config": f"{commit[:12]} (sha256 {expected_sha[:12]}…)",
+        },
+        default_configuration="dir",
+        default_threshold=0.5,
+        notes=[
+            "**home ground**: every positive here was generated from a gitleaks regex and "
+            "verified against it, and every negative is a vector gitleaks' own allowlists were "
+            "written to pass. This row is a ceiling and a check on the corpus, not a "
+            "comparison.",
+            "the configuration is the catalogue at the commit the corpus was vendored from, "
+            "checked against the sha256 the corpus records, so the binary scores the corpus's "
+            "own rules and not a newer catalogue's.",
+            "a rule matches or it does not: the recorded score is 1, and there is no "
+            "threshold to choose.",
+            "latency is one `gitleaks stdin` process per payload, the path a deployer would "
+            "run on each tool result, process start included.",
+        ],
+        home_ground=(
+            "The secrets corpus is gitleaks' own catalogue: every positive was generated from a "
+            "gitleaks regex and every negative is a vector its allowlists were written to pass."
+        ),
+    )
+    bench.configurations["dir"] = {
+        "description": "`gitleaks dir` over one file per case, pinned catalogue configuration",
+        "findings": findings,
+    }
+    bench.fidelity = {
+        "claim": (
+            "on the sample, a per-payload `gitleaks stdin` run names exactly the rules the "
+            "directory scan recorded for that case"
+        ),
+        "sampled": len(sample),
+        "agreements": agreements,
+    }
+    bench.latency_ms = round(statistics.median(latencies), 2) if latencies else None
+    return bench
+
+
+EGRESS_ADAPTERS: dict[str, dict[str, Callable[[Sequence[EgressCase]], EgressBench]]] = {
+    "pii": {"presidio": bench_presidio, "mcp-firewall": bench_firewall_pii},
+    "secrets": {
+        "gitleaks": bench_gitleaks,
+        "detect-secrets": bench_detect_secrets,
+        "mcp-firewall": bench_firewall_secrets,
+    },
+}
+
+
+def write_egress(bench: EgressBench, cases: Sequence[EgressCase], out: Path) -> Path:
+    """Write one tool's egress results, refusing anything a reader could not check.
+
+    Args:
+        bench: What the run produced.
+        cases: The distinct cases it was asked to score.
+        out: The directory to write into (``.../comparison/<bench>``).
+
+    Returns:
+        The path written.
+
+    Raises:
+        SystemExit: Two distinct texts share a key, or a configuration covers
+            fewer cases than it was handed.
+    """
+    keys = {case.key for case in cases}
+    if len(keys) != len(cases):
+        raise SystemExit("cannot say: two distinct texts share a 16-hex case key.")
+    for name, configuration in bench.configurations.items():
+        missing = keys - set(configuration["findings"])
+        if missing:
+            raise SystemExit(
+                f"cannot say: configuration {name!r} covers {len(configuration['findings'])} of "
+                f"{len(keys)} cases; a partial run must not be written as a whole one."
+            )
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"{bench.tool}.results.json"
+    payload = {
+        "bench": bench.bench,
+        "tool": bench.tool,
+        "label": bench.label,
+        "scope": bench.scope,
+        "generated_at": date.today().isoformat(),
+        "environment": {
+            "python": platform.python_version(),
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+        },
+        "versions": bench.versions,
+        "model": bench.model,
+        "default": {
+            "configuration": bench.default_configuration,
+            "threshold": bench.default_threshold,
+        },
+        "corpus": {
+            "source": (
+                "eval/corpus/presidio (ADR 0021)"
+                if bench.bench == "pii"
+                else "eval/corpus/gitleaks (ADR 0021)"
+            ),
+            "cases": len(cases),
+            "key": "first 16 hex characters of sha256(text)",
+        },
+        "home_ground": bench.home_ground,
+        "fidelity": bench.fidelity,
+        "latency_ms": bench.latency_ms,
+        "notes": bench.notes,
+        "configurations": bench.configurations,
+    }
+    path.write_text(json.dumps(payload, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def write(bench: Bench, cases: Sequence[ComparisonCase], out: Path) -> Path:
@@ -656,25 +1458,46 @@ def write(bench: Bench, cases: Sequence[ComparisonCase], out: Path) -> Path:
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="bench one competitor on garak's corpus (ADR 0020)"
+        description="bench one competitor on the corpus limes is scored on (ADR 0020, ADR 0030)"
     )
-    parser.add_argument("--tool", required=True, choices=sorted(ADAPTERS), help="which tool to run")
+    parser.add_argument(
+        "--bench",
+        choices=("injection", *sorted(EGRESS_ADAPTERS)),
+        default="injection",
+        help="which table to bench for (default: injection, on garak's corpus)",
+    )
+    tools = sorted(set(ADAPTERS) | {t for adapters in EGRESS_ADAPTERS.values() for t in adapters})
+    parser.add_argument("--tool", required=True, choices=tools, help="which tool to run")
     parser.add_argument(
         "--out",
         type=Path,
         default=Path(__file__).resolve().parents[1] / "eval" / "matrices" / "comparison",
-        help="directory for the results file",
+        help="directory for the results files (an egress bench writes into a subdirectory)",
     )
     arguments = parser.parse_args()
 
-    cases = unique_cases(comparison_cases())
-    print(f"{arguments.tool}: {len(cases)} distinct cases", file=sys.stderr)
     started = time.perf_counter()
-    bench = ADAPTERS[arguments.tool](cases)
-    path = write(bench, cases, arguments.out)
+    if arguments.bench == "injection":
+        if arguments.tool not in ADAPTERS:
+            parser.error(f"{arguments.tool} has no injection adapter")
+        cases = unique_cases(comparison_cases())
+        print(f"{arguments.tool}: {len(cases)} distinct cases", file=sys.stderr)
+        bench = ADAPTERS[arguments.tool](cases)
+        path = write(bench, cases, arguments.out)
+        configurations = len(bench.configurations)
+    else:
+        adapters = EGRESS_ADAPTERS[arguments.bench]
+        if arguments.tool not in adapters:
+            parser.error(f"{arguments.tool} has no {arguments.bench} adapter")
+        egress = unique_egress_cases(egress_cases(arguments.bench))
+        print(
+            f"{arguments.tool} ({arguments.bench}): {len(egress)} distinct cases", file=sys.stderr
+        )
+        egress_bench = adapters[arguments.tool](egress)
+        path = write_egress(egress_bench, egress, arguments.out / arguments.bench)
+        configurations = len(egress_bench.configurations)
     print(
-        f"wrote {path} in {time.perf_counter() - started:.0f}s "
-        f"({len(bench.configurations)} configuration(s))",
+        f"wrote {path} in {time.perf_counter() - started:.0f}s ({configurations} configuration(s))",
         file=sys.stderr,
     )
 

@@ -118,8 +118,9 @@ Every tool named on this page publishes numbers about itself. So does limes.
 **None of them are comparable** — different corpora, different thresholds,
 different definitions of a hit — and putting two of them side by side would
 produce a table that reads like a measurement and is not one. So limes ran them:
-llm-guard, rebuff, and two bare injection classifiers, **here**, on garak's
-corpus, with one grader (ADR 0020). Nothing below is quoted from a vendor.
+llm-guard, rebuff, two bare injection classifiers and mcp-firewall's pattern
+detector, **here**, on garak's corpus, with one grader (ADR 0020, ADR 0030).
+Nothing below is quoted from a vendor.
 
 **limes gives up its entire argument to enter this table.** The grader is a
 boolean — no located span, no policy hash, no evidence that replays, no
@@ -138,6 +139,7 @@ alone, then frozen:
 | deepset, bare — at zero dev FP | 100/280 (36 %) | 113/131 (86 %) | 5/100 | 58 ms |
 | rebuff heuristics — its own default | 6/280 (2 %) | 0/131 (0 %) | 0/100 | 5 127 ms |
 | rebuff heuristics — dev-tuned | 105/280 (38 %) | 107/131 (82 %) | 19/100 | 5 127 ms |
+| mcp-firewall — pattern detector, its own default | 10/280 (4 %) | 0/131 (0 %) | 0/100 | 0.1 ms |
 
 **A denominator that is not a sample size.** garak materialises many prompts from
 one attack template. Measured: the held-out column's 280 prompts come from **8**
@@ -163,7 +165,11 @@ outright, and splits the third.**
    24 % against 3 %. Not because the classifier is weak: llm-guard's shipped
    `MatchType.FULL` truncates at 512 tokens and garak's résumés run well past it.
    On the family that *fits* — short goal hijacks — the same default beats limes,
-   96 % against 82 %.
+   96 % against 82 %. The other rules engine in the table, mcp-firewall's
+   thirteen shipped patterns, catches 4 % and none of the hijacks — its override
+   pattern wants *previous instructions* adjacent, and garak's says *previous and
+   following* — and kills nothing; its `high` sensitivity kills more clean
+   documents than it catches attacks on `dev`, so no tuned row is published.
 2. **Tuned, the classifier is simply the better detector, and limes is nowhere
    near it** — 88 % against 24 %. It costs 18 clean documents per 100 where limes
    costs none, and a recall gap that size is not something a rules engine argues
@@ -215,6 +221,67 @@ garak's sources, which favours them. And **rebuff is under-represented on
 purpose**: its deployed detector is heuristics plus an LLM judge plus a vector
 store of past attacks plus canary tokens, and only the heuristics run offline —
 its row is a floor for rebuff, never a measurement of rebuff.
+
+### …and the two other legs — personal data and secrets, against the tools that claim them
+
+Since 0.16.0 the data detectors have their own head-to-heads (ADR 0030), on the
+external corpora of ADR 0021, under the located-span grader every egress matrix
+uses: a hit is a finding at the value's exact offsets (PII) or wholly inside the
+vendored token (secrets), and a tool that fires on the whole message locates
+nothing. One rule is new and marked in the tables with ⚑: **the author of the
+ground is a contestant** — gitleaks on gitleaks' catalogue, Presidio on
+presidio-research's sentences — and its row is a ceiling and a sanity check, not
+a comparison.
+
+**Personal data** — 289 values in 42 sentences nobody here wrote, each value
+paired with a *decoy* (same shape, checksum broken) and with the sentence
+*without* the value. Only the four categories both sides claim are counted; a
+competitor's names, dates and places are neither credited nor charged.
+
+| | values located (held out) | checksum-invalid decoys killed (all 289) | median |
+|---|---|---|---|
+| **limes** `pii-egress` | **104/104 (100 %)** | **6** | **0.01 ms** |
+| Presidio ⚑ — its own default | 104/104 (100 %) | 61 | 5 ms |
+| Presidio ⚑ — held to limes's precision | 77/104 (74 %) | 3 | 5 ms |
+| mcp-firewall PII detector | 34/104 (33 %) | 107 | 0.01 ms |
+| Tessera output guard (ported) | 79/104 (76 %) | 171 | 0.01 ms |
+
+Both limes and Presidio locate every value. The difference is what a broken
+checksum costs: Presidio's phone recogniser accepts the eight-digit decoys
+limes's E.164 gate rejects (55 of its 61 kills), and held to limes's precision it
+gives up phones entirely. limes's six are the Luhn coincidence ADR 0021 Am. 2
+kept on purpose. **A checksum beats a confidence score at the precision a guard
+runs at**; Presidio detects fifteen kinds of thing limes does not claim, and this
+table says nothing about them.
+
+**Secrets** — gitleaks' catalogue: 218 formats materialised from its own regexes,
+339 of its own hard negatives. Two questions, because the census and the
+perimeter are different questions:
+
+| | the census: 218 formats located | hard negatives killed (339) | **held to the 19 formats limes claims** | median |
+|---|---|---|---|---|
+| gitleaks ⚑ (pinned to the vendored catalogue) | 194 (89 %) | 16 (5 %) | **16/19** | 27 ms (one process per payload) |
+| **limes** `secrets-egress` | 16 (7 %) | 33 (10 %) | **14/19** | **0.02 ms** |
+| detect-secrets — as shipped (`file`) | 31 (14 %) | 53 (16 %) | 12/19 | 0.7 ms |
+| detect-secrets — its `--string` path | 218 (100 %) | **317 (94 %)** | 19/19 | 0.7 ms |
+| mcp-firewall secret scanner | 14 (6 %) | 46 (14 %) | 11/19 | 0.01 ms |
+
+The census column says what it always said: limes's perimeter is small and
+stated. The perimeter column is the fair one, and it names limes's five misses
+one by one in the matrix: **two real gaps in the rules** (the `A3T…` AWS key-id
+prefix family; GitHub's `github_pat_…` format), one disagreement about a
+10-character Stripe body, and two shape-only instances — a PEM armour no real
+key carries, a JWT whose header is not JSON — that limes refuses by design and
+the shape-only tools accept. Even gitleaks does not reach 218 on its own
+catalogue: a rule is more than its regex (an entropy floor, keywords, an
+allowlist), and the generator satisfied the regex alone. detect-secrets' string
+path finds everything by flagging almost everything, which is the row the matrix
+marks as blocking rather than detecting.
+
+Full matrices, with every operating point, the per-format table and what each
+does not measure:
+[`eval/matrices/comparison_pii.md`](https://github.com/AmadouMamane/Limes/blob/main/eval/matrices/comparison_pii.md),
+[`eval/matrices/comparison_secrets.md`](https://github.com/AmadouMamane/Limes/blob/main/eval/matrices/comparison_secrets.md).
 
 ## Use it in Python
 
@@ -590,7 +657,10 @@ before commit (the "no unverified citation" discipline it inherits from Tessera)
   security gateway: policy enforcement, threat detection, audit logging (AGPL-3.0).
   limes shares the single-seam idea but starts in-process and makes every verdict
   carry replayable evidence; the MCP proxy is a later transport (v0.2), not the
-  identity of the tool.
+  identity of the tool. Its injection detector, PII detector and secret scanner
+  are **measured head to head** on all three of limes's tables (ADR 0030): at
+  0.1.0 they are regular expressions with no checksum and no validator, and the
+  numbers read accordingly.
 - [Rebuff](https://github.com/protectai/rebuff) (Protect AI) — a self-hardening
   prompt-injection detector (heuristics + LLM + vector DB + canary tokens).
   limes's v0.1 injection detector is deliberately rule-only and shipped with a
@@ -707,7 +777,9 @@ what that is worth on the other leg: `injection` scored 76% on the author's corp
 and **24%** on garak's. So `pii-egress` was put in front of **42 sentence
 templates from presidio-research** (MIT) — customer-support and banking prose
 nobody here chose — carrying the *same* cleared synthetic vectors. Dated matrix:
-`eval/matrices/external_pii.md`; ADR 0021.
+`eval/matrices/external_pii.md`; ADR 0021. And against the tools that claim the
+same detection — Presidio, mcp-firewall — in `eval/matrices/comparison_pii.md`
+(ADR 0030; see *How limes compares*).
 
 | configuration | located (dev) | located (holdout) | checksum-invalid decoy | value removed |
 |---|---|---|---|---|
@@ -826,7 +898,10 @@ F1 1.00 answers *"do my eight rules find my eight formats"*. A reader takes it f
 rule catalogue** (MIT): 222 formats, 218 of which materialise into an instance
 generated from the rule's own regex and verified against it, plus **339 of
 gitleaks' own false-positive vectors** as external hard negatives. Dated matrix:
-`eval/matrices/external_secrets.md`; ADR 0021.
+`eval/matrices/external_secrets.md`; ADR 0021. And against gitleaks itself,
+detect-secrets and mcp-firewall, including the per-format table over the
+nineteen formats limes claims, in `eval/matrices/comparison_secrets.md` (ADR
+0030; see *How limes compares*).
 
 | configuration | formats located (dev) | formats located (holdout) | gitleaks' hard negatives killed |
 |---|---|---|---|
@@ -1032,7 +1107,7 @@ and, in `_meta`, what was masked:
   "redaction": {"masked": 2, "kinds": ["pii"], "spans": [
     {"start": 6,  "end": 25, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"},
     {"start": 51, "end": 68, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"}]},
-  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.15.0"}], "…": "…"}}}
+  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.16.0"}], "…": "…"}}}
 ```
 
 (real output from the shipped `pii-egress` detector, digests abbreviated and the

@@ -442,6 +442,13 @@ EXTERNAL_ADVERSARY = (
 #: torch, transformers and presidio.
 HEAD_TO_HEAD = (
     "src/limes/eval/comparison_harness.py",
+    # ADR 0030 — the outbound leg meets its competitors: the harness that scores
+    # PII and secrets tools on the vendored external corpora, its two matrices,
+    # and the record. Measurement, not detection: nothing here changes a verdict.
+    "src/limes/eval/egress_comparison_harness.py",
+    "eval/matrices/comparison_pii.md",
+    "eval/matrices/comparison_secrets.md",
+    "docs/decisions/0030-the-outbound-leg-meets-its-competitors.md",
     "scripts/bench_competitors.py",
     "tests/unit/comparison/",
     "docs/decisions/0020-a-comparison-on-ground-nobody-here-owns.md",

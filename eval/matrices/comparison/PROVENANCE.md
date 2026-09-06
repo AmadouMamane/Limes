@@ -31,6 +31,35 @@ uv pip install --python rebuffenv/bin/python --no-deps -e .
 rebuffenv/bin/python scripts/bench_competitors.py --tool rebuff
 ```
 
+```bash
+# mcp-firewall (AGPL-3.0) — a rule-based MCP gateway; its injection detector
+# joins the injection table, its PII detector and secret scanner the two
+# outbound tables (ADR 0030)
+uv venv fwenv --python 3.12
+uv pip install --python fwenv/bin/python mcp-firewall==0.1.0
+uv pip install --python fwenv/bin/python --no-deps -e .
+fwenv/bin/python scripts/bench_competitors.py --tool mcp-firewall
+fwenv/bin/python scripts/bench_competitors.py --bench pii --tool mcp-firewall
+fwenv/bin/python scripts/bench_competitors.py --bench secrets --tool mcp-firewall
+
+# Presidio's analyzer with spaCy's large English model, and detect-secrets, share
+# an environment; gitleaks is a binary on PATH, run with the catalogue
+# configuration at the vendored commit, which the bench fetches and checks
+# against the sha256 the corpus records before it runs anything
+uv venv piienv --python 3.12
+uv pip install --python piienv/bin/python presidio-analyzer==2.2.364 detect-secrets==1.5.0
+uv pip install --python piienv/bin/python \
+    https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl
+uv pip install --python piienv/bin/python --no-deps -e .
+piienv/bin/python scripts/bench_competitors.py --bench pii --tool presidio
+piienv/bin/python scripts/bench_competitors.py --bench secrets --tool detect-secrets
+piienv/bin/python scripts/bench_competitors.py --bench secrets --tool gitleaks
+```
+
+The outbound benches write into `eval/matrices/comparison/pii/` and
+`eval/matrices/comparison/secrets/`; `limes.eval.egress_comparison_harness`
+renders `eval/matrices/comparison_pii.md` and `comparison_secrets.md` from them.
+
 `--no-deps -e .` installs limes for exactly one reason: the case enumeration
 (`limes.eval.comparison_harness.comparison_cases`) has to be *the same function*
 on both sides. Otherwise the two files describe different texts and the join
@@ -48,6 +77,10 @@ share a key, or one that covers fewer cases than it was handed.
 | **rebuff** (Protect AI) | 0.1.1 | Apache-2.0 | `detect_prompt_injection_using_heuristic_on_input` — **one of its four layers** |
 | **DeBERTa injection v2** (bare) | — | Apache-2.0 | llm-guard's own checkpoint, no product around it |
 | **deepset injection** (bare) | — | MIT | a second classifier, trained by somebody else |
+| **mcp-firewall** (Robert Ressl) | 0.1.0 | AGPL-3.0 | `InjectionDetector` at its three sensitivities (injection); `PIIDetector` (PII); `SecretScanner` (secrets) — regular expressions, run as shipped |
+| **Presidio analyzer** (Microsoft) | 2.2.364, spaCy 3.8.16, `en_core_web_lg` 3.8.0 | MIT | `AnalyzerEngine.analyze(language='en')`, every shipped recogniser (PII) |
+| **detect-secrets** (Yelp) | 1.5.0 | Apache-2.0 | every default plugin, `file` mode and the `--string` (`adhoc`) path (secrets) |
+| **gitleaks** | binary 8.30.1, catalogue at commit `b58d3f102cf3` | MIT | `gitleaks dir` over one file per case, `--config` pinned to the vendored catalogue (secrets) — **home ground** |
 
 ### Models, pinned by name *and* revision
 
@@ -113,6 +146,36 @@ bit-identical, at 30× to 166× the speed.
 
 The **latency** reported for rebuff is its own unmodified function, never the
 pruned one.
+
+## The outbound adapters (ADR 0030)
+
+**Presidio** is called through its public `analyze()`, with the analyzer's own
+`default_score_threshold` (0) as the vendor row. Its four entity types for the
+categories both sides claim are mapped to limes's; the other fifteen are recorded
+and count for nothing. Fidelity: at `score_threshold=0.5`, `analyze()`'s own
+filtering names exactly the recorded findings with `score >= 0.5` on the sample
+(Presidio keeps a score equal to its cut; the harness's `score > threshold` is
+stricter by at most the cut itself).
+
+**mcp-firewall** reports the *names* of the patterns that fired and not their
+offsets, so each adapter runs the tool's own pattern list over the same text to
+obtain spans, and the fidelity check holds the set of names to what the tool's
+own `scan()` / `evaluate()` reports. Its PII detector ships **disabled** and was
+switched on for the bench, as an operator wanting the feature would.
+
+**detect-secrets** is called through its library (`scan_file`, `scan_line`);
+the fidelity check runs the command line (`detect-secrets scan --no-verify`) on
+the sample and compares plugin types. `--no-verify` because the command line
+otherwise checks a Slack token against Slack's API and drops one the vendor
+rejects — a synthetic token always is — which would make the number depend on a
+third party's answer.
+
+**gitleaks** is the binary, over a directory with one file per case, with
+`--config` set to the catalogue at the vendored commit: the bench fetches it and
+refuses to run if its sha256 is not the one `eval/corpus/gitleaks/` records.
+Fidelity: a per-payload `gitleaks stdin` run names the same rules on the sample.
+Latency is that per-payload process, start included. **Home ground**, and
+marked so in the matrix: the corpus is its catalogue.
 
 ## What this cannot control for, and does not pretend to
 

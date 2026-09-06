@@ -289,6 +289,7 @@ def test_the_vendor_default_is_the_vendors_and_is_written_down():
         "rebuff": 0.75,
         "deberta-injection-v2": 0.5,
         "deepset-injection": 0.5,
+        "mcp-firewall": 0.5,
     }
     for competitor in load_competitors():
         if competitor.tool in expected:

@@ -38,7 +38,7 @@ like this (an outbound decision that masked a card number):
         "label": "pii:pan",
         "sha": "9219e0affa4b…" }              // SHA-256 of the matched value — never the value
     ],
-    "witnesses": [ { "id": "pii-egress", "version": "0.15.0" } ]   // the build that looked
+    "witnesses": [ { "id": "pii-egress", "version": "0.16.0" } ]   // the build that looked
   },
   "kind": "deny",
   "reason": "1 rule match(es) on outbound content: pii:pan"
