@@ -4,6 +4,75 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-09-06
+
+**A declared limit names its family.** 0.14.0 made the guard say what it cannot
+read, and the honest answer was blocked by default for ordinary deployments — an
+agent that navigates by screenshot, a tool that returns a file as base64, a
+result in Chinese or Arabic. The one remedy, `on_cannot_say: allow`, opened
+every declared limit at once. Two corrections, one release (ADR 0029 and ADR
+0028 Amendment 1), because both change what a `CannotSay` record hashes to and a
+deployment should meet that once.
+
+### Changed — security
+
+- **`CannotSay` carries the families of its declared limits, and the policy
+  opens them one at a time** (ADR 0029). `CannotSay(blind_spot, cause, kinds)`
+  with `kinds` a set of `BlindKind`: `budget`, `encoding`, `opaque` (mostly
+  base64/hex), `invisible`, `script`, `locale`, `binary` (an image, an audio
+  clip, a blob), `unwitnessed` (a leg or a message nobody reads), `unspecified`.
+  A declared blind spot names at least one; the families are sealed into the
+  fingerprint, so **every `CannotSay` digest changes again**. `on_cannot_say`
+  becomes a policy by family: `on_cannot_say: {default: deny, by_kind: {binary:
+  allow}}` lets screenshots cross and nothing else; the scalar `deny|allow`
+  keeps its meaning (every declared family); `--on-cannot-say` moves only the
+  default. A verdict is forwarded only when **every** family it carries is
+  open, never for a fault or a refusal; the refusal names the families that
+  closed it and the exact `by_kind` line that would open them; `_meta.limes`
+  gains `kinds`. A policy naming a family that does not exist is refused at
+  load.
+- **The script measure stands down for a policy that declares a non-Latin
+  language** (ADR 0028 Amendment 1). The "mostly another script" screen ran
+  whatever `locales` declared, so an operator with Chinese rules and
+  `locales: [zh]` saw their own text declared unreadable. It now applies only
+  when the policy declares nothing or only Latin-script languages
+  (`readability.LATIN_SCRIPT_LANGUAGES`, documented, not a census); an unknown
+  tag stands it down too. Stated: under a non-Latin declaration the measure
+  cannot tell one non-Latin script from another. The declared-locale check,
+  the opaque screen and the invisible screen are unchanged.
+- **`DetectorBlind` names its family.** `DetectorBlind(message, kind=…)`,
+  `UNSPECIFIED` when none is given; a name outside the vocabulary is a
+  `ValueError` the core renders as a `fault`. Every shipped raise site names
+  its family; the payload walk hands its binary blocks to the core as
+  `(binary, sentence)` pairs; a leg nobody reads is `unwitnessed`.
+
+### Added
+
+- `limes.verdict.BlindKind`, `limes.verdict.blind_label()`;
+  `limes.transports.mcp.config.CannotSayPolicy` (`denying()`, `allowing()`,
+  `disposition_for()`, `opens()`, `closed_kinds()`); the `by_kind` form of
+  `on_cannot_say` in the policy file for both proxies; `kinds` in
+  `_meta.limes`, in `limes check` output and `--json`; `LATIN_SCRIPT_LANGUAGES`.
+- ADR 0029 (a declared limit names its family), ADR 0028 Amendment 1; the
+  frontier re-pins `verdict.py` (its second amendment), `detector.py`,
+  `guard.py`, `injection.py` and the two contract tests that construct a
+  `CannotSay`.
+- `tests/unit/ratchets/test_a_declared_limit_names_its_family.py` — 37 tests,
+  seen red under seven named mutations of the new code before ADR 0029 was
+  written (the core dropping a family; the policy opening on *any* family; the
+  policy ignoring the cause; the fingerprint omitting the families; the walk
+  labelling an image `unspecified`; the loader accepting an unknown family;
+  the script measure ignoring `locales`).
+
+### Breaking
+
+- `CannotSay(blind_spot, cause)` no longer constructs: `kinds` has no default.
+  `case CannotSay(blind_spot, cause):` keeps matching.
+- `decide(blind_spots=…)`, `Guard.verdict/check/check_egress(blind_spots=…)`
+  take `(BlindKind, str)` pairs; `payload.Derived.unreadable` is a tuple of
+  them. `rule()`, `Relay`, `ProxyConfig` and `HttpProxyConfig` take a
+  `CannotSayPolicy` where they took an `OnCannotSay`.
+
 ## [0.14.0] - 2026-09-06
 
 **The guard says what it does not know.** An audit found that every `CannotSay`
@@ -983,6 +1052,7 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.15.0]: https://github.com/AmadouMamane/Limes/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/AmadouMamane/Limes/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/AmadouMamane/Limes/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/AmadouMamane/Limes/compare/v0.11.0...v0.12.0
