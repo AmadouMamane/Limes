@@ -4,6 +4,42 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-09-06
+
+**The two gaps the perimeter table named are closed.** 0.16.0 held
+`secrets-egress` to the 19 catalogue formats it claims and named five misses,
+two of them real gaps in the rules. Both are closed here under ADR 0003's
+admission rule, with the measurement (ADR 0030 Amendment 1). The egress policy
+changes, so its hash — recorded in every outbound verdict — changes with it.
+
+### Fixed
+
+- **`secret:aws-access-key-id` reads the `A3T…` prefix family** — the family
+  AWS's own git-secrets pattern lists and AWS's prefix documentation does not.
+  The catalogue instance the head-to-head drew starts `A3TR`, and the rule,
+  listing only the documented prefixes, missed it. No measured price: none of
+  gitleaks' 339 negatives and none of limes's lookalikes carries the shape.
+- **`secret:github-token` reads GitHub's fine-grained personal access token**,
+  `github_pat_` + 82 word characters, the shape GitHub publishes, beside the
+  `gh[pousr]_` family it always read. The measured price is one more of
+  gitleaks' negatives (`fp203_github`, a `github_pat_xxx…` placeholder): gitleaks
+  discards it by its entropy floor, and limes has no entropy gate by
+  measurement (ADR 0021 Am. 2), so it reads the placeholder as the format it is.
+  Stated, not avoided.
+- The corpus grows by two positives (assembled, ADR 0010) and two lookalikes;
+  the internal matrix moves from 20/20 · 0/32 to 22/22 · 0/34.
+
+### Changed
+
+- On gitleaks' catalogue, `secrets-egress` locates 18 of 218 formats (was 16;
+  dev 14/110, holdout unmoved at 4/108) and kills 34 of 339 hard negatives
+  (was 33). **Held to the 19 formats limes claims: 16/19** (was 14/19); the
+  three misses that remain are the refusals by design — a 10-character Stripe
+  body, a PEM armour no key carries, a JWT with no JSON header — and the
+  `CLAIMED_FORMAT_NOTES` test now holds exactly those three.
+- The external secrets matrix reads its internal count from the corpus instead
+  of a literal that had gone stale twice ("15/15" while the corpus said 20).
+
 ## [0.16.0] - 2026-09-06
 
 **The outbound leg meets its competitors.** ADR 0020 measured limes's injection
