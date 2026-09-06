@@ -176,15 +176,6 @@ CLAIMED_FORMATS: Final[Mapping[str, str]] = {
 #: mapping to exactly the set of claimed formats limes does not locate, so a
 #: note cannot outlive its miss and a miss cannot go unexplained.
 CLAIMED_FORMAT_NOTES: Final[Mapping[str, str]] = {
-    "aws-access-token": (
-        "gitleaks' format admits the `A3T…` prefix family and this instance draws `A3TR`; "
-        "limes's rule lists AWS's documented key-id prefixes (`AKIA`, `ASIA`, `ABIA`, "
-        "`ACCA`, …) and not that one. A real gap in limes's rule."
-    ),
-    "github-fine-grained-pat": (
-        "`github_pat_…` is a format limes's GitHub rule (`gh[pousr]_`) does not cover. A "
-        "real gap in limes's rule."
-    ),
     "stripe-access-token": (
         "the generated body is 10 characters; gitleaks' regex admits 10 to 99, limes's "
         "requires at least 24, the shortest body Stripe documents. Whether a 10-character "

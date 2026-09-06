@@ -192,3 +192,60 @@ The matrices are the source; these are the readings that decided the record.
 - ADR 0020's own table changed under rule 15: a score-less tool no longer gets a
   "dev-tuned at zero false positives" row that flags nothing, and the AUC table
   no longer prints a coin for it. No number in an existing row moved.
+
+## Amendment 1 — the two gaps the perimeter table named are closed, and the price is one placeholder (2026-09-06)
+
+The record above named two of limes's five misses on its own perimeter as its
+own to fix: the `A3T…` AWS key-id prefix family and GitHub's fine-grained token
+format. Both are policy edits under ADR 0003's admission rule — a positive, a
+lookalike, both numbers, on the same ground — and this amendment records the
+measurement rather than the intention.
+
+**What changed, in `egress.yaml` alone.** `secret:aws-access-key-id` admits the
+prefix `A3T` followed by one alphanumeric, the family AWS's own git-secrets
+pattern has always listed and AWS's unique-id prefix documentation does not; the
+documented prefixes and the sixteen-character body are unchanged.
+`secret:github-token` gains a second alternative, `github_pat_` followed by at
+least 82 word characters, the shape GitHub publishes for its fine-grained
+personal access tokens; the `gh[pousr]_` alternative is unchanged. Neither
+format gets a validator: like every other vendor prefix here, the claim is the
+prefix and the length.
+
+**Corpus.** Two positives, assembled per ADR 0010 — an `A3TR…` key id with a
+placeholder body in the base32 alphabet a real one uses, and a `github_pat_`
+token split where GitHub's carry an underscore after their 22nd character — and
+two lookalikes, an `A3TR…` order reference at eighteen characters and
+`github_pat_REDACTED` in prose. The internal matrix moves from 20/20 · 0/32 to
+22/22 · 0/34, every category still whole.
+
+**Before → after, both numbers together, on gitleaks' ground:**
+
+| | census: formats located (218) | held to the 19 claimed | hard negatives killed (339) |
+|---|---|---|---|
+| before (this record) | 16 — dev 12/110, holdout 4/108 | 14/19 | 33 — dev 16/166, holdout 17/173 |
+| after | **18** — dev 14/110, holdout 4/108 | **16/19** | **34** — dev 17/166, holdout 17/173 |
+
+Both new instances sit in `dev`; the holdout did not move in either column. The
+one new negative is `fp203_github`: `github_pat_` + 22 `x` + `_` + 59 `x`, a
+placeholder gitleaks' rule discards by its entropy floor of 3 and limes reads as
+the format it is. limes has no entropy gate, and that is a measurement, not an
+oversight: ADR 0021 Amendment 2 showed that no threshold can exist under ADR
+0009, whose positives are placeholders themselves. That measurement is not
+reopened for one `x`-run; the price is stated on the row.
+
+**The notes.** `CLAIMED_FORMAT_NOTES` loses its two "real gap" entries, as rule
+12's test demanded the moment the misses disappeared; the three it keeps — a
+10-character Stripe body, a PEM armour no key carries, a JWT whose header is not
+JSON — are the refusals by design the record already described. On the perimeter
+limes now reads 16 of 19, detect-secrets as shipped 12, mcp-firewall 11; the
+home-ground row is unchanged and, under rule 11, is not a comparison.
+
+**One instrument correction, recorded.** The external secrets matrix stated the
+internal matrix's count as a literal, "15/15", which had been 20/20 since ADR
+0022 and is 22/22 now. It is read from the corpus at render time; a number that
+is remembered rather than measured is the honour system this project keeps
+closing.
+
+Nothing else moved: the PII matrices, the injection matrices and every
+competitor's committed findings are byte-identical. What an operator will see
+change is the egress policy hash every outbound verdict records.

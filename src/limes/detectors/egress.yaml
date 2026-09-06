@@ -132,10 +132,18 @@ detectors:
       # AWS access key id. The four-letter type prefix is assigned by AWS and is
       # what makes this high-precision without a checksum: twenty upper-case
       # alphanumerics on their own are an order code, `AKIA` + sixteen is a key.
+      #
+      # The prefixes are AWS's documented unique-id prefixes PLUS the `A3T…`
+      # family, which AWS's own git-secrets pattern names and the prefix
+      # documentation does not. The head-to-head (ADR 0030) drew the catalogue
+      # instance `A3TR…` and this rule, listing only the documented prefixes,
+      # missed it — a real gap, closed under ADR 0030 Am. 1 at no measured
+      # price: none of gitleaks' 339 negatives and none of limes' own lookalikes
+      # carries the shape.
       - label: secret:aws-access-key-id
         validator: none
         retry_trim: false
-        pattern: '(?<![A-Za-z0-9])(?:AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[0-9A-Z]{16}(?![A-Za-z0-9])'
+        pattern: '(?<![A-Za-z0-9])(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA|AGPA|AIDA|AIPA|ANPA|ANVA|AROA)[0-9A-Z]{16}(?![A-Za-z0-9])'
 
       # AWS *secret* access key — the other half of the pair, and the first
       # CONTEXT-ANCHORED rule (ADR 0022). The value is forty base64 characters
@@ -187,11 +195,18 @@ detectors:
         retry_trim: false
         pattern: '(?<![A-Za-z0-9_-])sk-(?:proj-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])'
 
-      # GitHub personal / OAuth / server / user / refresh token.
+      # GitHub personal / OAuth / server / user / refresh token — and the
+      # fine-grained personal access token, `github_pat_` + 82 word characters,
+      # the shape GitHub publishes for it. The head-to-head (ADR 0030) found the
+      # `gh[pousr]_` rule blind to it — a real gap, closed under ADR 0030 Am. 1.
+      # The measured price is ONE of gitleaks' 339 negatives: a `github_pat_xxx…`
+      # placeholder that gitleaks' entropy floor discards and that limes, which
+      # has no entropy gate by measurement (ADR 0021 Am. 2), reads as the format
+      # it is.
       - label: secret:github-token
         validator: none
         retry_trim: false
-        pattern: '(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{36,}(?![A-Za-z0-9])'
+        pattern: '(?<![A-Za-z0-9_-])(?:gh[pousr]_[A-Za-z0-9]{36,}(?![A-Za-z0-9])|github_pat_[A-Za-z0-9_]{82,}(?![A-Za-z0-9_]))'
 
       # Stripe secret and restricted keys, live and test alike: the format is the
       # claim, and a test key in a tool result is still a credential leaving.

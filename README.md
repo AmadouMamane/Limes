@@ -261,18 +261,21 @@ perimeter are different questions:
 | | the census: 218 formats located | hard negatives killed (339) | **held to the 19 formats limes claims** | median |
 |---|---|---|---|---|
 | gitleaks ⚑ (pinned to the vendored catalogue) | 194 (89 %) | 16 (5 %) | **16/19** | 27 ms (one process per payload) |
-| **limes** `secrets-egress` | 16 (7 %) | 33 (10 %) | **14/19** | **0.02 ms** |
+| **limes** `secrets-egress` | 18 (8 %) | 34 (10 %) | **16/19** | **0.02 ms** |
 | detect-secrets — as shipped (`file`) | 31 (14 %) | 53 (16 %) | 12/19 | 0.7 ms |
 | detect-secrets — its `--string` path | 218 (100 %) | **317 (94 %)** | 19/19 | 0.7 ms |
 | mcp-firewall secret scanner | 14 (6 %) | 46 (14 %) | 11/19 | 0.01 ms |
 
 The census column says what it always said: limes's perimeter is small and
-stated. The perimeter column is the fair one, and it names limes's five misses
-one by one in the matrix: **two real gaps in the rules** (the `A3T…` AWS key-id
-prefix family; GitHub's `github_pat_…` format), one disagreement about a
-10-character Stripe body, and two shape-only instances — a PEM armour no real
-key carries, a JWT whose header is not JSON — that limes refuses by design and
-the shape-only tools accept. Even gitleaks does not reach 218 on its own
+stated. The perimeter column is the fair one, and it names limes's three misses
+one by one in the matrix: one disagreement about a 10-character Stripe body, and
+two shape-only instances — a PEM armour no real key carries, a JWT whose header
+is not JSON — that limes refuses by design and the shape-only tools accept. It
+named five when first run: the other two were **real gaps in the rules** (the
+`A3T…` AWS key-id prefix family; GitHub's `github_pat_…` format), closed in
+0.17.0 at a measured price of one more of gitleaks' negatives — a `github_pat_`
+placeholder its entropy floor discards and limes, which has no entropy gate,
+reads as the format it is (ADR 0030 Am. 1). Even gitleaks does not reach 218 on its own
 catalogue: a rule is more than its regex (an entropy floor, keywords, an
 allowlist), and the generator satisfied the regex alone. detect-secrets' string
 path finds everything by flagging almost everything, which is the row the matrix
@@ -883,17 +886,17 @@ says exactly that instead of inventing a comparison.
 
 | configuration | located | flagged | benign killed | recall | precision | F1 |
 |---|---|---|---|---|---|---|
-| unplugged (null control) | 0/20 | 0/20 | 0/32 | 0.00 | 0.00 | 0.00 |
-| block-everything | 0/20 | 20/20 | 32/32 | 0.00 | 0.00 | 0.00 |
-| **limes secrets-egress** | **20/20** | 20/20 | **0/32** | **1.00** | **1.00** | **1.00** |
+| unplugged (null control) | 0/22 | 0/22 | 0/34 | 0.00 | 0.00 | 0.00 |
+| block-everything | 0/22 | 22/22 | 34/34 | 0.00 | 0.00 | 0.00 |
+| **limes secrets-egress** | **22/22** | 22/22 | **0/34** | **1.00** | **1.00** | **1.00** |
 
-Per category, `located`: AWS key id 2/2, AWS secret 5/5, OpenAI 2/2, GitHub 2/2,
+Per category, `located`: AWS key id 3/3, AWS secret 5/5, OpenAI 2/2, GitHub 3/3,
 Stripe 2/2, Google 1/1, Slack 2/2, PEM 2/2, JWT 2/2. Dated matrix:
 `eval/matrices/secrets_egress.md`.
 
 #### And against the industry's credential catalogue — the uncomfortable number
 
-F1 1.00 answers *"do my eight rules find my eight formats"*. A reader takes it for
+F1 1.00 answers *"do my own rules find my own formats"*. A reader takes it for
 *"limes finds credentials"*. So `secrets-egress` was scored against **gitleaks'
 rule catalogue** (MIT): 222 formats, 218 of which materialise into an instance
 generated from the rule's own regex and verified against it, plus **339 of
@@ -907,9 +910,9 @@ nineteen formats limes claims, in `eval/matrices/comparison_secrets.md` (ADR
 |---|---|---|---|
 | unplugged (null control) | 0/110 | 0/108 | 0/339 |
 | block-everything | 0/110 | 0/108 | 339/339 |
-| **limes secrets-egress** | **12/110 (10.9%)** | **4/108 (3.7%)** | **33/339 (9.7%)** |
+| **limes secrets-egress** | **14/110 (12.7%)** | **4/108 (3.7%)** | **34/339 (10.0%)** |
 
-**16 of 218 credential formats, 7.3%.** That is not a regression and not a bug
+**18 of 218 credential formats, 8.3%.** That is not a regression and not a bug
 report: the perimeter below has always said eight vendor prefixes plus PEM and
 JWT. What this number adds is the perimeter's **size**, measured against somebody
 else's census instead of asserted in prose — the same service ADR 0017's 24% did
@@ -930,6 +933,8 @@ the rest are a **declared policy difference** — gitleaks does not alert on
 documented example keys, limes holds that a credential-shaped string leaving a
 system is a leak signal whichever key it is, which is the position ADR 0009
 already encodes by putting `AKIAIOSFODNN7EXAMPLE` in the *positive* corpus.
+The one negative 0.17.0 adds — `github_pat_xxx…`, the price of reading GitHub's
+fine-grained format (ADR 0030 Am. 1) — is that same shape and the same position.
 
 Four formats could not be materialised and are **excluded from the denominator**,
 named with their reasons in the matrix: a rule nobody could instantiate is not a
@@ -1107,7 +1112,7 @@ and, in `_meta`, what was masked:
   "redaction": {"masked": 2, "kinds": ["pii"], "spans": [
     {"start": 6,  "end": 25, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"},
     {"start": 51, "end": 68, "kinds": ["pii"], "token": "[REDACTED:pii]", "style": "full"}]},
-  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.16.0"}], "…": "…"}}}
+  "evidence": {"witnesses": [{"id": "pii-egress", "version": "0.17.0"}], "…": "…"}}}
 ```
 
 (real output from the shipped `pii-egress` detector, digests abbreviated and the

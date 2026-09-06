@@ -53,6 +53,21 @@ def test_a_documented_aws_key_id_is_located_exactly(detector):
     assert ("secret:aws-access-key-id", "AKIAIOSFODNN7EXAMPLE") in _located(detector, text)
 
 
+def test_the_a3t_prefix_family_is_an_aws_key_id_too(detector):
+    # ADR 0030 Am. 1: the head-to-head drew `A3TR…` from gitleaks' catalogue and
+    # the rule, which listed only AWS's documented prefixes, missed it. The
+    # family is in AWS's own git-secrets pattern; twenty characters, as ever.
+    key = "A3TR" + "EXAMPLEONLY22222"  # assembled: no key-shaped literal in the file (ADR 0010)
+    assert ("secret:aws-access-key-id", key) in _located(detector, f"Deployment log: {key}.")
+
+
+def test_a_fine_grained_github_token_is_located_exactly(detector):
+    # ADR 0030 Am. 1: `github_pat_` + 82 word characters, the shape GitHub
+    # publishes, which the `gh[pousr]_` alternative never covered.
+    token = "github_pat_" + "EXAMPLEONLY00000000000" + "_" + "EXAMPLEONLY" * 5 + "0000"
+    assert ("secret:github-token", token) in _located(detector, f"Token {token} pasted.")
+
+
 @pytest.mark.parametrize(
     "text",
     [
@@ -76,6 +91,8 @@ def test_high_entropy_lookalikes_do_not_fire(detector, text):
         "The form rejected the short key sk-1 as malformed.",
         "Header ghp_tooshort was ignored.",
         "Le préfixe AIzaSy seul ne suffit pas.",
+        "The docs show github_pat_REDACTED where the real token goes.",
+        "La référence A3TR2026Q3SHIPMENT figure sur le bon de commande.",
     ],
 )
 def test_a_vendor_prefix_without_a_body_is_not_a_key(detector, text):

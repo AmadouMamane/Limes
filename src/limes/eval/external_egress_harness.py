@@ -1,11 +1,11 @@
 """Score the egress detectors against adversaries limes did not write (ADR 0021).
 
-``eval/matrices/pii_egress.md`` says 32/32 and ``secrets_egress.md`` says 15/15.
-Both are true, and both are answers to "does the detector do what its author
-intended" over cases its author chose. ADR 0017 already measured what the other
-question costs: ``injection`` scored 76% on the author's corpus and **24%** on
-garak's. This harness asks the outbound leg the same question, from two outside
-sources, and publishes whatever comes back.
+``eval/matrices/pii_egress.md`` and ``secrets_egress.md`` each say every one of
+their own cases is located. Both are true, and both are answers to "does the
+detector do what its author intended" over cases its author chose. ADR 0017
+already measured what the other question costs: ``injection`` scored 76% on the
+author's corpus and **24%** on garak's. This harness asks the outbound leg the
+same question, from two outside sources, and publishes whatever comes back.
 
 **Recall and false positives, always together.** Every table here carries both
 sides, because a recall number alone is satisfied by blocking everything and a
@@ -52,6 +52,7 @@ from typing import Final, final
 from limes.detector import Context, Detector, DetectorBlind, Direction
 from limes.detectors.pii_egress import PiiEgressDetector
 from limes.detectors.secrets_egress import SecretsEgressDetector
+from limes.eval.egress_corpus import load_positive
 from limes.eval.egress_harness import BASELINES, _BlockEverything
 from limes.eval.external_corpus import ExternalCorpusUnavailable
 from limes.eval.external_egress_corpus import (
@@ -462,6 +463,9 @@ def render_pii(report: PiiReport, when: str) -> str:
 
 def render_secrets(report: SecretsReport, when: str) -> str:
     """Render the secrets bench as a Markdown matrix."""
+    # The internal matrix's own count, read from the corpus rather than remembered
+    # here: a literal went stale twice (15/15 stood while the corpus said 20).
+    internal = len(load_positive("secrets-egress"))
     lines = [
         "# limes `secrets-egress` — against the industry's credential catalogue",
         "",
@@ -474,9 +478,9 @@ def render_secrets(report: SecretsReport, when: str) -> str:
         "",
         f"**Strength of this number.** {report.corpus_strength}",
         "",
-        "**What this table is asking.** Not *do my eight rules find my eight formats* — "
-        "the internal matrix answers that, 15/15. This asks how much of what the "
-        "industry calls a credential limes sees at all.",
+        "**What this table is asking.** Not *do my own rules find my own formats* — "
+        f"the internal matrix answers that, {internal}/{internal}. This asks how much of "
+        "what the industry calls a credential limes sees at all.",
         "",
     ]
     lines += _matrix(report.rows, report.populations)

@@ -13,7 +13,7 @@ Generated 2026-09-06. Every number below was **measured here**, on one corpus, w
 | contestant | formats located (dev) | formats located (holdout) | gitleaks' hard negatives killed (dev) | gitleaks' hard negatives killed (holdout) |
 |---|---|---|---|---|
 | unplugged (null control) | 0/110 (0.0%) | 0/108 (0.0%) | 0/166 (0.0%) | 0/173 (0.0%) |
-| **limes secrets-egress** | 12/110 (10.9%) | 4/108 (3.7%) | 16/166 (9.6%) | 17/173 (9.8%) |
+| **limes secrets-egress** | 14/110 (12.7%) | 4/108 (3.7%) | 17/166 (10.2%) | 17/173 (9.8%) |
 | detect-secrets (Yelp) — vendor default | 21/110 (19.1%) | 10/108 (9.3%) | 25/166 (15.1%) | 28/173 (16.2%) |
 | detect-secrets (Yelp) — dev-tuned | 110/110 (100.0%) | 108/108 (100.0%) | 154/166 (92.8%) | 163/173 (94.2%) |
 | gitleaks — vendor default ⚑ | 98/110 (89.1%) | 96/108 (88.9%) | 4/166 (2.4%) | 12/173 (6.9%) |
@@ -65,13 +65,13 @@ The census above asks how much of gitleaks' 218-format catalogue each tool sees.
 
 | gitleaks rule | limes rule | limes secrets-egress | detect-secrets (Yelp) — vendor default | detect-secrets (Yelp) — dev-tuned | gitleaks — vendor default | mcp-firewall (secret scanner) — vendor default |
 |---|---|---|---|---|---|---|
-| `aws-access-token` | `secret:aws-access-key-id` | — | ✓ | ✓ | ✓ | — |
+| `aws-access-token` | `secret:aws-access-key-id` | ✓ | ✓ | ✓ | ✓ | — |
 | `openai-api-key` | `secret:openai-key` | ✓ | ✓ | ✓ | ✓ | — |
 | `github-pat` | `secret:github-token` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `github-oauth` | `secret:github-token` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `github-app-token` | `secret:github-token` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `github-refresh-token` | `secret:github-token` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `github-fine-grained-pat` | `secret:github-token` | — | — | ✓ | — | ✓ |
+| `github-fine-grained-pat` | `secret:github-token` | ✓ | — | ✓ | — | ✓ |
 | `stripe-access-token` | `secret:stripe-key` | — | — | ✓ | ✓ | — |
 | `gcp-api-key` | `secret:google-api-key` | ✓ | — | ✓ | — | ✓ |
 | `slack-app-token` | `secret:slack-token` | ✓ | — | ✓ | ✓ | — |
@@ -85,7 +85,7 @@ The census above asks how much of gitleaks' 218-format catalogue each tool sees.
 | `private-key` | `secret:private-key-pem` | — | — | ✓ | ✓ | — |
 | `jwt` | `secret:jwt` | — | — | ✓ | ✓ | — |
 
-- **limes secrets-egress** — 14/19 claimed formats located
+- **limes secrets-egress** — 16/19 claimed formats located
 - **detect-secrets (Yelp) — vendor default** — 12/19 claimed formats located
 - **detect-secrets (Yelp) — dev-tuned** — 19/19 claimed formats located
 - **gitleaks — vendor default** — 16/19 claimed formats located
@@ -93,8 +93,6 @@ The census above asks how much of gitleaks' 218-format catalogue each tool sees.
 
 **limes's misses on its own perimeter, one by one:**
 
-- `aws-access-token` — gitleaks' format admits the `A3T…` prefix family and this instance draws `A3TR`; limes's rule lists AWS's documented key-id prefixes (`AKIA`, `ASIA`, `ABIA`, `ACCA`, …) and not that one. A real gap in limes's rule.
-- `github-fine-grained-pat` — `github_pat_…` is a format limes's GitHub rule (`gh[pousr]_`) does not cover. A real gap in limes's rule.
 - `stripe-access-token` — the generated body is 10 characters; gitleaks' regex admits 10 to 99, limes's requires at least 24, the shortest body Stripe documents. Whether a 10-character `sk_test_` is a credential or a shape is exactly where the two rules disagree.
 - `private-key` — the generated armour is `-----BEGINPPRIVATE KEY BLOCK-----` — no space after `BEGIN`, a `BLOCK` suffix — a shape gitleaks' regex admits and no real PEM carries. limes reads PEM armour as written; it also does not cover PGP's `PRIVATE KEY BLOCK` armour, which is a real format and a real gap.
 - `jwt` — the generated first segment does not decode to a JSON header. limes's JWT rule is *only* its validator — the three-segment shape is shared with file names and version strings, so limes refuses the shape alone by design — and a shape-only instance is invisible to it. Counted as a miss; explained as a choice.
