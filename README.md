@@ -80,7 +80,7 @@ The distribution is `limes-guard` because PyPI prohibits the project name `limes
 
 | Layer | What ships | What it does **not** do (scope, not backlog) |
 |---|---|---|
-| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — moved only by decision since v0.1 (each move a named ADR with a re-pinned hash: 0011, 0014, 0019, 0023, 0025, 0026, 0027, 0028), and a *ratchet* — a test that may only tighten — says so |
+| **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — moved only by decision since v0.1 (each move a named ADR with a re-pinned hash: 0011, 0014, 0019, 0023, 0025, 0026, 0027, 0028, 0029, 0031), and a *ratchet* — a test that may only tighten — says so |
 | **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, the context-anchored AWS secret access key, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; *bare* unprefixed credentials — a keyword-anchored AWS secret is caught, a bodyless blob is measured out of reach (ADR 0022). Declared blind spots, not backlog |
 | **Transports** | in-process `Guard`; MCP stdio proxy (`limes-guard[mcp]`); MCP Streamable HTTP proxy (`limes-guard[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
 | **Egress** | three detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
@@ -406,7 +406,7 @@ changes — not the host, not the server, and no code of yours.
 Everything after `--` is the real server's command, launched verbatim.
 
 ```sh
-pip install 'limes[mcp]'    # the SDK is an optional extra; the core stays at one dependency
+pip install 'limes-guard[mcp]'    # the SDK is an optional extra; the core stays at one dependency
 ```
 
 Now every tool call your agent emits is a decision that carries its evidence. A
@@ -449,7 +449,7 @@ exit code is the verdict** — `0` allow, `1` deny, `3` cannot-say — so a CI s
 gates on it without parsing anything.
 
 ```sh
-pip install limes          # no extra needed; `check` is core only
+pip install limes-guard    # no extra needed; `check` is core only
 
 limes check prompt.txt                       # inspect a prompt   -> `injection`
 echo "$TOOL_OUTPUT" | limes check --direction outbound -   # inspect a result
@@ -505,7 +505,7 @@ redaction — because the core is transport-agnostic (ADR 0007). Only the plumbi
 is new, and most of *that* is the SDK's own session manager.
 
 ```sh
-pip install 'limes[http]'    # mcp + an ASGI server (uvicorn); the core stays light
+pip install 'limes-guard[http]'    # mcp + an ASGI server (uvicorn); the core stays light
 
 limes proxy-http --upstream http://127.0.0.1:9000/mcp --port 8080 \
                  --policy ~/.limes/policy.yaml

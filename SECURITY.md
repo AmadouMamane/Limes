@@ -5,7 +5,8 @@ limes is a security tool; we take vulnerabilities in it seriously.
 ## Supported versions
 
 limes is pre-1.0 and alpha. Security fixes land on `main` and in the next
-tagged release. There is no back-port guarantee before 1.0.
+tagged release, published on PyPI as `limes-guard` (the import stays `limes`;
+ADR 0031). There is no back-port guarantee before 1.0.
 
 ## Reporting a vulnerability
 

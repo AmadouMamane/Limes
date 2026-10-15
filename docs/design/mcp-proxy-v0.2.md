@@ -41,7 +41,7 @@ renamed and re-scoped, which is exactly why the rule exists.
   entry points `limes proxy` and `limes-proxy`. **The core is not touched** — the
   proxy imports `guard()` and the types, it does not modify them, and a test
   proves the diff outside the transport (plus entry points and docs) is empty.
-- The `mcp` SDK is an **optional extra** (`limes[mcp]`), never a core dependency.
+- The `mcp` SDK is an **optional extra** (`limes-guard[mcp]`), never a core dependency.
 - Composition: preserve JSON-RPC `id`s; relay requests, responses **and**
   notifications, in both directions.
 
