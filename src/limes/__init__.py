@@ -6,12 +6,12 @@ without its eval cases and its null control (ADR 0003).
 
 v0.1 shipped the core, one detector (``injection``, inbound), and the in-process
 transport. v0.2 adds a second transport and nothing else: the MCP stdio proxy
-(``limes proxy``, extra ``limes[mcp]``, ADR 0005), which reuses this core
+(``limes proxy``, extra ``limes-guard[mcp]``, ADR 0005), which reuses this core
 unchanged. v0.3 adds a *behaviour* to both transports' outbound leg and, again,
 nothing to the core: under a redacting egress policy a refused response is masked
 at the offsets its evidence already carried, and forwarded
 (:mod:`limes.transports.redaction`, ADR 0006). v0.4 adds a third transport — the
-MCP Streamable HTTP proxy (``limes proxy-http``, extra ``limes[http]``, ADR 0007)
+MCP Streamable HTTP proxy (``limes proxy-http``, extra ``limes-guard[http]``, ADR 0007)
 — which reuses the stdio proxy's decision unchanged, and a command-line surface,
 ``limes check`` (:mod:`limes.cli`); the core does not move.
 
@@ -67,8 +67,9 @@ from limes.verdict import (
 #: The build that is answering, read from the installed distribution's metadata —
 #: the same single source `limes --version` reads, so the two cannot disagree and
 #: neither can go stale against the wheel a user actually installed (ADR 0014).
+#: The distribution is named ``limes-guard``; the import stays ``limes`` (ADR 0031).
 try:
-    __version__ = version("limes")
+    __version__ = version("limes-guard")
 except PackageNotFoundError:
     # A source tree on sys.path rather than an installed distribution. Letting
     # this escape would make `import limes` fail because the package could not

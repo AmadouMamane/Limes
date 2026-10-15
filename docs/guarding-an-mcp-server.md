@@ -21,7 +21,7 @@ host  ⇄  limes proxy -- mcp-server-filesystem /data
 ```
 
 ```sh
-pip install 'limes[mcp]'
+pip install 'limes-guard[mcp]'
 ```
 
 Concretely, wherever your host launches the server, wrap the command. A
@@ -91,7 +91,7 @@ That difference is the whole product, and it is a test, not a paragraph:
 A Streamable-HTTP MCP server is guarded the same way, with the HTTP transport:
 
 ```sh
-pip install 'limes[http]'
+pip install 'limes-guard[http]'
 limes proxy-http --upstream http://127.0.0.1:9000/mcp --port 8080
 # point your host at  http://127.0.0.1:8080/mcp
 ```

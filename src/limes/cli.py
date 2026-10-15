@@ -85,7 +85,7 @@ _TOP_LEVEL_USAGE = (
 def _installed_version() -> str:
     """Return the installed limes version, or a placeholder outside an install."""
     try:
-        return version("limes")
+        return version("limes-guard")
     except PackageNotFoundError:  # pragma: no cover - only outside an install
         return "(not installed)"
 
@@ -284,7 +284,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             except ImportError as exc:
                 print(
                     "limes proxy-http needs the MCP + HTTP extra:\n"
-                    "    pip install 'limes[http]'      (or:  uv add 'limes[http]')\n"
+                    "    pip install 'limes-guard[http]'      (or:  uv add 'limes-guard[http]')\n"
                     f"the import failed with: {exc}",
                     file=sys.stderr,
                 )

@@ -17,7 +17,7 @@ This is a **transport** (ADR 0004). It imports :func:`limes.guard.decide` (throu
 and it modifies none of them. It **defines no detector of its own** — the ones it
 installs live in :mod:`limes.detectors`.
 
-The MCP SDK is an optional extra — ``pip install 'limes[mcp]'``. Every module in
+The MCP SDK is an optional extra — ``pip install 'limes-guard[mcp]'``. Every module in
 this package imports without it **except** :mod:`limes.transports.mcp.bridge`, so
 the console entry point can report a missing extra instead of dying on an
 ``ImportError`` traceback.

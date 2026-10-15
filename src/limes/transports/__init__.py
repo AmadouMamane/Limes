@@ -15,7 +15,7 @@ because it decides about a *message*, not about content — the core's answer to
 "is this clean?" is the same either way.
 
 This module deliberately does **not** import the MCP subpackage: the SDK is the
-optional ``limes[mcp]`` extra, and ``import limes`` must keep working without it.
+optional ``limes-guard[mcp]`` extra, and ``import limes`` must keep working without it.
 """
 
 from __future__ import annotations

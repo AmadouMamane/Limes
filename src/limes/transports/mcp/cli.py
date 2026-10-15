@@ -136,7 +136,7 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
 def _installed_version() -> str:
     """Return the installed limes version, or a placeholder outside a install."""
     try:
-        return version("limes")
+        return version("limes-guard")
     except PackageNotFoundError:  # pragma: no cover - only outside an install
         return "(not installed)"
 
@@ -212,7 +212,7 @@ def _run(config: ProxyConfig) -> int:
     except ImportError as exc:
         print(
             "limes proxy needs the MCP SDK, which is an optional extra:\n"
-            "    pip install 'limes[mcp]'      (or:  uv add 'limes[mcp]')\n"
+            "    pip install 'limes-guard[mcp]'      (or:  uv add 'limes-guard[mcp]')\n"
             f"the import failed with: {exc}",
             file=sys.stderr,
         )

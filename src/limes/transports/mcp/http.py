@@ -26,7 +26,7 @@ decision chain.
 
 Like the stdio bridge, this module imports the MCP SDK and a running ASGI server
 (``uvicorn``, which ``mcp`` already depends on); it is reached through the
-``limes[http]`` extra.
+``limes-guard[http]`` extra.
 
 Anti-scope (v1): the current Streamable HTTP only (no deprecated HTTP+SSE), one
 host↔server pair per session, no host authentication beyond what the SDK's

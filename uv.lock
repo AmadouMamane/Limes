@@ -400,8 +400,8 @@ wheels = [
 ]
 
 [[package]]
-name = "limes"
-version = "0.17.0"
+name = "limes-guard"
+version = "0.17.1"
 source = { editable = "." }
 dependencies = [
     { name = "pyyaml" },

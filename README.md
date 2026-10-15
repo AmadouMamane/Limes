@@ -1,7 +1,7 @@
 # limes
 
 [![ci](https://github.com/AmadouMamane/Limes/actions/workflows/ci.yml/badge.svg)](https://github.com/AmadouMamane/Limes/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/limes.svg)](https://pypi.org/project/limes/)
+[![PyPI](https://img.shields.io/pypi/v/limes-guard.svg)](https://pypi.org/project/limes-guard/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/AmadouMamane/Limes/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/downloads/)
 
@@ -46,10 +46,14 @@ ADR 0003, …).
 Python ≥ 3.12. The core has exactly one runtime dependency (PyYAML).
 
 ```sh
-pip install limes             # core + CLI (`limes check`)
-pip install 'limes[mcp]'      # + the MCP stdio proxy (`limes proxy`)
-pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-http`)
+pip install limes-guard             # core + CLI (`limes check`)
+pip install 'limes-guard[mcp]'      # + the MCP stdio proxy (`limes proxy`)
+pip install 'limes-guard[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-http`)
 ```
+
+The distribution is `limes-guard` because PyPI prohibits the project name `limes`
+(ADR 0031). Everything you import, run and configure is still `limes`:
+`import limes`, `limes check`, `limes proxy`, the `limes.detectors` entry-point group.
 
 *(Or the unreleased tip, straight from the repo: `pip install git+https://github.com/AmadouMamane/Limes`.)*
 
@@ -78,7 +82,7 @@ pip install 'limes[http]'     # + the MCP Streamable HTTP proxy (`limes proxy-ht
 |---|---|---|
 | **Core** | verdict algebra, hash-chained ledger, detector protocol, pipeline | grow — moved only by decision since v0.1 (each move a named ADR with a re-pinned hash: 0011, 0014, 0019, 0023, 0025, 0026, 0027, 0028), and a *ratchet* — a test that may only tighten — says so |
 | **Detectors** | **four**: `injection` (inbound), `pii-egress` (PAN, IBAN, e-mail, phone, NIR), `secrets-egress` (prefixed API keys, the context-anchored AWS secret access key, PEM private keys, JWTs) and `injection-egress` (injection arriving from tools — poisoned descriptions, indirect injection — caught before your model reads it) — all measured per category | names, addresses, dates of birth; generic high-entropy scanning; *bare* unprefixed credentials — a keyword-anchored AWS secret is caught, a bodyless blob is measured out of reach (ADR 0022). Declared blind spots, not backlog |
-| **Transports** | in-process `Guard`; MCP stdio proxy (`limes[mcp]`); MCP Streamable HTTP proxy (`limes[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
+| **Transports** | in-process `Guard`; MCP stdio proxy (`limes-guard[mcp]`); MCP Streamable HTTP proxy (`limes-guard[http]`) | one host↔server pair per session; no HTTP+SSE (deprecated), no multiplexing |
 | **Egress** | three detectors on the outbound leg + redaction as a transport behaviour: block \| redact, per kind; mask styles `full` / `last4` / `format_preserving`, verified | no reversible tokenisation, no FPE encryption |
 | **CLI** | `limes check` (file/stdin → verdict, exit code = verdict, `--json`) | scans one content; no watch, no batch-dir |
 
@@ -1320,8 +1324,8 @@ Deep dives that go past what this page covers:
   from the YAML, so an auditor can read which shapes
   are scanned and which check gates each of them without reading any Python.
 - **Transports** (`src/limes/transports/`): adapters. Three — `in_process` (v0.1),
-  the `mcp` stdio proxy (v0.2, `limes[mcp]`), and the `mcp` Streamable HTTP proxy
-  (`http.py`, `limes[http]`, ADR 0007), which reuses the stdio proxy's relay —
+  the `mcp` stdio proxy (v0.2, `limes-guard[mcp]`), and the `mcp` Streamable HTTP proxy
+  (`http.py`, `limes-guard[http]`, ADR 0007), which reuses the stdio proxy's relay —
   plus one behaviour they share, `redaction.py` (v0.3): what to do with a finding
   on the way out. A command-line surface, `limes check` (`cli.py`), runs the same
   pipeline with no transport at all.

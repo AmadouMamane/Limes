@@ -353,11 +353,13 @@ DECLARED_CODE_DELTA = {
     # ADR 0014 — `limes.__version__`, read from the installed distribution's
     # metadata (the same single source `limes --version` reads), so the package
     # can name the build that is answering a bug report or a security advisory.
+    # ADR 0031 — the distribution that metadata belongs to is `limes-guard`
+    # (PyPI prohibits the name `limes`); the import, and this module, stay `limes`.
     "src/limes/__init__.py": """
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("limes")
+    __version__ = version("limes-guard")
 except PackageNotFoundError:
     __version__ = "0+unknown"
 """,
@@ -406,6 +408,10 @@ AMENDING_RECORDS = (
     "docs/decisions/0027-a-witness-names-its-leg.md",
     "docs/decisions/0028-the-guard-says-what-it-cannot-read.md",
     "docs/decisions/0029-a-declared-limit-names-its-family.md",
+    # ADR 0031 — the distribution is `limes-guard`; ADR 0014's declared delta
+    # names it, so the record that moved that literal sits beside the one that
+    # authorised the lookup.
+    "docs/decisions/0031-the-distribution-takes-the-name-the-index-allows.md",
     "docs/decisions/0014-the-package-names-its-own-version.md",
     "docs/decisions/0015-a-ratchet-reports-its-own-blind-spot.md",
     "docs/decisions/0016-apache-2-throughout.md",
@@ -822,7 +828,8 @@ def test_the_mcp_sdk_is_an_optional_extra_and_never_a_core_dependency():
     manifest = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     core = manifest["project"]["dependencies"]
     assert [name for name in core if name.split(">")[0].strip() == "mcp"] == [], (
-        f"`mcp` must never be a core dependency; `pip install limes` stays light. Found: {core}"
+        "`mcp` must never be a core dependency; `pip install limes-guard` stays light. "
+        f"Found: {core}"
     )
     extra = manifest["project"]["optional-dependencies"]["mcp"]
     assert any(name.startswith("mcp") for name in extra), extra
@@ -836,7 +843,7 @@ def test_the_mcp_sdk_is_an_optional_extra_and_never_a_core_dependency():
 
 def test_the_detectors_add_no_dependency_at_all():
     # A detector is a plugin, and this one is rules plus arithmetic. If admitting
-    # it had cost a dependency, `pip install limes` would have grown for everyone
+    # it had cost a dependency, `pip install limes-guard` would have grown for everyone
     # — including the users who only ever run `limes check`.
     manifest = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     # The floor moved once, by measurement rather than by drift: PyYAML 6.0 ships

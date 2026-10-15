@@ -4,7 +4,7 @@ An MCP stdio server faces the host, an MCP stdio client faces the wrapped server
 and the relay in the middle carries the JSON-RPC both ways (ADR 0005).
 
 **This module is the only one in limes that imports the MCP SDK.** It is reached
-through the ``limes[mcp]`` extra; everything else in the package imports without
+through the ``limes-guard[mcp]`` extra; everything else in the package imports without
 it.
 
 What the relay does, message by message:

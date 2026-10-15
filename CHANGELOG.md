@@ -4,6 +4,34 @@ All notable changes to limes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); limes adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.1] - 2026-10-15
+
+**The distribution takes the name the index allows.** PyPI prohibits the project
+name `limes` — not registered by someone else, not too close to another, but
+prohibited by its administrators — which the `404` the pre-release check read as
+"available" never said. The first upload of 0.17.0 was refused on the name, so
+no 0.17.0 exists on PyPI. This release changes nothing but the name under which
+the same code is installed (ADR 0031).
+
+### Changed
+
+- **The distribution is `limes-guard`**: `pip install limes-guard`, extras
+  `limes-guard[mcp]` and `limes-guard[http]`. The import (`import limes`), the
+  console scripts (`limes`, `limes-proxy`), the entry-point group
+  (`limes.detectors`), the policies and their hashes are unchanged; no verdict
+  changes.
+- `limes.__version__`, `limes --version` and `limes-proxy --version` read the
+  metadata of the distribution that is actually installed, `limes-guard`. That
+  is ADR 0014's one declared delta in `src/limes/__init__.py`, re-declared in
+  the frontier ratchet with the new literal beside a reference to ADR 0031.
+- The install hints in the CLI's error messages, the README, the MCP guide and
+  the package docstrings name `limes-guard`. Past ADRs and changelog entries
+  keep the name they were written with.
+
+### Fixed
+
+- The 0.17.0 compare link was missing from this file.
+
 ## [0.17.0] - 2026-09-06
 
 **The two gaps the perimeter table named are closed.** 0.16.0 held
@@ -1134,6 +1162,8 @@ importing the SDK. All four were seen red under deliberate mutation.
   (`pypi.org/simple/limes/` → 404). The name, GitHub org, CLA and the final
   license split remain Amadou's calls, pending before any publication.
 
+[0.17.1]: https://github.com/AmadouMamane/Limes/compare/v0.17.0...v0.17.1
+[0.17.0]: https://github.com/AmadouMamane/Limes/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/AmadouMamane/Limes/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/AmadouMamane/Limes/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/AmadouMamane/Limes/compare/v0.13.0...v0.14.0
